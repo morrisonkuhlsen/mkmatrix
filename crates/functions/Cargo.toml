@@ -11,3 +11,4 @@ workspace = true
 [dependencies]
 mkmatrix-core = { workspace = true }
 regex = { workspace = true }
+nalgebra = { workspace = true }

@@ -4,7 +4,7 @@ use super::*;
 // Matrices
 
 /// A numeric matrix (every element must be a number, else `#VALUE!`).
-fn matrix(v: &Value) -> R<(usize, usize, Vec<f64>)> {
+pub(super) fn matrix(v: &Value) -> R<(usize, usize, Vec<f64>)> {
     let arr = as_array(v);
     let mut out = Vec::with_capacity(arr.data.len());
     for x in arr.iter() {
@@ -17,7 +17,7 @@ fn matrix(v: &Value) -> R<(usize, usize, Vec<f64>)> {
     Ok((arr.rows, arr.cols, out))
 }
 
-fn to_value_array(rows: usize, cols: usize, data: Vec<f64>) -> R<Value> {
+pub(super) fn to_value_array(rows: usize, cols: usize, data: Vec<f64>) -> R<Value> {
     let vals = data.into_iter().map(|x| if x.is_finite() { Value::Number(x) } else { Value::Error(CellError::Num) }).collect();
     array_val(rows, cols, vals)
 }
@@ -101,6 +101,11 @@ fn determinant(n: usize, mut m: Vec<f64>) -> f64 {
 
 pub(super) fn mdeterm(a: &[Arg], _c: &mut dyn Ctx) -> R<Value> {
     let (n, m) = square(a)?;
+    // A matrix of integers has an integer determinant: worked exactly, it reads 6, not
+    // 5.99999999999999.
+    if let Some(d) = super::linalg::exact_determinant(n, &m) {
+        return num_val(d);
+    }
     let d = determinant(n, m);
     // Tidy results that should be integers (e.g. 0.9999999999999998 → 1).
     num_val(if d.abs() > 1e-300 { to_sig_digits(d, 15) } else { d })

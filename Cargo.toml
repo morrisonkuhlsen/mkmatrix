@@ -37,6 +37,9 @@ log = "0.4"
 chrono = { version = "0.4.45", default-features = false, features = ["std"] }
 rayon = "1"
 regex = { version = "1", default-features = false, features = ["std", "unicode", "perf"] }
+# Linear algebra (LU, QR, SVD, eigenvalues, Cholesky) under the M* matrix functions; pure Rust,
+# builds for wasm.
+nalgebra = { version = "0.35", default-features = false, features = ["std"] }
 quick-xml = "0.41"
 zip = { version = "3", default-features = false, features = ["deflate"] }
 sha2 = { version = "0.11", default-features = false }

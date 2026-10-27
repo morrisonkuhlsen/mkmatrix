@@ -12,10 +12,12 @@ use crate::util::{
 use crate::{Arg, Ctx, FnSpec, VAR};
 
 mod criteria;
+mod linalg;
 mod matrix;
 mod roman_base;
 
 use criteria::{averageif, averageifs, countif, countifs, maxifs, minifs, sumif, sumifs};
+use linalg::{mchol, mcond, meigval, meigvec, mlu, mnorm, mpinv, mpower, mqr, mrank, msolve, msvd, mtrace};
 use matrix::{mdeterm, minverse, mmult, munit};
 use roman_base::{arabic, base, decimal, roman};
 
@@ -811,6 +813,20 @@ pub(crate) fn specs() -> Vec<FnSpec> {
         f!("MDETERM", 1, 1, MathTrig, A, "MDETERM(array)", "Determinant of a square matrix.", mdeterm),
         f!("MINVERSE", 1, 1, MathTrig, A, "MINVERSE(array)", "Inverse of a square matrix.", minverse),
         f!("MUNIT", 1, 1, MathTrig, S, "MUNIT(dimension)", "Identity matrix of the given size.", munit),
+        // MK Matrix's linear algebra (math/linalg.rs).
+        f!("MSOLVE", 2, 2, MathTrig, A, "MSOLVE(A, B)", "Solves A·X = B: exactly for a square A, by least squares otherwise.", msolve),
+        f!("MPINV", 1, 1, MathTrig, A, "MPINV(array)", "Moore–Penrose pseudo-inverse of a matrix.", mpinv),
+        f!("MRANK", 1, 2, MathTrig, &[false, true], "MRANK(array, [tolerance])", "Rank of a matrix: its singular values above the tolerance.", mrank),
+        f!("MTRACE", 1, 1, MathTrig, A, "MTRACE(array)", "Trace of a square matrix: the sum of its diagonal.", mtrace),
+        f!("MNORM", 1, 2, MathTrig, &[false, true], "MNORM(array, [type])", "Norm of a matrix: \"F\" Frobenius, 1, 2, \"inf\" or \"max\".", mnorm),
+        f!("MCOND", 1, 1, MathTrig, A, "MCOND(array)", "Condition number of a matrix in the 2-norm.", mcond),
+        f!("MEIGVAL", 1, 1, MathTrig, A, "MEIGVAL(array)", "Eigenvalues of a square matrix, largest first.", meigval),
+        f!("MEIGVEC", 1, 1, MathTrig, A, "MEIGVEC(array)", "Eigenvectors of a symmetric matrix, as columns.", meigvec),
+        f!("MSVD", 1, 2, MathTrig, &[false, true], "MSVD(array, [part])", "Singular value decomposition: \"S\", \"U\" or \"V\".", msvd),
+        f!("MQR", 1, 2, MathTrig, &[false, true], "MQR(array, [part])", "QR decomposition: \"Q\" or \"R\".", mqr),
+        f!("MLU", 1, 2, MathTrig, &[false, true], "MLU(array, [part])", "LU decomposition with pivoting: \"L\", \"U\" or \"P\".", mlu),
+        f!("MCHOL", 1, 1, MathTrig, A, "MCHOL(array)", "Cholesky factor L of a symmetric positive-definite matrix.", mchol),
+        f!("MPOWER", 2, 2, MathTrig, &[false, true], "MPOWER(array, k)", "A square matrix to an integer power.", mpower),
         f!("SERIESSUM", 4, 4, MathTrig, &[true, true, true, false], "SERIESSUM(x, n, m, coefficients)", "Sum of a power series.", seriessum),
         f!(
             "MULTINOMIAL",

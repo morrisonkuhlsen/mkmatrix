@@ -490,3 +490,124 @@ fn criteria_cut_inside_a_surrogate_pair() {
     close(sumifs(format!(">={}", e.repeat(128))), 1.0 + 2.0);
     close(sumifs(format!("<={}", e.repeat(128))), 3.0);
 }
+
+/// A matrix argument from rows of numbers.
+fn m(rows: &[&[f64]]) -> Arg {
+    av(arr(rows.iter().map(|r| r.iter().map(|x| nv(*x)).collect()).collect()))
+}
+
+/// Every element of a spilled result within `tol` of `expected`.
+fn mat_close(v: Value, expected: &[&[f64]], tol: f64) {
+    let got = rows_of(&v);
+    assert_eq!(got.len(), expected.len(), "rows of {v:?}");
+    for (g, e) in got.iter().zip(expected) {
+        assert_eq!(g.len(), e.len(), "columns of {v:?}");
+        for (x, y) in g.iter().zip(e.iter()) {
+            close_tol(x.clone(), *y, tol);
+        }
+    }
+}
+
+#[test]
+fn mdeterm_is_exact_for_integer_matrices() {
+    // 5.99999999999999 before: rounding noise in the float elimination.
+    assert_eq!(ev("MDETERM", vec![m(&[&[3.0, 9.0], &[9.0, 29.0]])]), nv(6.0));
+    assert_eq!(ev("MDETERM", vec![m(&[&[0.0, 1.0], &[1.0, 0.0]])]), nv(-1.0));
+    assert_eq!(ev("MDETERM", vec![m(&[&[1.0, 2.0], &[2.0, 4.0]])]), nv(0.0));
+    close(ev("MDETERM", vec![m(&[&[1.0, 2.0], &[3.0, 4.5]])]), -1.5);
+    // Too large for exact work: the float path still answers.
+    close_tol(ev("MDETERM", vec![m(&[&[1e17, 0.0], &[0.0, 1e17]])]), 1e34, 1e20);
+}
+
+#[test]
+fn msolve_square_least_squares_and_singular() {
+    mat_close(ev("MSOLVE", vec![m(&[&[2.0, 1.0], &[1.0, 3.0]]), m(&[&[3.0], &[5.0]])]), &[&[0.8], &[1.4]], 1e-12);
+    // Several right-hand sides at once.
+    mat_close(ev("MSOLVE", vec![m(&[&[2.0, 0.0], &[0.0, 4.0]]), m(&[&[2.0, 4.0], &[4.0, 8.0]])]), &[&[1.0, 2.0], &[1.0, 2.0]], 1e-12);
+    // A line through three points by least squares.
+    mat_close(ev("MSOLVE", vec![m(&[&[1.0, 1.0], &[1.0, 2.0], &[1.0, 3.0]]), m(&[&[1.0], &[2.0], &[2.0]])]), &[&[2.0 / 3.0], &[0.5]], 1e-12);
+    is_err(ev("MSOLVE", vec![m(&[&[1.0, 2.0], &[2.0, 4.0]]), m(&[&[1.0], &[2.0]])]), Num);
+    is_err(ev("MSOLVE", vec![m(&[&[1.0, 0.0], &[0.0, 1.0]]), m(&[&[1.0], &[2.0], &[3.0]])]), CellError::Value);
+}
+
+#[test]
+fn rank_trace_norms_and_condition() {
+    assert_eq!(ev("MRANK", vec![m(&[&[1.0, 2.0], &[2.0, 4.0]])]), nv(1.0));
+    assert_eq!(ev("MRANK", vec![m(&[&[1.0, 0.0, 0.0], &[0.0, 1.0, 0.0]])]), nv(2.0));
+    assert_eq!(ev("MRANK", vec![m(&[&[1.0, 0.0], &[0.0, 1e-3]]), n(0.01)]), nv(1.0));
+    close(ev("MTRACE", vec![m(&[&[1.0, 2.0], &[3.0, 4.0]])]), 5.0);
+    is_err(ev("MTRACE", vec![m(&[&[1.0, 2.0]])]), CellError::Value);
+    close(ev("MNORM", vec![m(&[&[3.0, 4.0]])]), 5.0);
+    close(ev("MNORM", vec![m(&[&[1.0, -2.0], &[3.0, 4.0]]), n(1.0)]), 6.0);
+    close(ev("MNORM", vec![m(&[&[1.0, -2.0], &[3.0, 4.0]]), t("inf")]), 7.0);
+    close(ev("MNORM", vec![m(&[&[1.0, -2.0], &[3.0, 4.0]]), t("max")]), 4.0);
+    close(ev("MNORM", vec![m(&[&[3.0, 0.0], &[0.0, 4.0]]), n(2.0)]), 4.0);
+    is_err(ev("MNORM", vec![m(&[&[1.0]]), t("nope")]), CellError::Value);
+    close_tol(ev("MCOND", vec![m(&[&[1.0, 0.0], &[0.0, 1e-3]])]), 1000.0, 1e-9);
+    is_err(ev("MCOND", vec![m(&[&[1.0, 2.0], &[2.0, 4.0]])]), Num);
+}
+
+#[test]
+fn eigenvalues_and_vectors() {
+    mat_close(ev("MEIGVAL", vec![m(&[&[2.0, 1.0], &[1.0, 2.0]])]), &[&[3.0], &[1.0]], 1e-12);
+    let s = std::f64::consts::FRAC_1_SQRT_2;
+    mat_close(ev("MEIGVEC", vec![m(&[&[2.0, 1.0], &[1.0, 2.0]])]), &[&[s, s], &[s, -s]], 1e-12);
+    // Not symmetric, real eigenvalues.
+    mat_close(ev("MEIGVAL", vec![m(&[&[4.0, 1.0], &[2.0, 3.0]])]), &[&[5.0], &[2.0]], 1e-12);
+    // A rotation: ±i, as real and imaginary columns.
+    mat_close(ev("MEIGVAL", vec![m(&[&[0.0, -1.0], &[1.0, 0.0]])]), &[&[0.0, 1.0], &[0.0, -1.0]], 1e-12);
+    is_err(ev("MEIGVEC", vec![m(&[&[4.0, 1.0], &[2.0, 3.0]])]), CellError::Value);
+}
+
+#[test]
+fn decompositions() {
+    mat_close(ev("MSVD", vec![m(&[&[3.0, 0.0], &[0.0, 4.0]])]), &[&[4.0], &[3.0]], 1e-12);
+    mat_close(ev("MSVD", vec![m(&[&[3.0, 0.0], &[0.0, 4.0]]), t("U")]), &[&[0.0, 1.0], &[1.0, 0.0]], 1e-12);
+    mat_close(ev("MSVD", vec![m(&[&[3.0, 0.0], &[0.0, 4.0]]), t("V")]), &[&[0.0, 1.0], &[1.0, 0.0]], 1e-12);
+    let r10 = 10f64.sqrt();
+    mat_close(ev("MQR", vec![m(&[&[1.0, 2.0], &[3.0, 4.0]]), t("R")]), &[&[r10, 14.0 / r10], &[0.0, 2.0 / r10]], 1e-12);
+    mat_close(ev("MQR", vec![m(&[&[1.0, 2.0], &[3.0, 4.0]]), t("Q")]), &[&[1.0 / r10, 3.0 / r10], &[3.0 / r10, -1.0 / r10]], 1e-12);
+    mat_close(ev("MLU", vec![m(&[&[1.0, 2.0], &[3.0, 4.0]]), t("P")]), &[&[0.0, 1.0], &[1.0, 0.0]], 0.0);
+    mat_close(ev("MLU", vec![m(&[&[1.0, 2.0], &[3.0, 4.0]]), t("L")]), &[&[1.0, 0.0], &[1.0 / 3.0, 1.0]], 1e-12);
+    mat_close(ev("MLU", vec![m(&[&[1.0, 2.0], &[3.0, 4.0]]), t("U")]), &[&[3.0, 4.0], &[0.0, 2.0 / 3.0]], 1e-12);
+    mat_close(ev("MCHOL", vec![m(&[&[4.0, 2.0], &[2.0, 3.0]])]), &[&[2.0, 0.0], &[1.0, 2f64.sqrt()]], 1e-12);
+    is_err(ev("MCHOL", vec![m(&[&[1.0, 2.0], &[2.0, 1.0]])]), Num);
+    is_err(ev("MCHOL", vec![m(&[&[1.0, 2.0], &[0.0, 1.0]])]), CellError::Value);
+    mat_close(ev("MPINV", vec![m(&[&[1.0, 2.0], &[2.0, 4.0]])]), &[&[0.04, 0.08], &[0.08, 0.16]], 1e-12);
+}
+
+#[test]
+fn mpower_markov_and_inverse() {
+    // A two-state Markov chain settles at its stationary distribution (5/6, 1/6).
+    mat_close(ev("MPOWER", vec![m(&[&[0.9, 0.1], &[0.5, 0.5]]), n(50.0)]), &[&[5.0 / 6.0, 1.0 / 6.0], &[5.0 / 6.0, 1.0 / 6.0]], 1e-12);
+    mat_close(ev("MPOWER", vec![m(&[&[2.0, 0.0], &[0.0, 4.0]]), n(-1.0)]), &[&[0.5, 0.0], &[0.0, 0.25]], 1e-12);
+    mat_close(ev("MPOWER", vec![m(&[&[2.0, 1.0], &[0.0, 2.0]]), n(0.0)]), &[&[1.0, 0.0], &[0.0, 1.0]], 0.0);
+    is_err(ev("MPOWER", vec![m(&[&[1.0, 1.0], &[1.0, 1.0]]), n(-1.0)]), Num);
+    is_err(ev("MPOWER", vec![m(&[&[1.0]]), n(0.5)]), Num);
+    // Overflow is #NUM!, not infinity.
+    is_err(ev("MPOWER", vec![m(&[&[10.0]]), n(1000.0)]), Num);
+}
+
+#[test]
+fn linear_algebra_survives_hostile_input() {
+    let fns = ["MSOLVE", "MPINV", "MRANK", "MTRACE", "MNORM", "MCOND", "MEIGVAL", "MEIGVEC", "MSVD", "MQR", "MLU", "MCHOL", "MPOWER"];
+    let inputs: Vec<Vec<Arg>> = vec![
+        vec![],
+        vec![t("x")],
+        vec![e(CellError::Div0)],
+        vec![m(&[&[f64::MAX, f64::MAX], &[f64::MAX, f64::MAX]])],
+        vec![m(&[&[0.0, 0.0], &[0.0, 0.0]]), m(&[&[0.0], &[0.0]])],
+        vec![m(&[&[1e-300, 1e300], &[1e300, 1e-300]]), n(3.0)],
+        vec![av(arr(vec![vec![nv(1.0), tv("a")], vec![Value::Empty, nv(2.0)]]))],
+        vec![m(&[&[1.0, 2.0, 3.0]]), t("Q")],
+    ];
+    for f in fns {
+        for args in &inputs {
+            // Any value, never a panic.
+            let _ = ev(f, args.clone());
+        }
+    }
+    // Too large to decompose: #NUM!, not minutes of work.
+    let big = av(arr(vec![vec![nv(1.0); 600]; 600]));
+    is_err(ev("MSVD", vec![big]), Num);
+}
