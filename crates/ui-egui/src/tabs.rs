@@ -189,22 +189,22 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                                 }
                                 let r = r.shrink2(vec2(0.0, 1.0));
                                 if active {
-                                    ui.painter().rect_filled(Rect::from_min_max(pos2(r.left(), r.top() - 2.0), r.max), 4.0, t.tab_active);
+                                    ui.painter().rect_filled(Rect::from_min_max(pos2(r.left(), r.top() - 2.0), r.max), 0.0, t.tab_active);
                                     ui.painter().rect_stroke(
                                         Rect::from_min_max(pos2(r.left(), r.top() - 2.0), r.max),
-                                        4.0,
+                                        0.0,
                                         Stroke::new(1.0, t.ribbon_border),
                                         StrokeKind::Inside,
                                     );
                                 } else if resp.hovered() {
-                                    ui.painter().rect_filled(r, 4.0, t.hover);
+                                    ui.painter().rect_filled(r, 0.0, t.hover);
                                 }
                                 if let Some(c) = color {
                                     let band = Rect::from_min_size(pos2(r.left() + 6.0, r.bottom() - 4.0), vec2(r.width() - 12.0, 3.0));
-                                    ui.painter().rect_filled(band, 1.0, theme::color32(c));
+                                    ui.painter().rect_filled(band, 0.0, theme::color32(c));
                                 } else if active {
                                     let band = Rect::from_center_size(pos2(r.center().x, r.bottom() - 3.0), vec2(tw.min(48.0), 2.5));
-                                    ui.painter().rect_filled(band, 1.0, t.accent);
+                                    ui.painter().rect_filled(band, 0.0, t.accent);
                                 }
                                 if renaming {
                                     let mut text = app.grid.rename_text.clone();
@@ -401,9 +401,9 @@ pub fn status_bar(app: &mut SheetApp, ui: &mut Ui) {
                         let (r, resp) = ui.allocate_exact_size(vec2(26.0, 20.0), Sense::click());
                         let cur = app.session.active().and_then(|d| d.wb.active().map(|s| s.view.as_str())).unwrap_or("normal");
                         if cur == mode {
-                            ui.painter().rect_filled(r, 3.0, t.pressed);
+                            ui.painter().rect_filled(r, 0.0, t.pressed);
                         } else if resp.hovered() {
-                            ui.painter().rect_filled(r, 3.0, t.hover);
+                            ui.painter().rect_filled(r, 0.0, t.hover);
                         }
                         icons::paint(ui.painter(), Rect::from_center_size(r.center(), vec2(14.0, 14.0)), icon, t.text_dim);
                         if resp.on_hover_text(tip).clicked() {
