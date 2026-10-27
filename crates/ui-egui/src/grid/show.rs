@@ -736,26 +736,36 @@ fn paint_pages(app: &mut SheetApp, p: &Painter, geo: &Geo, sh: &Sheet) {
     p.rect_stroke(pr, 0.0, Stroke::new(3.0, blue), StrokeKind::Outside);
 }
 
-/// The + that shows on a column heading's edge under the pointer. Over it, it fills with the accent
-/// and a line down the sheet marks where the new column goes.
+/// The + that shows on a column or row heading's edge under the pointer. Over it, it fills with
+/// the accent and a line across the sheet marks where the new column or row goes.
 fn paint_insert_col_button(app: &SheetApp, ui: &egui::Ui, p: &Painter, geo: &Geo, sh: &Sheet, t: &Tokens) {
     if app.grid.drag != crate::grid::Drag::None || app.editor.is_some() {
         return;
     }
     let Some(pointer) = ui.input(|i| i.pointer.hover_pos()) else { return };
     let at_sheet = geo.mirror_pos(pointer);
-    let Some((_, centre)) = insert_col_button(geo, sh, at_sheet) else { return };
-    let over = (at_sheet - centre).length() <= INSERT_PLUS_R + 2.0;
+    let (centre, over, column) = if let Some((_, c)) = insert_col_button(geo, sh, at_sheet) {
+        (c, super::interact::on_insert_col_button(geo, sh, at_sheet).is_some(), true)
+    } else if let Some((_, c)) = super::interact::insert_row_button(geo, sh, at_sheet) {
+        (c, super::interact::on_insert_row_button(geo, sh, at_sheet).is_some(), false)
+    } else {
+        return;
+    };
     let at = geo.mirror_pos(centre);
     if over {
-        p.with_clip_rect(geo.rect).line_segment([pos2(at.x, geo.cells.top()), pos2(at.x, geo.cells.bottom())], Stroke::new(2.0, t.accent));
+        let line = if column {
+            [pos2(at.x, geo.cells.top()), pos2(at.x, geo.cells.bottom())]
+        } else {
+            [pos2(geo.cells.left(), at.y), pos2(geo.cells.right(), at.y)]
+        };
+        p.with_clip_rect(geo.rect).line_segment(line, Stroke::new(2.0, t.accent));
     }
     let (fill, ink) = if over { (t.accent, t.on_accent) } else { (t.header_bg, t.accent) };
     p.circle_filled(at, INSERT_PLUS_R, fill);
     p.circle_stroke(at, INSERT_PLUS_R, Stroke::new(1.25, t.accent));
-    let arm = INSERT_PLUS_R * 0.55;
-    p.line_segment([pos2(at.x - arm, at.y), pos2(at.x + arm, at.y)], Stroke::new(1.5, ink));
-    p.line_segment([pos2(at.x, at.y - arm), pos2(at.x, at.y + arm)], Stroke::new(1.5, ink));
+    let arm = INSERT_PLUS_R * 0.6;
+    p.line_segment([pos2(at.x - arm, at.y), pos2(at.x + arm, at.y)], Stroke::new(1.25, ink));
+    p.line_segment([pos2(at.x, at.y - arm), pos2(at.x, at.y + arm)], Stroke::new(1.25, ink));
 }
 
 #[cfg(test)]

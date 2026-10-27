@@ -1,4 +1,5 @@
-//! The + on a column heading's edge inserts a column there; a drag from the edge still resizes.
+//! The + on a column or row heading's edge inserts a column or row there; the rest of the edge
+//! still resizes and autofits.
 
 use egui::{Event, Modifiers, PointerButton, Pos2, pos2, vec2};
 use mkmatrix_engine::{Session, core::CellRef};
@@ -20,12 +21,12 @@ fn harness() -> egui_kittest::Harness<'static, SheetApp> {
     harness
 }
 
-/// The point on the headings where column `col`'s right edge meets their middle.
+/// The point at the top of the headings on column `col`'s right edge, where its + sits.
 fn edge(harness: &egui_kittest::Harness<'_, SheetApp>, col: u32) -> Pos2 {
     let app = harness.state();
     let sheet = app.session.active().unwrap().wb.active().unwrap();
     let geo = Geo::new(sheet, app.grid.rect.unwrap(), app.view().scroll);
-    pos2(geo.x(sheet, col) + sheet.col_width(col) * geo.z, (geo.head_top() + geo.cells.top()) / 2.0)
+    pos2(geo.x(sheet, col) + sheet.col_width(col) * geo.z, geo.head_top() + 4.0)
 }
 
 fn click(harness: &mut egui_kittest::Harness<'_, SheetApp>, pos: Pos2) {
@@ -57,4 +58,39 @@ fn a_click_away_from_the_plus_selects_the_column_as_before() {
     let sheet = app.session.active().unwrap().wb.active().unwrap();
     assert_eq!(sheet.value(CellRef::new(0, 1)).display(), "B", "nothing inserted");
     assert!(app.session.active().unwrap().selection.current().is_full_cols());
+}
+
+#[test]
+fn a_click_on_the_edge_below_the_plus_inserts_nothing() {
+    let mut h = harness();
+    let at = edge(&h, 0);
+    // The edge at the headings' middle: resize and autofit live there.
+    click(&mut h, at + vec2(0.0, 7.0));
+    let sheet = h.state().session.active().unwrap().wb.active().unwrap();
+    assert_eq!(sheet.value(CellRef::new(0, 1)).display(), "B");
+}
+
+#[test]
+fn the_plus_on_a_row_heading_edge_inserts_a_row_there() {
+    let mut session = Session::new();
+    session.new_workbook();
+    session.execute("range.setValues", json!({"range": "A1", "values": [["1"], ["2"], ["3"]]})).unwrap();
+    let mut h = crate::common::builder().with_step_dt(1.0 / 60.0).with_size(vec2(1200.0, 800.0)).build_ui_state(
+        |ui, app: &mut SheetApp| {
+            app.logic(ui.ctx());
+            app.ui(ui);
+        },
+        crate::common::app(session),
+    );
+    h.run_steps(4);
+    let at = {
+        let app = h.state();
+        let sheet = app.session.active().unwrap().wb.active().unwrap();
+        let geo = Geo::new(sheet, app.grid.rect.unwrap(), app.view().scroll);
+        pos2(geo.head_left() + 4.0, geo.y(sheet, 0) + sheet.row_height(0) * geo.z)
+    };
+    click(&mut h, at);
+    let sheet = h.state().session.active().unwrap().wb.active().unwrap().clone();
+    let col: Vec<String> = (0..4).map(|r| sheet.value(CellRef::new(r, 0)).display()).collect();
+    assert_eq!(col, ["1", "", "2", "3"], "a new, empty row after row 1");
 }
