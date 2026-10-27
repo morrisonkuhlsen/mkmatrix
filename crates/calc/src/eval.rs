@@ -491,6 +491,10 @@ impl<'h> Evaluator<'h> {
                 _ => err(CellError::Ref),
             };
         }
+        if op == UnOp::Transpose {
+            let v = self.value(x);
+            return Ev::V(self.matrix_call("MX.T", vec![v]));
+        }
         if op == UnOp::At {
             let ev = self.eval(x);
             return match ev {
@@ -513,7 +517,7 @@ impl<'h> Evaluator<'h> {
                 UnOp::Neg => Value::number(-n),
                 UnOp::Plus => Value::number(n),
                 UnOp::Percent => Value::number(n / 100.0),
-                UnOp::At | UnOp::Spill | UnOp::Trim(_) => Value::number(n),
+                UnOp::At | UnOp::Spill | UnOp::Trim(_) | UnOp::Transpose => Value::number(n),
             },
             op == UnOp::Plus,
             sys,
@@ -589,13 +593,29 @@ impl<'h> Evaluator<'h> {
                     _ => err(CellError::Value),
                 }
             }
+            BinOp::MatMul | BinOp::Solve => {
+                // MK Matrix's matrix operators: `A@B` is MX.MUL(A,B), `A\b` MX.SOLVE(A,b). A long
+                // chain `A@B@C@…` folds in a loop, as the elementwise operators below do.
+                let mut rest = vec![(op, b)];
+                let mut left = a;
+                while let Expr::Binary(o @ (BinOp::MatMul | BinOp::Solve), l, r) = left {
+                    rest.push((*o, r.as_ref()));
+                    left = l.as_ref();
+                }
+                let mut acc = self.value(left);
+                while let Some((o, r)) = rest.pop() {
+                    let y = self.value(r);
+                    acc = self.matrix_call(if o == BinOp::MatMul { "MX.MUL" } else { "MX.SOLVE" }, vec![acc, y]);
+                }
+                Ev::V(acc)
+            }
             _ => {
                 // A long chain such as A1+A2+…+A500 nests to the left: fold it in a loop instead
                 // of one level of recursion per operator (past the depth limit it was an error).
                 let mut rest = vec![(op, b)];
                 let mut left = a;
                 while let Expr::Binary(o, l, r) = left
-                    && !matches!(o, BinOp::Range | BinOp::Union | BinOp::Intersect)
+                    && !matches!(o, BinOp::Range | BinOp::Union | BinOp::Intersect | BinOp::MatMul | BinOp::Solve)
                 {
                     rest.push((*o, r.as_ref()));
                     left = l.as_ref();

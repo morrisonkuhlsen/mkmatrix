@@ -543,3 +543,39 @@ fn reference_shapes_print_unchanged() {
         }
     }
 }
+
+#[test]
+fn matrix_operators_parse_and_print() {
+    // Transpose after an operand, matrix product and left division as infix operators.
+    assert_eq!(rt("X'"), "X'");
+    assert_eq!(rt("A1:B3'"), "A1:B3'");
+    assert_eq!(rt("(X'@X)\\(X'@y)"), "(X'@X)\\(X'@y)");
+    assert_eq!(rt("A1:B2@C1:C2"), "A1:B2@C1:C2");
+    assert_eq!(rt("MX.INV(X'@X)@X'@y"), "MX.INV(X'@X)@X'@y");
+    assert_eq!(rt("{1,2;3,4}''"), "{1,2;3,4}''");
+    // `A1:B3'` transposes the whole range; `X'@X` is (X')@X; `-X'` is -(X').
+    let e = parse("A1:B3'").unwrap();
+    assert!(matches!(e, Expr::Unary(UnOp::Transpose, _)), "{e:?}");
+    let e = parse("X'@X").unwrap();
+    assert!(matches!(&e, Expr::Binary(BinOp::MatMul, a, _) if matches!(**a, Expr::Unary(UnOp::Transpose, _))), "{e:?}");
+    let e = parse("-X'").unwrap();
+    assert!(matches!(&e, Expr::Unary(UnOp::Neg, x) if matches!(**x, Expr::Unary(UnOp::Transpose, _))), "{e:?}");
+    let e = parse("A1+B1@C1").unwrap();
+    assert!(matches!(e, Expr::Binary(BinOp::Add, ..)), "{e:?}");
+    // Spaces around the division.
+    assert_eq!(rt("A1:B2 \\ C1:C2"), "A1:B2\\C1:C2");
+}
+
+#[test]
+fn excel_meanings_of_quote_backslash_and_at_survive() {
+    // A quote that starts an operand is still a sheet name, also after an operator or space.
+    assert_eq!(rt("'My Sheet'!A1+'Other'!B2"), "'My Sheet'!A1+Other!B2");
+    assert_eq!(rt("SUM('My Sheet'!A1:B2)"), "SUM('My Sheet'!A1:B2)");
+    assert_eq!(rt("A1:B9 'My Sheet'!B2:C3"), "A1:B9 'My Sheet'!B2:C3");
+    // A backslash still starts a defined name.
+    assert_eq!(rt("\\rate*2"), "\\rate*2");
+    assert_eq!(rt("SUM(\\rate,1)"), "SUM(\\rate,1)");
+    // A prefix @ is still Excel's implicit intersection.
+    assert!(matches!(parse("@A1:A9").unwrap(), Expr::Unary(UnOp::At, _)));
+    assert!(matches!(parse("1+@A1:A9").unwrap(), Expr::Binary(BinOp::Add, ..)));
+}

@@ -94,6 +94,8 @@ pub enum UnOp {
     /// Trim reference `A1.:E10` / `A1:.E10` / `A1.:.E10` around a range: the range without its
     /// blank leading, trailing or outer rows and columns (`TRIMRANGE` with both trim codes set).
     Trim(TrimMode),
+    /// MK Matrix's postfix transpose `X'` (`MX.T` in function form, `TRANSPOSE` in files).
+    Transpose,
 }
 
 /// Which blank edges a trim reference drops.
@@ -145,6 +147,11 @@ pub enum BinOp {
     Union,
     /// space between two references.
     Intersect,
+    /// MK Matrix's matrix product `A@B` (`MX.MUL`, `MMULT` in files). Infix only: a prefix `@` is
+    /// still Excel's implicit intersection.
+    MatMul,
+    /// MK Matrix's left division `A\b`, the X with A·X = b (`MX.SOLVE`).
+    Solve,
 }
 
 impl BinOp {
@@ -165,6 +172,8 @@ impl BinOp {
             BinOp::Range => ":",
             BinOp::Union => ",",
             BinOp::Intersect => " ",
+            BinOp::MatMul => "@",
+            BinOp::Solve => "\\",
         }
     }
     /// Binding power (higher binds tighter).
@@ -174,7 +183,7 @@ impl BinOp {
             BinOp::Intersect => 85,
             BinOp::Union => 80,
             BinOp::Pow => 50,
-            BinOp::Mul | BinOp::Div => 40,
+            BinOp::Mul | BinOp::Div | BinOp::MatMul | BinOp::Solve => 40,
             BinOp::Add | BinOp::Sub => 30,
             BinOp::Concat => 20,
             BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge => 10,

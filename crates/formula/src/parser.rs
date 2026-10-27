@@ -17,6 +17,9 @@ pub struct ParseError {
 
 pub(crate) const MAX_DEPTH: usize = 256;
 
+/// The postfix transpose's binding power: below the range operator's, above every other.
+const TRANSPOSE_BP: u8 = 89;
+
 /// Longest formula accepted, in characters: Excel's limit for formula contents. It also bounds
 /// the depth of the trees long operator chains build (`1+1+…`), which dropping and evaluating
 /// walk recursively; without it a formula of a few hundred kilobytes in a file overflows the stack.
@@ -179,6 +182,8 @@ impl Parser {
             Tok::Op("+") => BinOp::Add,
             Tok::Op("-") => BinOp::Sub,
             Tok::Op("*") => BinOp::Mul,
+            Tok::Op("@") => BinOp::MatMul,
+            Tok::Op("\\") => BinOp::Solve,
             Tok::Op("/") => BinOp::Div,
             Tok::Op("^") => BinOp::Pow,
             Tok::Op("&") => BinOp::Concat,
@@ -215,6 +220,20 @@ impl Parser {
                 }
                 self.next();
                 lhs = Expr::Unary(UnOp::Percent, Box::new(lhs));
+                continue;
+            }
+            if *self.peek() == Tok::Op("'") {
+                // MK Matrix's transpose `X'`: after the range operator (`A1:B3'` is the whole
+                // range's), before every other binary one (`X'@X` is `(X')@X`).
+                if TRANSPOSE_BP < min_bp {
+                    break;
+                }
+                postfix += 1;
+                if self.depth + postfix > MAX_DEPTH {
+                    return Err(self.err("formula is nested too deeply"));
+                }
+                self.next();
+                lhs = Expr::Unary(UnOp::Transpose, Box::new(lhs));
                 continue;
             }
             if *self.peek() == Tok::LParen && matches!(lhs, Expr::Call(..) | Expr::Invoke(..) | Expr::Paren(_) | Expr::Name(_)) {

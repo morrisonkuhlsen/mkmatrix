@@ -4,6 +4,15 @@ use super::special::{ev_shape, resized_sum_range, resizes_sum_range};
 use super::*;
 
 impl<'h> Evaluator<'h> {
+    /// A library function on values already evaluated: the matrix operators' MX.MUL, MX.SOLVE
+    /// and MX.T.
+    pub(super) fn matrix_call(&mut self, name: &str, args: Vec<Value>) -> Value {
+        let Some(spec) = mkmatrix_functions::lookup(name) else { return Value::Error(CellError::Name) };
+        let evaluated: Vec<Arg> = args.into_iter().map(|value| Arg { value, from_ref: false }).collect();
+        let mut ctx = FnCtx { ev: self, criteria: None, lambda: None };
+        mkmatrix_functions::call(spec, &evaluated, &mut ctx)
+    }
+
     pub(super) fn call(&mut self, name: &str, args: &[Expr]) -> Ev {
         match name {
             "IF" => {

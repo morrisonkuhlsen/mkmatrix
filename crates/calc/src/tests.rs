@@ -2274,3 +2274,39 @@ fn loan_schedule_residue_keeps_excels_sign() {
     }
     assert_eq!(t.get("P7"), Value::Text("".into()));
 }
+
+#[test]
+fn matrix_operators_evaluate() {
+    let mut t = T::new();
+    // X: 4×2 (a constant and one regressor), y: 4×1.
+    for (r, (x, y)) in [(1.0, 2.0), (2.0, 3.0), (3.0, 5.0), (4.0, 6.0)].iter().enumerate() {
+        t.set(&format!("A{}", r + 1), "1");
+        t.set(&format!("B{}", r + 1), &x.to_string());
+        t.set(&format!("C{}", r + 1), &y.to_string());
+    }
+    // OLS by operators: beta = (X'X) \ (X'y), then the same through MX.INV.
+    t.set("E1", "=(A1:B4'@A1:B4)\\(A1:B4'@C1:C4)");
+    t.set("G1", "=MX.INV(A1:B4'@A1:B4)@A1:B4'@C1:C4");
+    for (a, b) in [("E1", "G1"), ("E2", "G2")] {
+        assert!((t.num(a) - t.num(b)).abs() < 1e-9, "{a} {} vs {b} {}", t.num(a), t.num(b));
+    }
+    assert!((t.num("E1") - 0.5).abs() < 1e-9 && (t.num("E2") - 1.4).abs() < 1e-9, "beta {} {}", t.num("E1"), t.num("E2"));
+    // The transpose spills; changing an input recalculates through the operators.
+    t.set("I1", "=C1:C4'");
+    assert_eq!((t.num("I1"), t.num("L1")), (2.0, 6.0));
+    t.set("C4", "7");
+    assert_eq!(t.num("L1"), 7.0);
+    // Shapes that don't fit give #VALUE!, a singular system #NUM!.
+    t.set("N1", "=A1:B4@C1:C4");
+    assert_eq!(t.get("N1"), Value::Error(CellError::Value));
+    t.set("N2", "={1,2;2,4}\\{1;2}");
+    assert_eq!(t.get("N2"), Value::Error(CellError::Num));
+}
+
+#[test]
+fn a_long_matrix_product_chain_does_not_overflow() {
+    let mut t = T::new();
+    let chain = vec!["{1,0;0,1}"; 700].join("@");
+    t.set("A1", &format!("=SUM({chain})"));
+    assert_eq!(t.num("A1"), 2.0);
+}

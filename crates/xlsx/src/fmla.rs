@@ -23,7 +23,11 @@ fn needs_file_spelling(e: &Expr) -> bool {
             Expr::Call(name, _) => {
                 name == "LET" || name == "LAMBDA" || crate::tables::file_function_name(name).is_some() || mkmatrix_core::mx::canonical(name).is_some()
             }
-            Expr::Unary(mkmatrix_formula::UnOp::Spill | mkmatrix_formula::UnOp::At | mkmatrix_formula::UnOp::Trim(_), _) => true,
+            Expr::Unary(
+                mkmatrix_formula::UnOp::Spill | mkmatrix_formula::UnOp::At | mkmatrix_formula::UnOp::Trim(_) | mkmatrix_formula::UnOp::Transpose,
+                _,
+            ) => true,
+            Expr::Binary(mkmatrix_formula::BinOp::MatMul | mkmatrix_formula::BinOp::Solve, ..) => true,
             Expr::Struct(_) => true,
             _ => false,
         }
@@ -113,6 +117,11 @@ fn expr_to_file(e: Expr) -> String {
         // reference that became `#REF!` (its cell was deleted) as plain `#REF!`.
         Expr::Unary(mkmatrix_formula::UnOp::Spill, r) if matches!(*r, Expr::Error(_)) => *r,
         Expr::Unary(mkmatrix_formula::UnOp::Spill, r) => Expr::Call("_xlfn.ANCHORARRAY".into(), vec![*r]),
+        // Nor MK Matrix's matrix operators: `X'` is TRANSPOSE(X), `A@B` MMULT(A,B), and `A\b`
+        // MK Matrix's own solver, user-defined to Excel.
+        Expr::Unary(mkmatrix_formula::UnOp::Transpose, x) => Expr::Call("TRANSPOSE".into(), vec![*x]),
+        Expr::Binary(mkmatrix_formula::BinOp::MatMul, a, b) => Expr::Call("MMULT".into(), vec![*a, *b]),
+        Expr::Binary(mkmatrix_formula::BinOp::Solve, a, b) => Expr::Call("_xludf.MX.SOLVE".into(), vec![*a, *b]),
         // Nor an `@` operator: Excel writes `@x` as `_xlfn.SINGLE(x)`.
         Expr::Unary(mkmatrix_formula::UnOp::At, x) => Expr::Call("_xlfn.SINGLE".into(), vec![*x]),
         // Nor the `[@Col]` shorthand: files spell it `[[#This Row],[Col]]`, or Excel repairs
@@ -227,6 +236,14 @@ mod tests {
         assert_eq!(to_file(&Formula::new("MX.SOLVE(A1:B2,C1:C2)+MX.DET(A1:B2)")), "_xludf.MX.SOLVE(A1:B2,C1:C2)+MDETERM(A1:B2)");
         // And read back under the MX. names.
         assert_eq!(Formula::new("_xludf.MX.SOLVE(A1:B2,C1:C2)+MDETERM(A1:B2)").text, "MX.SOLVE(A1:B2,C1:C2)+MX.DET(A1:B2)");
+    }
+
+    #[test]
+    fn matrix_operators_take_function_form_in_files() {
+        // The typed parentheses stay, around each argument.
+        assert_eq!(to_file(&Formula::new("(X'@X)\\(X'@y)")), "_xludf.MX.SOLVE((MMULT(TRANSPOSE(X),X)),(MMULT(TRANSPOSE(X),y)))");
+        assert_eq!(to_file(&Formula::new("A1:B3'")), "TRANSPOSE(A1:B3)");
+        assert_eq!(to_file(&Formula::new("A1:B2@C1:C2+1")), "MMULT(A1:B2,C1:C2)+1");
     }
 
     #[test]

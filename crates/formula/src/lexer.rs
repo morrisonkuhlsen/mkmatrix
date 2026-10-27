@@ -67,6 +67,25 @@ fn starts_range_end(c: Option<char>) -> bool {
     c.is_some_and(|c| c.is_ascii_alphanumeric() || c == '$')
 }
 
+/// Whether the last token ends an operand: a reference, name, number, text, error, closing
+/// bracket or a postfix operator. After one, `'` is MK Matrix's transpose and `\` its left
+/// division; anywhere else they keep Excel's meanings (a quoted sheet name, a name's first
+/// character).
+fn ends_operand(t: &Token) -> bool {
+    matches!(
+        t.tok,
+        Tok::Word(_)
+            | Tok::Number(_)
+            | Tok::Text(_)
+            | Tok::Bool(_)
+            | Tok::Error(_)
+            | Tok::RParen
+            | Tok::RBrace
+            | Tok::Struct(_)
+            | Tok::Op("'" | "%" | "#")
+    )
+}
+
 /// Tokenizes formula text (without the leading `=`).
 pub fn tokenize(src: &str) -> Result<Vec<Token>, LexError> {
     tokenize_locale(src, crate::FormulaLocale::En)
@@ -116,6 +135,19 @@ pub fn tokenize_locale(src: &str, locale: crate::FormulaLocale) -> Result<Vec<To
                 }
                 push(&mut out, Tok::Text(s), j);
                 i = j;
+            }
+            '\'' if out.last().is_some_and(|t: &Token| t.end == start && ends_operand(t)) => {
+                // Transpose, right after an operand: `X'`, `A1:B3'`, `(A@B)'`.
+                push(&mut out, Tok::Op("'"), i + 1);
+                i += 1;
+            }
+            // Not inside an array constant where `\` separates columns (Spanish input: `{1\2;3\4}`).
+            '\\' if !(array_depth > 0 && locale.array_column_separator() == '\\')
+                && out.iter().rev().find(|t: &&Token| t.tok != Tok::Space).is_some_and(ends_operand) =>
+            {
+                // Left division after an operand: `A\b`, `(X'@X) \ (X'@y)`.
+                push(&mut out, Tok::Op("\\"), i + 1);
+                i += 1;
             }
             '\'' => {
                 // Quoted sheet name: 'My Sheet'!  or 'A:B'!
@@ -330,7 +362,8 @@ pub fn tokenize_locale(src: &str, locale: crate::FormulaLocale) -> Result<Vec<To
             }
             c if is_word_char(c) => {
                 let mut j = i;
-                while ch(j).is_some_and(|c| is_word_char(c) && !(array_depth > 0 && c == locale.array_column_separator())) {
+                // A backslash only starts a name (Excel's rule); inside one it is left division.
+                while ch(j).is_some_and(|c| (c != '\\' || j == i) && is_word_char(c) && !(array_depth > 0 && c == locale.array_column_separator())) {
                     j += 1;
                 }
                 let w: String = chars.get(i..j).map(|s| s.iter().map(|c| c.1).collect()).unwrap_or_default();

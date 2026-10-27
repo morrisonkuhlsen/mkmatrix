@@ -150,6 +150,8 @@ fn binary_scalar(op: BinOp, a: &Value, b: &Value, sys: mkmatrix_core::DateSystem
         BinOp::Sub => num(|x, y| Value::number(x - y)),
         BinOp::Mul => num(|x, y| Value::number(x * y)),
         BinOp::Div => num(|x, y| if y == 0.0 { Value::Error(CellError::Div0) } else { Value::number(x / y) }),
+        // The matrix operators never reach here (`Evaluator::binary` calls MX.MUL / MX.SOLVE).
+        BinOp::MatMul | BinOp::Solve => Value::Error(CellError::Value),
         BinOp::Pow => num(|x, y| {
             if x == 0.0 && y == 0.0 {
                 Value::Error(CellError::Num)
