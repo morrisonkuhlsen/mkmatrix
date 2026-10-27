@@ -173,6 +173,10 @@ impl SheetApp {
                 self.ui.density = d;
                 Ok(json!({"mode": d.code()}))
             }
+            "view.classicRibbon" => {
+                self.ui.classic_ribbon = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.classic_ribbon);
+                Ok(json!({"on": self.ui.classic_ribbon}))
+            }
             "view.matrixBrackets" => {
                 self.ui.matrix_brackets = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.matrix_brackets);
                 Ok(json!({"on": self.ui.matrix_brackets}))

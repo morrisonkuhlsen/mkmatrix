@@ -28,6 +28,7 @@ pub mod icons;
 pub mod keymap;
 pub mod keytips;
 pub mod matrices;
+pub mod menus;
 pub mod outline;
 pub mod panes;
 pub mod paper_view;
@@ -111,6 +112,9 @@ pub struct UiState {
     pub density: Density,
     /// Square brackets around each named matrix on the sheet (View › Matrix Brackets).
     pub matrix_brackets: bool,
+    /// The classic ribbon of tabs and named groups instead of the menu bar and single-row toolbar
+    /// (View › Classic Ribbon).
+    pub classic_ribbon: bool,
 }
 
 /// How much room the bars above and below the sheet take; the sheet itself is never scaled.
@@ -195,6 +199,7 @@ impl Default for UiState {
             numbered_columns: true,
             density: Density::Normal,
             matrix_brackets: true,
+            classic_ribbon: false,
         }
     }
 }

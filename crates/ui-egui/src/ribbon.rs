@@ -45,6 +45,10 @@ const _: () = assert!(TITLE_CONTROL_H < TITLE_BAR_H, "title-bar controls keep a 
 
 /// Draws the ribbon tabs and the active tab's horizontally scrollable card, resetting an unavailable contextual tab to Home.
 pub fn show(app: &mut SheetApp, ui: &mut Ui) {
+    if !app.ui.classic_ribbon {
+        toolbar(app, ui);
+        return;
+    }
     let t = Tokens::get(ui.ctx());
     let collapsed = app.ui.ribbon_collapsed;
     // Compact: lower tabs, and a card without the groups' names.
@@ -164,6 +168,78 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                     });
                 });
                 scroll_arrows(ui, &t, tab.as_str(), scroll);
+            });
+        });
+}
+
+/// MK Matrix's top bar: a menu bar (File, Edit, View, Insert, Format, Data, Tools, Help) over a
+/// single row of the Home tab's controls, one size throughout. Minimal density keeps the menus
+/// only. View › Classic Ribbon brings the tabs back.
+fn toolbar(app: &mut SheetApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
+    let menu_h = if app.ui.density.compact() { 26.0 } else { 30.0 };
+    let row_h = 36.0;
+    let with_row = app.ui.density != crate::Density::Minimal;
+    let h = menu_h + if with_row { row_h + 2.0 } else { 0.0 };
+    egui::Panel::top("ribbon")
+        .exact_size(h)
+        .show_separator_line(false)
+        .frame(egui::Frame::NONE.fill(t.window).inner_margin(egui::Margin { left: 10, right: 10, top: 0, bottom: 0 }))
+        .show(ui, |ui| {
+            let lang = app.ui.language;
+            let bar = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), menu_h));
+            ui.scope_builder(egui::UiBuilder::new().max_rect(bar), |ui| {
+                ui.horizontal_centered(|ui| {
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    for (title, items) in crate::menus::tree() {
+                        let font = theme::ui_font(13.0);
+                        let label = lang.tr(title).to_string();
+                        let tw = ui.painter().layout_no_wrap(label.clone(), font.clone(), t.text).size().x;
+                        let (r, resp) = ui.allocate_exact_size(vec2(tw + 18.0, menu_h - 4.0), Sense::click());
+                        let open = egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&resp));
+                        if resp.hovered() || open {
+                            ui.painter().rect_filled(r, 0.0, t.hover);
+                        }
+                        ui.painter().text(r.center(), Align2::CENTER_CENTER, label.clone(), font, t.text);
+                        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &label));
+                        egui::Popup::menu(&resp).show(|ui| {
+                            ui.set_min_width(230.0);
+                            for (item, id) in &items {
+                                if *item == "-" {
+                                    ui.separator();
+                                    continue;
+                                }
+                                let button = egui::Button::new(lang.tr(item)).frame_when_inactive(false).min_size(vec2(230.0, 24.0));
+                                if ui.add(button).clicked() {
+                                    let ctx = ui.ctx().clone();
+                                    crate::menus::run(app, &ctx, id);
+                                    ui.close();
+                                }
+                            }
+                        });
+                    }
+                });
+            });
+            if !with_row {
+                return;
+            }
+            // The toolbar: the Home controls in one row, scrolling sideways when the window is
+            // narrower than they are.
+            let row = Rect::from_min_size(pos2(bar.left(), bar.bottom()), vec2(bar.width(), row_h));
+            ui.scope_builder(egui::UiBuilder::new().max_rect(row), |ui| {
+                let scroll = egui::ScrollArea::horizontal()
+                    .id_salt("toolbar_scroll")
+                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+                    .show(ui, |ui| {
+                        ui.set_min_height(row_h);
+                        ui.horizontal_centered(|ui| {
+                            ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
+                            controls::set_single_row(ui, true);
+                            home(app, ui);
+                            controls::set_single_row(ui, false);
+                        });
+                    });
+                scroll_arrows(ui, &t, "toolbar", scroll);
             });
         });
 }

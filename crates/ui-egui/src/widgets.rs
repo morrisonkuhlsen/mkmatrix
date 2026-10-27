@@ -60,9 +60,9 @@ pub fn icon_button(ui: &mut Ui, icon: Icon, color: Color32, tip: &str, size: egu
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
     let t = Tokens::get(ui.ctx());
     if resp.is_pointer_button_down_on() {
-        ui.painter().rect_filled(rect, 4.0, t.pressed);
+        ui.painter().rect_filled(rect, 0.0, t.pressed);
     } else if resp.hovered() {
-        ui.painter().rect_filled(rect, 4.0, t.hover);
+        ui.painter().rect_filled(rect, 0.0, t.hover);
     }
     icons::paint(ui.painter(), Rect::from_center_size(rect.center(), vec2(16.0, 16.0)), icon, color);
     resp.on_hover_text(tip_text(ui, tip))
@@ -87,10 +87,10 @@ pub fn toggle_button(ui: &mut Ui, icon: Icon, on: bool, tip: &str) -> Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(26.0, 24.0), Sense::click());
     let t = Tokens::get(ui.ctx());
     if on {
-        ui.painter().rect_filled(rect, 4.0, t.pressed);
-        ui.painter().rect_stroke(rect, 4.0, Stroke::new(1.0, t.separator), StrokeKind::Inside);
+        ui.painter().rect_filled(rect, 0.0, t.pressed);
+        ui.painter().rect_stroke(rect, 0.0, Stroke::new(1.0, t.separator), StrokeKind::Inside);
     } else if resp.hovered() {
-        ui.painter().rect_filled(rect, 4.0, t.hover);
+        ui.painter().rect_filled(rect, 0.0, t.hover);
     }
     icons::paint(ui.painter(), Rect::from_center_size(rect.center(), vec2(16.0, 16.0)), icon, t.text);
     resp.on_hover_text(tip_text(ui, tip))
@@ -187,9 +187,9 @@ pub fn small_button(ui: &mut Ui, icon: Icon, label: &str, tip: &str, dropdown: b
     let w = 24.0 + tw + if dropdown { 12.0 } else { 0.0 };
     let (rect, resp) = ui.allocate_exact_size(vec2(w, 23.0), Sense::click());
     if resp.is_pointer_button_down_on() {
-        ui.painter().rect_filled(rect, 4.0, t.pressed);
+        ui.painter().rect_filled(rect, 0.0, t.pressed);
     } else if resp.hovered() {
-        ui.painter().rect_filled(rect, 4.0, t.hover);
+        ui.painter().rect_filled(rect, 0.0, t.hover);
     }
     icons::paint(ui.painter(), Rect::from_center_size(pos2(rect.left() + 12.0, rect.center().y), vec2(16.0, 16.0)), icon, t.text);
     if !label.is_empty() {
@@ -198,9 +198,9 @@ pub fn small_button(ui: &mut Ui, icon: Icon, label: &str, tip: &str, dropdown: b
     if dropdown {
         icons::paint(
             ui.painter(),
-            Rect::from_center_size(pos2(rect.right() - 7.0, rect.center().y + 1.0), vec2(10.0, 10.0)),
+            Rect::from_center_size(pos2(rect.right() - 7.0, rect.center().y + 1.0), vec2(8.0, 8.0)),
             Icon::Chevron,
-            t.text_dim,
+            t.text_dim.gamma_multiply(0.7),
         );
     }
     resp.on_hover_text(tip_text(ui, tip))
@@ -216,14 +216,14 @@ pub fn split_button(ui: &mut Ui, icon: Icon, accent: Option<Color32>, tip: &str)
     let m = ui.interact(main, ui.scope_id().with((tip, "main")), Sense::click());
     let a = ui.interact(arrow, ui.scope_id().with((tip, "arrow")), Sense::click());
     if m.hovered() || a.hovered() {
-        ui.painter().rect_filled(rect, 4.0, t.hover);
+        ui.painter().rect_filled(rect, 0.0, t.hover);
         ui.painter().line_segment([pos2(main.right(), rect.top() + 3.0), pos2(main.right(), rect.bottom() - 3.0)], Stroke::new(1.0, t.separator));
     }
     icons::paint(ui.painter(), Rect::from_center_size(main.center() - vec2(0.0, 2.0), vec2(16.0, 16.0)), icon, t.text);
     if let Some(c) = accent {
         ui.painter().rect_filled(Rect::from_min_size(pos2(main.left() + 4.0, main.bottom() - 5.0), vec2(17.0, 3.0)), 0.0, c);
     }
-    icons::paint(ui.painter(), Rect::from_center_size(arrow.center(), vec2(10.0, 10.0)), Icon::Chevron, t.text_dim);
+    icons::paint(ui.painter(), Rect::from_center_size(arrow.center(), vec2(8.0, 8.0)), Icon::Chevron, t.text_dim.gamma_multiply(0.7));
     (m.on_hover_text(tip_text(ui, tip)).clicked(), a)
 }
 
@@ -244,17 +244,22 @@ pub fn small_split_button(ui: &mut Ui, icon: Icon, label: &str, tip: &str) -> (R
     m.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, &name));
     a.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, format!("{name} options")));
     if m.hovered() || a.hovered() {
-        ui.painter().rect_filled(rect, 4.0, t.hover);
+        ui.painter().rect_filled(rect, 0.0, t.hover);
         for (part, r) in [(&m, main), (&a, arrow)] {
             if part.is_pointer_button_down_on() {
-                ui.painter().rect_filled(r, 4.0, t.pressed);
+                ui.painter().rect_filled(r, 0.0, t.pressed);
             }
         }
         ui.painter().line_segment([pos2(main.right(), rect.top() + 3.0), pos2(main.right(), rect.bottom() - 3.0)], Stroke::new(1.0, t.separator));
     }
     icons::paint(ui.painter(), Rect::from_center_size(pos2(rect.left() + 12.0, rect.center().y), vec2(16.0, 16.0)), icon, t.text);
     ui.painter().text(pos2(rect.left() + 24.0, rect.center().y), Align2::LEFT_CENTER, label, font, t.text);
-    icons::paint(ui.painter(), Rect::from_center_size(pos2(arrow.center().x, rect.center().y + 1.0), vec2(10.0, 10.0)), Icon::Chevron, t.text_dim);
+    icons::paint(
+        ui.painter(),
+        Rect::from_center_size(pos2(arrow.center().x, rect.center().y + 1.0), vec2(8.0, 8.0)),
+        Icon::Chevron,
+        t.text_dim.gamma_multiply(0.7),
+    );
     let tip = tip_text(ui, tip);
     (m.on_hover_text(tip.clone()), a.on_hover_text(tip))
 }

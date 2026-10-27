@@ -1,6 +1,6 @@
 use super::controls::{
-    ComboResult, act, active_style, anchor_keytip, control_keytip, editable_combo, invoke, keytip, list_combo, menu_items, popup_command, sep,
-    theme_colors,
+    ComboResult, act, active_style, anchor_keytip, control_keytip, editable_combo, invoke, keytip, list_combo, menu_items, popup_command, sep, stack,
+    theme_colors, tool, wide,
 };
 use super::galleries::{cell_style_gallery, table_gallery};
 use super::*;
@@ -25,7 +25,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let st = active_style(app);
     // Clipboard
-    let paste = big_button(ui, Icon::Paste, "Paste", "Paste", true);
+    let paste = tool(ui, Icon::Paste, "Paste", "Paste", true);
     paste.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "Paste"));
     for sequence in
         keytip_table::group_extension(app.keytips.prefix().unwrap_or_default(), &["edit.paste", "edit.pasteSpecial", "dialog:pasteSpecial"])
@@ -76,7 +76,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
             ],
         );
     });
-    ui.vertical(|ui| {
+    stack(ui, |ui| {
         let __k = icon_button(ui, Icon::Cut, t.text, "Cut", vec2(26.0, 23.0));
         control_keytip(app, ui, &__k, "edit.cut");
         if __k.clicked() {
@@ -103,7 +103,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
     });
     sep(ui, "Clipboard");
     // Font
-    ui.vertical(|ui| {
+    stack(ui, |ui| {
         ui.horizontal(|ui| {
             font_combo(app, ui, &st);
             size_combo(app, ui, &st);
@@ -226,7 +226,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
     });
     sep(ui, "Font");
     // Alignment
-    ui.vertical(|ui| {
+    stack(ui, |ui| {
         ui.horizontal(|ui| {
             for (icon, v, id, tip) in [
                 (Icon::AlignTop, VAlign::Top, "home.alignTop", "Top Align"),
@@ -309,7 +309,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
     });
     sep(ui, "Alignment");
     // Number
-    ui.vertical(|ui| {
+    stack(ui, |ui| {
         number_combo(app, ui, &st);
         ui.horizontal(|ui| {
             let (c, ca) = split_button(ui, Icon::Currency, None, "Accounting Number Format");
@@ -347,19 +347,19 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
     });
     sep(ui, "Number");
     // Styles
-    let cf = big_button(ui, Icon::CondFormat, "Conditional\nFormatting", "Conditional Formatting", true);
+    let cf = tool(ui, Icon::CondFormat, "Conditional\nFormatting", "Conditional Formatting", true);
     anchor_keytip(app, ui, &cf, &["home.conditionalFormat", "home.manageRules", "home.clearRules"]);
     egui::Popup::menu(&cf).show(|ui| cf_menu(app, ui));
-    let ft = big_button(ui, Icon::FormatTable, "Format\nas Table", "Format as Table", true);
+    let ft = tool(ui, Icon::FormatTable, "Format\nas Table", "Format as Table", true);
     anchor_keytip(app, ui, &ft, &["table.style"]);
     egui::Popup::menu(&ft).show(|ui| table_gallery(app, ui, "home.formatAsTable"));
-    let cs = big_button(ui, Icon::CellStyles, "Cell\nStyles", "Cell Styles", true);
+    let cs = tool(ui, Icon::CellStyles, "Cell\nStyles", "Cell Styles", true);
     anchor_keytip(app, ui, &cs, &["home.newCellStyle"]);
     egui::Popup::menu(&cs).show(|ui| cell_style_gallery(app, ui));
     sep(ui, "Styles");
     // Cells
-    ui.vertical(|ui| {
-        let ins = small_button(ui, Icon::Insert, "Insert", "Insert", true);
+    stack(ui, |ui| {
+        let ins = small_button(ui, Icon::Insert, wide(ui, "Insert"), "Insert", true);
         for sequence in keytip_table::group_extension(
             app.keytips.prefix().unwrap_or_default(),
             &["dialog:insertCells", "home.insertRows", "home.insertColumns", "home.insertSheet"],
@@ -378,7 +378,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
                 ],
             );
         });
-        let del = small_button(ui, Icon::Delete, "Delete", "Delete", true);
+        let del = small_button(ui, Icon::Delete, wide(ui, "Delete"), "Delete", true);
         for sequence in keytip_table::group_extension(
             app.keytips.prefix().unwrap_or_default(),
             &["dialog:deleteCells", "home.deleteRows", "home.deleteColumns", "home.deleteSheet"],
@@ -397,7 +397,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
                 ],
             );
         });
-        let fmt = small_button(ui, Icon::Format, "Format", "Format", true);
+        let fmt = small_button(ui, Icon::Format, wide(ui, "Format"), "Format", true);
         for sequence in keytip_table::group_extension(
             app.keytips.prefix().unwrap_or_default(),
             &[
@@ -457,7 +457,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
     });
     sep(ui, "Cells");
     // Editing
-    ui.vertical(|ui| {
+    stack(ui, |ui| {
         ui.horizontal(|ui| {
             let (s, sa) = split_button(ui, Icon::Sum, None, "AutoSum");
             control_keytip(app, ui, &sa, "formulas.autoSum");
@@ -508,7 +508,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
             );
         });
     });
-    let sf = big_button(ui, Icon::SortFilter, "Sort &\nFilter", "Sort & Filter", true);
+    let sf = tool(ui, Icon::SortFilter, "Sort &\nFilter", "Sort & Filter", true);
     for sequence in keytip_table::group_extension(
         app.keytips.prefix().unwrap_or_default(),
         &["data.sortAscending", "data.sortDescending", "dialog:sort", "data.filter", "data.clearFilter", "data.reapply"],
@@ -530,7 +530,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
             ],
         );
     });
-    let fs = big_button(ui, Icon::Find, "Find &\nSelect", "Find & Select", true);
+    let fs = tool(ui, Icon::Find, "Find &\nSelect", "Find & Select", true);
     for sequence in keytip_table::group_extension(
         app.keytips.prefix().unwrap_or_default(),
         &["dialog:find", "dialog:goTo", "dialog:goToSpecial", "edit.goToSpecial"],

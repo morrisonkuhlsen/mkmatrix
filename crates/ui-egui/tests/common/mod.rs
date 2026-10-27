@@ -30,6 +30,9 @@ pub fn app(session: Session) -> SheetApp {
 /// Mark `app` as already using the harness's pinned font set.
 pub fn prepare(mut app: SheetApp) -> SheetApp {
     app.use_prepared_fonts();
+    // The suite drives the classic ribbon's tabs and groups (View › Classic Ribbon); the
+    // single-row toolbar has tests of its own.
+    app.ui.classic_ribbon = true;
     app
 }
 
