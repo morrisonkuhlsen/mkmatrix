@@ -1,6 +1,6 @@
 //! The formula bar (Name Box, ✕ ✓ fx, formula field) and the shared cell editor widget.
 
-use egui::{FontId, Key, Rect, Sense, Stroke, StrokeKind, TextEdit, pos2, vec2};
+use egui::{FontId, Key, Rect, Sense, TextEdit, pos2, vec2};
 use serde_json::json;
 
 use crate::SheetApp;
@@ -116,7 +116,6 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
                 let avail = ui.available_width() - 24.0;
                 let field = Rect::from_min_size(ui.cursor().min, vec2(avail, ui.available_height()));
                 ui.painter().rect_filled(field, 0.0, t.window);
-                ui.painter().rect_stroke(field, 0.0, Stroke::new(1.0, t.input_border), StrokeKind::Inside);
                 let inner = field.shrink2(vec2(6.0, 3.0));
                 // The formula reads from the field's top, whatever the row's centring.
                 let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));
@@ -208,7 +207,6 @@ fn name_box(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens) -> Rect {
     let top = ui.cursor().min.y + ((ui.available_height() - 24.0) / 2.0).max(0.0);
     let rect = Rect::from_min_size(pos2(ui.cursor().min.x, top), vec2(118.0, 24.0));
     ui.painter().rect_filled(rect, 0.0, t.window);
-    ui.painter().rect_stroke(rect, 0.0, Stroke::new(1.0, t.input_border), StrokeKind::Inside);
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(rect.min + vec2(6.0, 3.0), vec2(96.0, 18.0))));
     // The box has no visible label of its own: screen readers and the strict accessibility check
     // need a name (egui 0.37 makes unnamed text inputs a test failure).
