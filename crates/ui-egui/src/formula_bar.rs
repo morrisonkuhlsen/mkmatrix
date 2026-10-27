@@ -85,8 +85,8 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
         .show_separator_line(false)
         .frame(egui::Frame::NONE.fill(t.window).inner_margin(egui::Margin { left: 8, right: 8, top: pad, bottom: pad }))
         .show(ui, |ui| {
-            // Top-aligned: the Name Box and buttons stay on the first line as the field grows.
-            ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
+            // Centred: as the bar grows (eased), the Name Box and buttons glide to its middle.
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
                 layout.name_box = name_box(app, ui, &t);
                 ui.add_space(4.0);
@@ -118,7 +118,8 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
                 ui.painter().rect_filled(field, 0.0, t.window);
                 ui.painter().rect_stroke(field, 0.0, Stroke::new(1.0, t.input_border), StrokeKind::Inside);
                 let inner = field.shrink2(vec2(6.0, 3.0));
-                let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner));
+                // The formula reads from the field's top, whatever the row's centring.
+                let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));
                 let id = egui::Id::unique("mkmatrix.formula_bar");
                 // A spill child shows its anchor's formula muted and read-only.
                 let read_only = active_spill_anchor(app).is_some();
@@ -203,7 +204,9 @@ fn name_box(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens) -> Rect {
     let id = egui::Id::unique("mkmatrix.name_box");
     let shown = app.name_box_text();
     let mut text = app.name_box.clone().unwrap_or(shown.clone());
-    let rect = Rect::from_min_size(ui.cursor().min, vec2(118.0, 24.0));
+    // Centred in the bar's height, as the row's buttons are.
+    let top = ui.cursor().min.y + ((ui.available_height() - 24.0) / 2.0).max(0.0);
+    let rect = Rect::from_min_size(pos2(ui.cursor().min.x, top), vec2(118.0, 24.0));
     ui.painter().rect_filled(rect, 0.0, t.window);
     ui.painter().rect_stroke(rect, 0.0, Stroke::new(1.0, t.input_border), StrokeKind::Inside);
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(rect.min + vec2(6.0, 3.0), vec2(96.0, 18.0))));

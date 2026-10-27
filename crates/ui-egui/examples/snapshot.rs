@@ -2,7 +2,7 @@
 //!
 //! `cargo run --release -p mkmatrix-ui-egui --example snapshot -- [--sample sales] [--in file.xlsx]
 //!  [--size 1440x900] [--scale 2] [--cmd 'id={json}']... [--tab Insert] [--dark] [--language en|es|zh|ja|ko|ru|pt|de|cs|fr|tr]
-//!  [--dialog 'name={json}'] [--hf-edit header|footer] [--splash] [--backstage] [--density normal|compact|minimal] out.png`
+//!  [--dialog 'name={json}'] [--hf-edit header|footer] [--splash] [--backstage] [--density normal|compact|minimal] [--ui 'id={json}']... out.png`
 //!
 //! `--splash` renders the splash screen alone, at its own size.
 
@@ -27,6 +27,7 @@ fn main() {
     let mut splash = false;
     let mut backstage = false;
     let mut density: Option<String> = None;
+    let mut ui_cmds: Vec<String> = vec![];
     let mut out = "snapshot.png".to_string();
     let mut i = 0;
     while i < args.len() {
@@ -82,6 +83,12 @@ fn main() {
             }
             "--splash" => splash = true,
             "--backstage" => backstage = true,
+            "--ui" => {
+                i += 1;
+                if let Some(c) = args.get(i) {
+                    ui_cmds.push(c.clone());
+                }
+            }
             "--density" => {
                 i += 1;
                 density = args.get(i).cloned();
@@ -141,6 +148,15 @@ fn main() {
                 }
                 if let Some(t) = tab {
                     app.ui.ribbon_tab = t;
+                }
+                for c in &ui_cmds {
+                    let (id, p) = c
+                        .split_once('=')
+                        .map(|(a, b)| (a.to_string(), serde_json::from_str(b).unwrap_or(json!({}))))
+                        .unwrap_or((c.clone(), json!({})));
+                    if let Err(e) = app.run(&id, p) {
+                        eprintln!("{id}: {e}");
+                    }
                 }
                 if let Some(d) = &density {
                     let _ = app.run("view.density", json!({"mode": d}));

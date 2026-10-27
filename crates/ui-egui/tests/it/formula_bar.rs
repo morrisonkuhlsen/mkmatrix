@@ -59,12 +59,8 @@ fn row_height(h: &Harness) -> f32 {
     h.ctx.fonts_mut(|f| f.row_height(&theme::ui_font(13.0)))
 }
 
-fn same(a: Rect, b: Rect) -> bool {
-    (a.min - b.min).length() < 0.5 && (a.max - b.max).length() < 0.5
-}
-
 #[test]
-fn bar_grows_to_five_lines_then_scrolls_with_name_box_pinned() {
+fn bar_grows_to_five_lines_then_scrolls_with_name_box_centred() {
     let mut h = harness(blank());
     // The one-line height is 30 px unless the font's rows need more (Windows' do).
     let rh = row_height(&h);
@@ -83,8 +79,14 @@ fn bar_grows_to_five_lines_then_scrolls_with_name_box_pinned() {
         assert_eq!(l.lines, n, "the editor holds {n} lines");
         let expect = base + (n.min(MAX_LINES) - 1) as f32 * rh;
         assert!((l.height - expect).abs() < 0.5, "{n} lines: height {} expected {expect}", l.height);
-        assert!(same(l.name_box, one.name_box), "the Name Box stays on the first line ({n} lines)");
-        assert!(same(l.buttons, one.buttons), "the buttons stay on the first line ({n} lines)");
+        // The Name Box and buttons keep their places across, centred in the bar's height.
+        for (now, first, what) in [(l.name_box, one.name_box, "Name Box"), (l.buttons, one.buttons, "buttons")] {
+            assert!(
+                (now.left() - first.left()).abs() < 0.5 && (now.height() - first.height()).abs() < 0.5,
+                "the {what} keep their place ({n} lines)"
+            );
+            assert!((now.center().y - l.field.center().y).abs() < 1.0, "the {what} are centred ({n} lines): {now:?} in {:?}", l.field);
+        }
         let caret = l.caret.expect("a caret while editing");
         assert!(l.field.contains_rect(caret.shrink(0.5)), "the caret stays visible at {n} lines: {caret:?} in {:?}", l.field);
     }
