@@ -786,10 +786,8 @@ fn freeze_boundary(geo: &Geo, sh: &Sheet, p: Pos2, cols: bool) -> u32 {
 
 /// Paints the freeze handles and, while one is dragged, where the freeze line will go.
 pub(super) fn paint_freeze_handles(p: &Painter, geo: &Geo, sh: &Sheet, drag: &Drag, t: &Tokens) {
-    let (cols, rows) = freeze_handles(geo);
-    let bar = Color32::from_gray(150);
-    p.rect_filled(Rect::from_center_size(cols.center(), vec2(3.0, cols.height())), 1.0, bar);
-    p.rect_filled(Rect::from_center_size(rows.center(), vec2(rows.width(), 3.0)), 1.0, bar);
+    // MK Matrix draws no bars for the handles: the headings' corner stays clean. They still drag,
+    // and the line being dragged shows where the panes will freeze.
     if let Drag::Freeze { cols, to: Some(to) } = *drag {
         let stroke = Stroke::new(2.0, t.accent);
         if cols {
