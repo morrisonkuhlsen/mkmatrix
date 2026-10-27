@@ -63,7 +63,7 @@ fn run(s: &mut Session, id: &str, p: serde_json::Value) -> bool {
 
 /// MK Matrix's own sample: ordinary least squares worked as matrices, each step a block on the
 /// sheet: the design matrix X and y, X'X, its inverse, X'y, then beta = (X'X)^-1 X'y, the fitted
-/// values and the residuals, all as spilled array formulas.
+/// values and the residuals, all as spilled MX. array formulas.
 fn regression(s: &mut Session) -> bool {
     // Eight students: an intercept column, hours studied, hours slept; and the exam score.
     let x = json!([["const", "Hours", "Sleep"], [1, 2, 8], [1, 3, 6], [1, 4, 7], [1, 5, 5], [1, 6, 8], [1, 7, 6], [1, 8, 7], [1, 9, 8]]);
@@ -96,18 +96,18 @@ fn regression(s: &mut Session) -> bool {
     ok &= run(s, "range.setValues", json!({"range": "G6", "values": [["y-hat"]]}));
     ok &= run(s, "range.setValues", json!({"range": "H6", "values": [["e"]]}));
     // The matrices, as spilled array formulas.
-    ok &= run(s, "cell.set", json!({"cell": "J6", "input": "=MMULT(TRANSPOSE(B7:D14),B7:D14)"}));
-    ok &= run(s, "cell.set", json!({"cell": "J11", "input": "=MINVERSE(J6:L8)"}));
-    ok &= run(s, "cell.set", json!({"cell": "O6", "input": "=MMULT(TRANSPOSE(B7:D14),F7:F14)"}));
+    ok &= run(s, "cell.set", json!({"cell": "J6", "input": "=MX.MUL(MX.T(B7:D14),B7:D14)"}));
+    ok &= run(s, "cell.set", json!({"cell": "J11", "input": "=MX.INV(J6:L8)"}));
+    ok &= run(s, "cell.set", json!({"cell": "O6", "input": "=MX.MUL(MX.T(B7:D14),F7:F14)"}));
     ok &= run(s, "range.setValues", json!({"range": "M11", "values": [["Intercept"], ["Hours"], ["Sleep"]]}));
-    ok &= run(s, "cell.set", json!({"cell": "N11", "input": "=MMULT(J11:L13,O6:O8)"}));
-    ok &= run(s, "cell.set", json!({"cell": "G7", "input": "=MMULT(B7:D14,N11:N13)"}));
+    ok &= run(s, "cell.set", json!({"cell": "N11", "input": "=MX.MUL(J11:L13,O6:O8)"}));
+    ok &= run(s, "cell.set", json!({"cell": "G7", "input": "=MX.MUL(B7:D14,N11:N13)"}));
     ok &= run(s, "cell.set", json!({"cell": "H7", "input": "=F7:F14-G7:G14"}));
     // How good the fit is.
     ok &= run(s, "range.setValues", json!({"range": "B17", "values": [["R squared"], ["RSS"], ["det(X'X)"]]}));
     ok &= run(s, "cell.set", json!({"cell": "D17", "input": "=1-SUMSQ(H7:H14)/DEVSQ(F7:F14)"}));
     ok &= run(s, "cell.set", json!({"cell": "D18", "input": "=SUMSQ(H7:H14)"}));
-    ok &= run(s, "cell.set", json!({"cell": "D19", "input": "=MDETERM(J6:L8)"}));
+    ok &= run(s, "cell.set", json!({"cell": "D19", "input": "=MX.DET(J6:L8)"}));
     // Each block shaded and boxed, the headers bold.
     for block in ["B7:D14", "F7:F14", "G7:H14", "J6:L8", "J11:L13", "O6:O8", "N11:N13"] {
         ok &= run(s, "home.fillColor", json!({"range": block, "color": "#DCF4EE"}));
@@ -130,7 +130,7 @@ fn regression(s: &mut Session) -> bool {
     ok &= run(s, "home.columnWidth", json!({"cols": "J:L", "width": 74}));
     ok &= run(s, "home.columnWidth", json!({"cols": "M:M", "width": 70}));
     ok &= run(s, "home.columnWidth", json!({"cols": "N:O", "width": 74}));
-    ok &= run(s, "review.newNote", json!({"cell": "N10", "text": "beta = (X'X)^-1 X'y: MMULT of the inverse and X'y."}));
+    ok &= run(s, "review.newNote", json!({"cell": "N10", "text": "beta = (X'X)^-1 X'y: MX.MUL of the inverse and X'y."}));
     // The fit: actual and fitted scores against hours studied.
     ok &= run(
         s,

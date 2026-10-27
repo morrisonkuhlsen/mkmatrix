@@ -58,7 +58,11 @@ pub(super) struct Links {
 }
 
 pub(super) fn function(iftab: u16) -> Option<(&'static str, i8)> {
-    FTAB.binary_search_by_key(&iftab, |(i, _, _)| *i).ok().and_then(|i| FTAB.get(i)).map(|(_, n, a)| (*n, *a))
+    // Excel's matrix functions read as their MX. names (MMULT → MX.MUL).
+    FTAB.binary_search_by_key(&iftab, |(i, _, _)| *i)
+        .ok()
+        .and_then(|i| FTAB.get(i))
+        .map(|(_, n, a)| (mkmatrix_core::mx::from_excel(n).unwrap_or(n), *a))
 }
 
 fn error_code(code: u8) -> Option<CellError> {

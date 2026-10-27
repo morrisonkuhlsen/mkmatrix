@@ -542,11 +542,11 @@ pub(crate) fn paint_headers(
     // Corner (select all) and edges.
     let corner = Rect::from_min_max(r.min, geo.cells.min);
     p.rect_filled(corner, 0.0, t.header_bg);
-    let tri = vec![
-        pos2(corner.right() - 3.0, corner.top() + 5.0),
-        pos2(corner.right() - 3.0, corner.bottom() - 3.0),
-        pos2(corner.left() + 7.0, corner.bottom() - 3.0),
-    ];
+    // A right isosceles triangle in the bottom-right corner, the same inset from both edges.
+    let inset = 3.0;
+    let leg = (corner.width().min(corner.height()) - 2.0 * inset).max(0.0);
+    let (right, bottom) = (corner.right() - inset, corner.bottom() - inset);
+    let tri = vec![pos2(right, bottom - leg), pos2(right, bottom), pos2(right - leg, bottom)];
     p.add(egui::Shape::convex_polygon(tri, Color32::from_gray(190), Stroke::NONE));
     p.line_segment([pos2(r.left(), geo.cells.top() - 0.5), pos2(r.right(), geo.cells.top() - 0.5)], Stroke::new(1.0, t.header_line));
     p.line_segment([pos2(geo.cells.left() - 0.5, r.top()), pos2(geo.cells.left() - 0.5, r.bottom())], Stroke::new(1.0, t.header_line));

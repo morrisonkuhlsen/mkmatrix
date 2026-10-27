@@ -244,6 +244,8 @@ pub fn lookup(name: &str) -> Option<&'static FnSpec> {
         }
     }
     let (v, map) = registry();
+    // Excel's matrix functions are registered under their MX. names (MMULT → MX.MUL).
+    let n = mkmatrix_core::mx::from_excel(&n).map_or(n, str::to_string);
     map.get(n.as_str()).and_then(|&i| v.get(i))
 }
 

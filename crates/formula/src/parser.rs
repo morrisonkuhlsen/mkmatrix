@@ -134,12 +134,14 @@ pub fn normalize_function_name(name: &str) -> String {
     let u = name.to_ascii_uppercase();
     for p in ["_XLFN._XLWS.", "_XLFN.", "_XLWS."] {
         if let Some(r) = u.strip_prefix(p) {
-            return r.to_string();
+            return mkmatrix_core::mx::from_excel(r).map_or_else(|| r.to_string(), str::to_string);
         }
     }
     match u.strip_prefix("_XLUDF.") {
-        Some(r) => format!("_xludf.{r}"),
-        None => u,
+        // MK Matrix's own functions, as files carry them.
+        Some(r) => mkmatrix_core::mx::canonical(r).map_or_else(|| format!("_xludf.{r}"), str::to_string),
+        // Excel's matrix functions go by their MX. names (MMULT → MX.MUL).
+        None => mkmatrix_core::mx::from_excel(&u).map_or(u, str::to_string),
     }
 }
 

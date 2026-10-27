@@ -20,7 +20,9 @@ fn needs_file_spelling(e: &Expr) -> bool {
     let mut found = false;
     e.walk(&mut |x| {
         found |= match x {
-            Expr::Call(name, _) => name == "LET" || name == "LAMBDA" || crate::tables::file_function_name(name).is_some(),
+            Expr::Call(name, _) => {
+                name == "LET" || name == "LAMBDA" || crate::tables::file_function_name(name).is_some() || mkmatrix_core::mx::canonical(name).is_some()
+            }
             Expr::Unary(mkmatrix_formula::UnOp::Spill | mkmatrix_formula::UnOp::At | mkmatrix_formula::UnOp::Trim(_), _) => true,
             Expr::Struct(_) => true,
             _ => false,
@@ -103,7 +105,7 @@ fn prefix_params(e: Expr, scope: &[String]) -> Expr {
 fn expr_to_file(e: Expr) -> String {
     let e = prefix_params(e, &[]);
     let e = e.map(&mut |x| match x {
-        Expr::Call(name, args) => match crate::tables::file_function_name(&name) {
+        Expr::Call(name, args) => match crate::tables::file_function_name(&name).or_else(|| mkmatrix_core::mx::file_name(&name)) {
             Some(n) => Expr::Call(n, args),
             None => Expr::Call(name, args),
         },
@@ -213,6 +215,18 @@ mod tests {
             }
         }
         assert!(checked > mkmatrix_functions::all().len() * 10, "only {checked} formulas parsed");
+    }
+
+    #[test]
+    fn mx_functions_take_excel_names_in_files() {
+        // Typed under either name, shown under the MX. one.
+        assert_eq!(Formula::new("MMULT(A1:B2,C1:C2)").text, "MX.MUL(A1:B2,C1:C2)");
+        assert_eq!(Formula::new("mx.inv(A1:B2)").text, "MX.INV(A1:B2)");
+        // Written as Excel's function, or as user-defined when Excel has none.
+        assert_eq!(to_file(&Formula::new("MX.MUL(MX.T(A1:B2),MX.INV(C1:D2))")), "MMULT(TRANSPOSE(A1:B2),MINVERSE(C1:D2))");
+        assert_eq!(to_file(&Formula::new("MX.SOLVE(A1:B2,C1:C2)+MX.DET(A1:B2)")), "_xludf.MX.SOLVE(A1:B2,C1:C2)+MDETERM(A1:B2)");
+        // And read back under the MX. names.
+        assert_eq!(Formula::new("_xludf.MX.SOLVE(A1:B2,C1:C2)+MDETERM(A1:B2)").text, "MX.SOLVE(A1:B2,C1:C2)+MX.DET(A1:B2)");
     }
 
     #[test]

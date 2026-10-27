@@ -120,6 +120,12 @@ impl Scan<'_> {
     }
 
     fn call(&mut self, name: &str, args: &[Expr], sheet: usize, array_context: bool, depth: usize) -> Shape {
+        // MX. functions are judged as the Excel functions they are written as (MX.MUL as MMULT);
+        // MK Matrix's own take whole matrices and return them, as MMULT does.
+        let name = match mkmatrix_core::mx::canonical(name) {
+            Some(mx) => mkmatrix_core::mx::excel_name(mx).unwrap_or("MMULT"),
+            None => name,
+        };
         if name == "LET"
             && args.len() >= 3
             && let Some((last, bindings)) = args.split_last()

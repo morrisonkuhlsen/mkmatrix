@@ -32,7 +32,7 @@ pub(super) fn keytip(app: &SheetApp, ui: &Ui, sequence: &str, at: egui::Pos2) {
     let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::unique("ribbon_keytips"))).with_clip_rect(ui.clip_rect());
     let text = painter.layout_no_wrap(rest.into(), theme::ui_bold(10.5), t.text);
     let rect = Rect::from_center_size(at, text.size() + vec2(7.0, 3.0));
-    painter.rect_filled(rect, 2.0, t.input_bg);
+    painter.rect_filled(rect, 0.0, t.input_bg);
     painter.rect_stroke(rect, 2.0, Stroke::new(1.0, t.text_dim), StrokeKind::Inside);
     painter.galley(rect.min + vec2(3.5, 1.5), text, t.text);
 }

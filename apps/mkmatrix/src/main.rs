@@ -246,6 +246,13 @@ fn icon() -> Option<egui::IconData> {
     Some(egui::IconData { width: img.width(), height: img.height(), rgba: img.into_raw() })
 }
 
+/// Whether to run through X11 (XWayland on a Wayland desktop): only when MKMATRIX_X11 asks
+/// for it and an X display is there.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn force_x11() -> bool {
+    std::env::var_os("MKMATRIX_X11").is_some() && std::env::var_os("DISPLAY").is_some_and(|d| !d.is_empty())
+}
+
 /// The splash screen's window: its size, no decorations, off the taskbar.
 fn splash_viewport() -> egui::ViewportBuilder {
     let viewport = egui::ViewportBuilder::default()
@@ -371,11 +378,11 @@ fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions { viewport, ..Default::default() };
     #[cfg(all(unix, not(target_os = "macos")))]
     let mut options = options;
-    // winit has no file drag-and-drop on Wayland (only on X11), so dropping files from the file
-    // manager showed a "no" cursor. Run through XWayland when it's there; MKMATRIX_WAYLAND=1
-    // keeps the native Wayland backend.
+    // Native Wayland by default: compositors such as niri ignore an XWayland window's requests
+    // to maximize (a double-click on the title bar did nothing). MKMATRIX_X11=1 runs through
+    // XWayland instead, where winit has file drag-and-drop (it has none on Wayland).
     #[cfg(all(unix, not(target_os = "macos")))]
-    if std::env::var_os("DISPLAY").is_some_and(|d| !d.is_empty()) && std::env::var_os("MKMATRIX_WAYLAND").is_none() {
+    if force_x11() {
         options.event_loop_builder = Some(Box::new(|b| {
             use winit::platform::x11::EventLoopBuilderExtX11;
             b.with_x11();
@@ -406,7 +413,7 @@ fn main() -> eframe::Result<()> {
     if !no_splash && control_port.is_none() {
         let mut splash = eframe::NativeOptions { viewport: splash_viewport(), centered: true, ..Default::default() };
         #[cfg(all(unix, not(target_os = "macos")))]
-        if std::env::var_os("DISPLAY").is_some_and(|d| !d.is_empty()) && std::env::var_os("MKMATRIX_WAYLAND").is_none() {
+        if force_x11() {
             splash.event_loop_builder = Some(Box::new(|b| {
                 use winit::platform::x11::EventLoopBuilderExtX11;
                 b.with_x11();

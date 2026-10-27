@@ -79,6 +79,8 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     let mut layout = BarLayout { height: h, ..Default::default() };
     egui::Panel::top("formula_bar")
         .exact_size(h)
+        // No line between the bar and the column headings.
+        .show_separator_line(false)
         .frame(egui::Frame::NONE.fill(t.window).inner_margin(egui::Margin { left: 8, right: 8, top: 3, bottom: 3 }))
         .show(ui, |ui| {
             // Top-aligned: the Name Box and buttons stay on the first line as the field grows.
@@ -104,8 +106,8 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
                 // The formula field fills the rest, as tall as the bar.
                 let avail = ui.available_width() - 24.0;
                 let field = Rect::from_min_size(ui.cursor().min, vec2(avail, ui.available_height()));
-                ui.painter().rect_filled(field, 4.0, t.input_bg);
-                ui.painter().rect_stroke(field, 4.0, Stroke::new(1.0, t.input_border), StrokeKind::Inside);
+                ui.painter().rect_filled(field, 0.0, t.window);
+                ui.painter().rect_stroke(field, 0.0, Stroke::new(1.0, t.input_border), StrokeKind::Inside);
                 let inner = field.shrink2(vec2(6.0, 3.0));
                 let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner));
                 let id = egui::Id::unique("mkmatrix.formula_bar");
@@ -193,8 +195,8 @@ fn name_box(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens) -> Rect {
     let shown = app.name_box_text();
     let mut text = app.name_box.clone().unwrap_or(shown.clone());
     let rect = Rect::from_min_size(ui.cursor().min, vec2(118.0, 24.0));
-    ui.painter().rect_filled(rect, 4.0, t.input_bg);
-    ui.painter().rect_stroke(rect, 4.0, Stroke::new(1.0, t.input_border), StrokeKind::Inside);
+    ui.painter().rect_filled(rect, 0.0, t.window);
+    ui.painter().rect_stroke(rect, 0.0, Stroke::new(1.0, t.input_border), StrokeKind::Inside);
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(rect.min + vec2(6.0, 3.0), vec2(96.0, 18.0))));
     // The box has no visible label of its own: screen readers and the strict accessibility check
     // need a name (egui 0.37 makes unnamed text inputs a test failure).

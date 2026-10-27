@@ -178,7 +178,8 @@ impl Tokens {
             grid_bg: Color32::WHITE,
             desk: pick(dark, Color32::from_rgb(0xDE, 0xDE, 0xDE), Color32::from_rgb(0x3A, 0x3A, 0x3A)),
             gridline: Color32::from_rgb(0xE1, 0xE1, 0xE1),
-            header_bg: pick(dark, Color32::from_rgb(0xF8, 0xF8, 0xF8), Color32::from_rgb(0x30, 0x30, 0x30)),
+            // The row and column headings sit on the window's own colour.
+            header_bg: pick(dark, Color32::from_rgb(0xF3, 0xF3, 0xF3), Color32::from_rgb(0x29, 0x29, 0x29)),
             header_text: pick(dark, Color32::from_rgb(0x42, 0x42, 0x42), Color32::from_rgb(0xCC, 0xCC, 0xCC)),
             header_line: pick(dark, Color32::from_rgb(0xD6, 0xD6, 0xD6), Color32::from_rgb(0x45, 0x45, 0x45)),
             header_sel_bg: pick(dark, Color32::from_rgb(0xE1, 0xE1, 0xE1), Color32::from_rgb(0x45, 0x45, 0x45)),
@@ -276,11 +277,12 @@ pub fn apply(ctx: &egui::Context, dark: bool) {
         v.widgets.active.weak_bg_fill = t.pressed;
         v.widgets.inactive.bg_stroke = Stroke::new(1.0, t.input_border);
         // 0.37 raises the default widget corner radii; MK Matrix keeps its 0.36 shape (#8617).
-        v.widgets.noninteractive.corner_radius = egui::CornerRadius::same(2);
-        v.widgets.inactive.corner_radius = egui::CornerRadius::same(2);
-        v.widgets.hovered.corner_radius = egui::CornerRadius::same(3);
-        v.widgets.active.corner_radius = egui::CornerRadius::same(2);
-        v.widgets.open.corner_radius = egui::CornerRadius::same(2);
+        // MK Matrix's fields and controls have square corners.
+        v.widgets.noninteractive.corner_radius = egui::CornerRadius::ZERO;
+        v.widgets.inactive.corner_radius = egui::CornerRadius::ZERO;
+        v.widgets.hovered.corner_radius = egui::CornerRadius::ZERO;
+        v.widgets.active.corner_radius = egui::CornerRadius::ZERO;
+        v.widgets.open.corner_radius = egui::CornerRadius::ZERO;
         v.window_corner_radius = egui::CornerRadius::same(10);
         v.menu_corner_radius = egui::CornerRadius::same(8);
         v.popup_shadow = egui::epaint::Shadow { offset: [0, 4], blur: 16, spread: 0, color: t.shadow };

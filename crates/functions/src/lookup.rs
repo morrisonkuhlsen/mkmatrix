@@ -552,7 +552,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
         ),
         f!("ROWS", 1, 1, Lookup, A, "ROWS(array)", "Counts the rows in an array or range.", rows_fn),
         f!("COLUMNS", 1, 1, Lookup, A, "COLUMNS(array)", "Counts the columns in an array or range.", columns_fn),
-        f!("TRANSPOSE", 1, 1, Lookup, A, "TRANSPOSE(array)", "Swaps the rows and columns of an array.", transpose),
+        f!("MX.T", 1, 1, Lookup, A, "MX.T(array)", "Swaps the rows and columns of an array.", transpose),
         f!(
             "ADDRESS",
             2,

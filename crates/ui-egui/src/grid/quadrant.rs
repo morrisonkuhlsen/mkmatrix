@@ -137,6 +137,24 @@ pub(crate) fn paint_quadrant(
         }
         looks.push((anchor, rect, lk, cfl));
     }
+    // MK Matrix keeps the gridlines over filled cells (Excel hides them), so a shaded block still
+    // reads as a matrix of cells: each filled cell's (or merge's outer) edges, where the
+    // gridlines above fall.
+    if sh.show_gridlines {
+        // Black at 30/255 reads as the gridline grey (#E1E1E1) on white and as a darker shade of
+        // any fill, so it shows on yellow as on teal.
+        let stroke = Stroke::new(1.0, Color32::from_black_alpha(30));
+        for (_, rect, lk, _) in &looks {
+            if lk.fill.is_none() {
+                continue;
+            }
+            let (x0, x1) = (rect.left().round() - 0.5, rect.right().round() - 0.5);
+            let (y0, y1) = (rect.top().round() - 0.5, rect.bottom().round() - 0.5);
+            for (from, to) in [((x0, y0), (x1, y0)), ((x0, y1), (x1, y1)), ((x0, y0), (x0, y1)), ((x1, y0), (x1, y1))] {
+                p.line_segment([pos2(from.0, from.1), pos2(to.0, to.1)], stroke);
+            }
+        }
+    }
     // Text cells just outside the quadrant whose text may overflow into it: the nearest non-empty
     // cell left of `c0` and right of `c1` in each row (within the same frozen / scrolled pane).
     let mut outside: Vec<(CellRef, Rect, Look, Option<CfLook>)> = Vec::new();

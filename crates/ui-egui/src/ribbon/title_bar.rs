@@ -42,8 +42,9 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
         }
         if bg.double_clicked() {
-            let max = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
-            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!max));
+            let max = ui.ctx().input(|i| i.viewport().maximized);
+            log::debug!("title bar double-click: maximized {max:?}, asking for {}", !max.unwrap_or(false));
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!max.unwrap_or(false)));
         }
         ui.horizontal_centered(|ui| {
             ui.add_space(TITLE_LEFT_PAD);
