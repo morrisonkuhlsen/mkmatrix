@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use egui::{Align2, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
+use egui::{Align2, Rect, Sense, Stroke, Ui, pos2, vec2};
 use mkmatrix_engine::model::{Sheet, Visibility};
 use serde_json::json;
 
@@ -190,23 +190,16 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                                         resp.scroll_to_me(None);
                                     }
                                     let r = r.shrink2(vec2(0.0, 1.0));
+                                    // The active tab is its fill and its teal name, in the same box the name
+                                    // is centred in: no outline, no underline.
                                     if active {
-                                        ui.painter().rect_filled(Rect::from_min_max(pos2(r.left(), r.top() - 2.0), r.max), 0.0, t.tab_active);
-                                        ui.painter().rect_stroke(
-                                            Rect::from_min_max(pos2(r.left(), r.top() - 2.0), r.max),
-                                            0.0,
-                                            Stroke::new(1.0, t.ribbon_border),
-                                            StrokeKind::Inside,
-                                        );
+                                        ui.painter().rect_filled(r, 0.0, t.tab_active);
                                     } else if resp.hovered() {
                                         ui.painter().rect_filled(r, 0.0, t.hover);
                                     }
                                     if let Some(c) = color {
                                         let band = Rect::from_min_size(pos2(r.left() + 6.0, r.bottom() - 4.0), vec2(r.width() - 12.0, 3.0));
                                         ui.painter().rect_filled(band, 0.0, theme::color32(c));
-                                    } else if active {
-                                        let band = Rect::from_center_size(pos2(r.center().x, r.bottom() - 3.0), vec2(tw.min(48.0), 2.5));
-                                        ui.painter().rect_filled(band, 0.0, t.accent);
                                     }
                                     if renaming {
                                         let mut text = app.grid.rename_text.clone();
