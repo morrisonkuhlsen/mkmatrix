@@ -60,6 +60,11 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
         if ui.checkbox(&mut numbered, lang.tr("Numbered Columns")).on_hover_text(hint).changed() {
             act(app, "view.numberedColumns", json!({"on": numbered}));
         }
+        let mut brackets = app.ui.matrix_brackets;
+        let hint = lang.tr("Draw square brackets around each named matrix");
+        if ui.checkbox(&mut brackets, lang.tr("Matrix Brackets")).on_hover_text(hint).changed() {
+            act(app, "view.matrixBrackets", json!({"on": brackets}));
+        }
     });
     sep(ui, "Show");
     let __k = big_button(ui, Icon::Zoom, "Zoom", "Zoom…", false);

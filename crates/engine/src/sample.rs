@@ -73,7 +73,7 @@ fn regression(s: &mut Session) -> bool {
     ok &= run(
         s,
         "range.setValues",
-        json!({"range": "B3", "values": [["beta = (X'X)^-1 X'y, every step a block: X' transposes, @ multiplies, \\ solves. Change a score and watch it recalculate."]]}),
+        json!({"range": "B3", "values": [["beta = (X'X)^-1 X'y with the named matrices X, y and beta: X' transposes, @ multiplies, \\ solves. Change a score and watch it recalculate."]]}),
     );
     ok &= run(s, "home.cellStyle", json!({"range": "B3", "name": "Explanatory Text"}));
     // Labels over each block.
@@ -93,31 +93,38 @@ fn regression(s: &mut Session) -> bool {
     }
     ok &= run(s, "range.setValues", json!({"range": "B6", "values": x}));
     ok &= run(s, "range.setValues", json!({"range": "F6", "values": y}));
+    // The named matrices the formulas use: X, y and beta.
+    for (name, range) in [("X", "$B$7:$D$14"), ("y", "$F$7:$F$14"), ("beta", "$N$11:$N$13")] {
+        ok &= run(s, "formulas.defineName", json!({"name": name, "refersTo": format!("=Regression!{range}")}));
+    }
     ok &= run(s, "range.setValues", json!({"range": "G6", "values": [["y-hat"]]}));
     ok &= run(s, "range.setValues", json!({"range": "H6", "values": [["e"]]}));
     // The matrices, as spilled array formulas.
-    ok &= run(s, "cell.set", json!({"cell": "J6", "input": "=B7:D14'@B7:D14"}));
+    ok &= run(s, "cell.set", json!({"cell": "J6", "input": "=X'@X"}));
     ok &= run(s, "cell.set", json!({"cell": "J11", "input": "=MX.INV(J6:L8)"}));
-    ok &= run(s, "cell.set", json!({"cell": "O6", "input": "=B7:D14'@F7:F14"}));
+    ok &= run(s, "cell.set", json!({"cell": "O6", "input": "=X'@y"}));
     ok &= run(s, "range.setValues", json!({"range": "M11", "values": [["Intercept"], ["Hours"], ["Sleep"]]}));
     ok &= run(s, "cell.set", json!({"cell": "N11", "input": "=J11:L13@O6:O8"}));
-    ok &= run(s, "cell.set", json!({"cell": "G7", "input": "=B7:D14@N11:N13"}));
+    ok &= run(s, "cell.set", json!({"cell": "G7", "input": "=X@beta"}));
     // The same beta in one step: left division solves the least-squares problem directly.
     ok &= run(s, "range.setValues", json!({"range": "Q10", "values": [["X\\y"]]}));
     ok &= run(s, "home.bold", json!({"range": "Q10", "on": true}));
-    ok &= run(s, "cell.set", json!({"cell": "Q11", "input": "=B7:D14\\F7:F14"}));
+    ok &= run(s, "cell.set", json!({"cell": "Q11", "input": "=X\\y"}));
     ok &= run(s, "home.numberFormat", json!({"range": "Q11:Q13", "code": "0.000"}));
     ok &= run(s, "home.fillColor", json!({"range": "Q11:Q13", "color": "#B8F2E2"}));
     ok &= run(s, "home.borders", json!({"range": "Q11:Q13", "preset": "outside"}));
-    ok &= run(s, "cell.set", json!({"cell": "H7", "input": "=F7:F14-G7:G14"}));
+    ok &= run(s, "cell.set", json!({"cell": "H7", "input": "=y-X@beta"}));
     // How good the fit is.
     ok &= run(s, "range.setValues", json!({"range": "B17", "values": [["R squared"], ["RSS"], ["det(X'X)"]]}));
-    ok &= run(s, "cell.set", json!({"cell": "D17", "input": "=1-SUMSQ(H7:H14)/DEVSQ(F7:F14)"}));
+    ok &= run(s, "cell.set", json!({"cell": "D17", "input": "=1-SUMSQ(H7:H14)/DEVSQ(y)"}));
     ok &= run(s, "cell.set", json!({"cell": "D18", "input": "=SUMSQ(H7:H14)"}));
-    ok &= run(s, "cell.set", json!({"cell": "D19", "input": "=MX.DET(J6:L8)"}));
+    ok &= run(s, "cell.set", json!({"cell": "D19", "input": "=MX.DET(X'@X)"}));
     // Each block shaded and boxed, the headers bold.
     for block in ["B7:D14", "F7:F14", "G7:H14", "J6:L8", "J11:L13", "O6:O8", "N11:N13"] {
         ok &= run(s, "home.fillColor", json!({"range": block, "color": "#DCF4EE"}));
+    }
+    // The named matrices get the grid's brackets; the computed blocks a box.
+    for block in ["G7:H14", "J6:L8", "J11:L13", "O6:O8"] {
         ok &= run(s, "home.borders", json!({"range": block, "preset": "outside"}));
     }
     ok &= run(s, "home.fillColor", json!({"range": "N11:N13", "color": "#B8F2E2"}));

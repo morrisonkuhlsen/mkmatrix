@@ -218,7 +218,9 @@ fn name_box(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens) -> Rect {
             // grid (drawn after the formula bar, and focused again now the box let go) would read
             // it as its own Enter and move the active cell one row down from the jump target (#247).
             ui.input_mut(|i| i.events.retain(|e| !matches!(e, egui::Event::Key { key: Key::Enter, .. })));
-            let target = crate::app::row_col_to_a1(text.trim()).unwrap_or_else(|| text.trim().to_string());
+            // `X(3,2)` goes to that place in matrix X; `(21, 18)` to that row and column.
+            let in_matrix = app.session.active().and_then(|d| crate::matrices::resolve(&d.wb, d.wb.active_sheet(), &text)).map(|c| c.a1());
+            let target = in_matrix.or_else(|| crate::app::row_col_to_a1(text.trim())).unwrap_or_else(|| text.trim().to_string());
             if !target.is_empty() && target != shown {
                 // A new name for the selection, or a place to go.
                 let is_ref = mkmatrix_engine::core::RangeRef::parse(target.split('!').next_back().unwrap_or("")).is_some();

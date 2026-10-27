@@ -1016,6 +1016,8 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Density" => "Densidade",
         "Compact" => "Compacta",
         "Minimal" => "Mínima",
+        "Matrix Brackets" => "Colchetes de Matriz",
+        "Draw square brackets around each named matrix" => "Desenhar colchetes em volta de cada matriz nomeada",
         "Welcome to MK Matrix" => "Bem-vindo ao MK Matrix",
         "Numbered Columns" => "Colunas Numeradas",
         "Head the columns 1, 2, 3… as a matrix's a(i,j), rather than A, B, C" => {

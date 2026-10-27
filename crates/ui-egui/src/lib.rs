@@ -27,6 +27,7 @@ pub mod i18n;
 pub mod icons;
 pub mod keymap;
 pub mod keytips;
+pub mod matrices;
 pub mod outline;
 pub mod panes;
 pub mod paper_view;
@@ -108,6 +109,8 @@ pub struct UiState {
     /// How much room the bars above and below the sheet take (View › Interface › Density).
     #[serde(deserialize_with = "lenient_density")]
     pub density: Density,
+    /// Square brackets around each named matrix on the sheet (View › Matrix Brackets).
+    pub matrix_brackets: bool,
 }
 
 /// How much room the bars above and below the sheet take; the sheet itself is never scaled.
@@ -191,6 +194,7 @@ impl Default for UiState {
             interface_scale: 100,
             numbered_columns: true,
             density: Density::Normal,
+            matrix_brackets: true,
         }
     }
 }

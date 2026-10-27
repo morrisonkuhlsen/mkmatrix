@@ -279,6 +279,10 @@ impl SheetApp {
         if self.grid.drag_select && !cur.is_single() {
             return format!("{}R x {}C", cur.height(), cur.width());
         }
+        // Inside a named matrix: the cell's place in it, `X(3,2)`.
+        if let Some(text) = crate::matrices::name_box(&d.wb, d.wb.active_sheet(), sel.active) {
+            return text;
+        }
         if self.ui.numbered_columns {
             return format!("({}, {})", u64::from(sel.active.row) + 1, u64::from(sel.active.col) + 1);
         }
