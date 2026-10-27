@@ -24,10 +24,10 @@
   <launchable type="desktop-id">com.morrisonkuhlsen.mkmatrix.desktop</launchable>
   <icon type="stock">com.morrisonkuhlsen.mkmatrix</icon>
   <!-- Only url types known to appstream 0.15 (Ubuntu 22.04, where CI validates): no vcs-browser. -->
-  <url type="homepage">https://getartcraft.com/apps/mkmatrix</url>
+  <url type="homepage">https://github.com/morrisonkuhlsen/mkmatrix</url>
   <url type="bugtracker">https://github.com/storytold/gridcraft/issues</url>
   <url type="help">https://github.com/storytold/gridcraft</url>
-  <url type="contact">https://discord.gg/artcraft</url>
+  <url type="contact">https://github.com/morrisonkuhlsen/mkmatrix/issues</url>
   <categories>
     <category>Office</category>
     <category>Spreadsheet</category>

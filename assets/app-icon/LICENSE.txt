@@ -1,8 +1,8 @@
 MK Matrix app icon (mkmatrix.svg and every file derived from it in this directory:
 mkmatrix-1024.png, mkmatrix-macos-512.png, mkmatrix.icns, mkmatrix.ico, hicolor/).
 
-PLACEHOLDER artwork: original work written for this project by MK Matrix contributors (simple
-hand-written SVG geometry). No third-party material. Licensed like the rest of MK Matrix, under
+MK Matrix's mark (a bracketed 3×3 matrix): original work written for this project by MK Matrix
+contributors (hand-written SVG geometry). No third-party material. Licensed like the rest of MK Matrix, under
 either of
 
   * Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0)

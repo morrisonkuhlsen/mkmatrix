@@ -16,7 +16,7 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows' -or $env:RUN
 }
 if (-not $WorkDir) { $WorkDir = Join-Path $env:RUNNER_TEMP 'mkmatrix-shortcut-smoke' }
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$InstallDir = Join-Path $env:ProgramFiles 'ArtCraft\MK Matrix'
+$InstallDir = Join-Path $env:ProgramFiles 'Morrison Kuhlsen\MK Matrix'
 $DesktopLink = Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'MK Matrix.lnk'
 $StartLink = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'MK Matrix.lnk'
 $ChoiceKey = 'HKLM:\Software\MK Matrix\Installer'

@@ -14,7 +14,7 @@ section: misc
 priority: optional
 maintainer: ${MKMATRIX_MAINTAINER}
 vendor: Learning Machines LLC
-homepage: https://getartcraft.com/apps/mkmatrix
+homepage: https://github.com/morrisonkuhlsen/mkmatrix
 license: MIT OR Apache-2.0
 description: |-
   Open-source, native spreadsheet that works the way Excel users expect.

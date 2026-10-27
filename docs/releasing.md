@@ -123,7 +123,7 @@ is GUI, `mkmatrix-cli.exe` console), signs both executables, builds the MSI with
 the MSI, and zips a portable build.
 
 - `mkmatrix.wxs`: a dual-scope package (per-user by default into
-  `%LOCALAPPDATA%\Programs\ArtCraft\MK Matrix`, per-machine into `Program Files\ArtCraft\MK Matrix` (`Program Files (x86)` for the 32-bit build),
+  `%LOCALAPPDATA%\Programs\Morrison Kuhlsen\MK Matrix`, per-machine into `Program Files\Morrison Kuhlsen\MK Matrix` (`Program Files (x86)` for the 32-bit build),
   see `packaging/windows/INSTALLATION.md`), advertised Start Menu shortcut, App
   Paths (Win+R `mkmatrix`). File types: ProgIds `MK Matrix.Workbook` (`.xlsx`, `.xlsm`) and
   `MK Matrix.TextData` (`.csv`, `.tsv`), listed under each extension's `OpenWithProgids` and

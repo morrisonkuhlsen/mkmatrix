@@ -5,7 +5,9 @@ Licensed under the MIT License or the Apache License, Version 2.0, at your optio
 
 MK Matrix is a fork of GridCraft (https://github.com/storytold/gridcraft):
 Copyright (c) 2026 ArtCraft Team and the GridCraft contributors, under the same licenses.
-It carries none of the ArtCraft brand files.
+It carries none of the ArtCraft brand files and is not made, sponsored or endorsed by the
+ArtCraft Team. Its files have been modified from GridCraft's since 2026-10-27; the git history
+records every change.
 
 The Morrison Kühlsen name and wordmark in docs/brand/ are Morrison Kühlsen brand assets, used
 with their owner's permission. They are not open source and are not covered by the license above;

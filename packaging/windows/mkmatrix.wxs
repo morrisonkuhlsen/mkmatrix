@@ -13,9 +13,9 @@
 
     <Icon Id="MkMatrixIcon.ico" SourceFile="$(var.IconPath)" />
     <Property Id="ARPPRODUCTICON" Value="MkMatrixIcon.ico" />
-    <Property Id="ARPURLINFOABOUT" Value="https://getartcraft.com/apps/mkmatrix" />
-    <Property Id="ARPURLUPDATEINFO" Value="https://getartcraft.com/apps/mkmatrix" />
-    <Property Id="ARPHELPLINK" Value="https://discord.gg/artcraft" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/morrisonkuhlsen/mkmatrix" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/morrisonkuhlsen/mkmatrix" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/morrisonkuhlsen/mkmatrix/issues" />
 
     <!-- An explicit command-line value wins. Otherwise retain the previous installation's
          choice, defaulting to off for a fresh install. Run only in the first sequence so the
@@ -128,7 +128,7 @@
     </AdminUISequence>
 
     <StandardDirectory Id="ProgramFiles6432Folder">
-      <Directory Id="CraftSuiteFolder" Name="ArtCraft">
+      <Directory Id="CraftSuiteFolder" Name="Morrison Kuhlsen">
         <Directory Id="INSTALLFOLDER" Name="MK Matrix" />
       </Directory>
     </StandardDirectory>
