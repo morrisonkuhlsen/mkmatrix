@@ -6,6 +6,8 @@ pub(super) struct Look {
     pub(super) style: Style,
     pub(super) fill: Option<Color32>,
     pub(super) text_color: Color32,
+    /// The font colour is Automatic: black on the light sheet, the theme's ink on the dark one.
+    pub(super) auto_text: bool,
 }
 
 pub(super) fn col32(c: Color, wb: &Workbook, default: Color32) -> Color32 {
@@ -87,7 +89,8 @@ pub(super) fn look(wb: &Workbook, si: usize, sh: &Sheet, c: CellRef, cf: &mut Cf
         fill = Some(theme::color32(rgb));
     }
     let text_color = col32(style.font.color, wb, Color32::BLACK);
-    (Look { style, fill, text_color }, cfl)
+    let auto_text = style.font.color.resolve(&wb.theme).is_none();
+    (Look { style, fill, text_color, auto_text }, cfl)
 }
 
 /// Text for a value with General narrowing to the available width.
@@ -289,6 +292,19 @@ pub(super) fn paint_cf_icon(p: &Painter, r: Rect, set: &str, idx: usize) {
     } else {
         p.circle_filled(r.center(), r.width() / 2.0 - 0.5, col);
     }
+}
+
+/// WCAG contrast ratio between two colours (1 to 21).
+pub(super) fn contrast(a: Color32, b: Color32) -> f32 {
+    let lum = |c: Color32| {
+        let ch = |v: u8| {
+            let v = f32::from(v) / 255.0;
+            if v <= 0.039_28 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+        };
+        0.2126 * ch(c.r()) + 0.7152 * ch(c.g()) + 0.0722 * ch(c.b())
+    };
+    let (x, y) = (lum(a), lum(b));
+    (x.max(y) + 0.05) / (x.min(y) + 0.05)
 }
 
 /// Black or white, whichever reads on `fill` (the threshold chart labels use).

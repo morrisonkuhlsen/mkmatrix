@@ -1,6 +1,6 @@
 use super::cell_paint::{
-    Look, cell_text_y, center_across_end, col32, display_text, look, merged_edges, paint_border, paint_cf_icon, painted_halign, rotated_text_pos,
-    shrink_font, wrapped_cell_text_y,
+    Look, cell_text_y, center_across_end, col32, contrast, display_text, ink_on, look, merged_edges, paint_border, paint_cf_icon, painted_halign,
+    rotated_text_pos, shrink_font, wrapped_cell_text_y,
 };
 use super::geo::Geo;
 use super::tables::{filter_button_rect, paint_filter_button};
@@ -249,7 +249,21 @@ pub(crate) fn paint_quadrant(
         if text.is_empty() {
             continue;
         }
-        let color = ncolor.unwrap_or(lk.text_color);
+        // Automatic text on the dark sheet: the theme's ink, or whichever of black and white
+        // reads on the cell's fill.
+        let auto = match lk.fill {
+            Some(f) if t.dark => ink_on(f),
+            _ => t.cell_text,
+        };
+        let mut color = ncolor.unwrap_or(if lk.auto_text { auto } else { lk.text_color });
+        // On the dark sheet a colour made for white paper (a Title style's dark blue) that no
+        // longer reads on its background gives way to one that does.
+        if t.dark {
+            let bg = lk.fill.unwrap_or(t.grid_bg);
+            if contrast(color, bg) < 3.0 {
+                color = if lk.fill.is_some() { ink_on(bg) } else { t.cell_text };
+            }
+        }
         let halign = match st.align.h {
             HAlign::General => match v {
                 Value::Number(_) => HAlign::Right,
@@ -425,7 +439,7 @@ pub(crate) fn paint_quadrant(
             if line.is_none() {
                 continue;
             }
-            let col = col32(line.color, wb, Color32::BLACK);
+            let col = col32(line.color, wb, if t.dark { t.cell_text } else { Color32::BLACK });
             paint_border(p, pts, line.style, col);
         }
         if !b.diag_down.is_none() {

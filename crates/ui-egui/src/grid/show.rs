@@ -227,7 +227,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     let objects = crate::chartview::paint_objects(app, &painter.with_clip_rect(geo.cells), &geo, &wb, si, sh);
     paint_overlays(app, ui, &painter.with_clip_rect(geo.cells), &geo, &wb, si, sh, &sel);
     if app.ui.matrix_brackets {
-        crate::matrices::paint_brackets(&painter.with_clip_rect(geo.cells), &geo, sh, &crate::matrices::on_sheet(&wb, si), Tokens::light().accent);
+        crate::matrices::paint_brackets(&painter.with_clip_rect(geo.cells), &geo, sh, &crate::matrices::on_sheet(&wb, si), t.accent);
     }
     if sh.view == mkmatrix_engine::model::SheetViewMode::PageBreakPreview {
         paint_pages(app, &painter.with_clip_rect(geo.cells), &geo, sh);

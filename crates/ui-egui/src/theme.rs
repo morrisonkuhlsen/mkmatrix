@@ -177,9 +177,10 @@ impl Tokens {
             hover: pick(dark, Color32::from_rgb(0xEB, 0xEB, 0xEB), Color32::from_rgb(0x23, 0x27, 0x31)),
             pressed: pick(dark, Color32::from_rgb(0xDD, 0xDD, 0xDD), Color32::from_rgb(0x2B, 0x30, 0x3B)),
             separator: pick(dark, Color32::from_rgb(0xE0, 0xE0, 0xE0), Color32::from_rgb(0x2A, 0x2E, 0x37)),
-            grid_bg: Color32::WHITE,
+            // The sheet: white in light mode; a graphite a step lighter than the ink in dark mode.
+            grid_bg: pick(dark, Color32::WHITE, Color32::from_rgb(0x2B, 0x2F, 0x38)),
             desk: pick(dark, Color32::from_rgb(0xDE, 0xDE, 0xDE), Color32::from_rgb(0x0F, 0x11, 0x15)),
-            gridline: Color32::from_rgb(0xE1, 0xE1, 0xE1),
+            gridline: pick(dark, Color32::from_rgb(0xE1, 0xE1, 0xE1), Color32::from_rgb(0x3A, 0x3F, 0x4A)),
             // The row and column headings sit on the window's own colour.
             header_bg: pick(dark, Color32::from_rgb(0xF3, 0xF3, 0xF3), Color32::from_rgb(0x14, 0x16, 0x1C)),
             header_text: pick(dark, Color32::from_rgb(0x42, 0x42, 0x42), Color32::from_rgb(0x8B, 0x93, 0xA1)),
@@ -188,13 +189,13 @@ impl Tokens {
             header_sel_text: pick(dark, Color32::from_rgb(0x0A, 0x64, 0x52), Color32::from_rgb(0x6F, 0xDB, 0xC0)),
             header_all_bg: pick(dark, Color32::from_rgb(0xC6, 0xEB, 0xE1), Color32::from_rgb(0x1F, 0x52, 0x48)),
             sel_fill: pick(dark, Color32::from_rgba_unmultiplied(0x0B, 0x7A, 0x63, 0x1C), Color32::from_rgba_unmultiplied(0x0B, 0x7A, 0x63, 0x24)),
-            sel_border: Color32::from_rgb(0x0B, 0x7A, 0x63),
+            sel_border: pick(dark, Color32::from_rgb(0x0B, 0x7A, 0x63), Color32::from_rgb(0x2E, 0xC4, 0xA0)),
             input_bg: pick(dark, Color32::WHITE, Color32::from_rgb(0x10, 0x12, 0x17)),
             input_border: pick(dark, Color32::from_rgb(0xD1, 0xD1, 0xD1), Color32::from_rgb(0x2E, 0x33, 0x3D)),
             tab_bar: pick(dark, Color32::from_rgb(0xF3, 0xF3, 0xF3), Color32::from_rgb(0x14, 0x16, 0x1C)),
             tab_active: pick(dark, Color32::WHITE, Color32::from_rgb(0x1F, 0x23, 0x2B)),
             status_bar: pick(dark, Color32::from_rgb(0xF3, 0xF3, 0xF3), Color32::from_rgb(0x14, 0x16, 0x1C)),
-            cell_text: Color32::BLACK,
+            cell_text: pick(dark, Color32::BLACK, Color32::from_rgb(0xE6, 0xE8, 0xEC)),
             menu_bg: pick(dark, Color32::WHITE, Color32::from_rgb(0x1B, 0x1E, 0x25)),
             shadow: pick(dark, Color32::from_black_alpha(40), Color32::from_black_alpha(140)),
             danger: pick(dark, Color32::from_rgb(0xC4, 0x2B, 0x1C), Color32::from_rgb(0xFF, 0x95, 0x85)),
@@ -217,7 +218,12 @@ impl Tokens {
                 SHEET_REF_COLORS,
                 [rgb(0x6FA3F5), rgb(0xF27C7C), rgb(0xB394EE), rgb(0x6CCB85), rgb(0xF0A061), rgb(0x5CC9DA), rgb(0xE77FC4), rgb(0xD4C25A)],
             ),
-            sheet_ref_colors: SHEET_REF_COLORS,
+            // On the dark sheet the references take the formula bar's dark-mode colours.
+            sheet_ref_colors: pick(
+                dark,
+                SHEET_REF_COLORS,
+                [rgb(0x6FA3F5), rgb(0xF27C7C), rgb(0xB394EE), rgb(0x6CCB85), rgb(0xF0A061), rgb(0x5CC9DA), rgb(0xE77FC4), rgb(0xD4C25A)],
+            ),
             syntax: pick(dark, LIGHT_SYNTAX, DARK_SYNTAX),
             warning: rgb(0xF2C32E),
             on_warning: rgb(0x1F1F1F),
@@ -393,10 +399,12 @@ mod contrast_tests {
     }
 
     #[test]
-    fn sheet_tokens_follow_the_sheet_not_the_theme() {
+    fn the_dark_sheet_is_graphite_its_controls_stay_light() {
         let (l, d) = (Tokens::light(), Tokens::dark());
-        assert_eq!(l.grid_bg, d.grid_bg);
-        assert_eq!(l.sheet_ref_colors, d.sheet_ref_colors);
+        // MK Matrix's dark sheet: a graphite a step lighter than the ink around it.
+        assert_eq!(l.grid_bg, Color32::WHITE);
+        assert!(contrast(d.grid_bg, d.window) > 1.2 && contrast(d.cell_text, d.grid_bg) >= 4.5);
+        assert_ne!(l.sheet_ref_colors, d.sheet_ref_colors);
         assert_eq!(
             (l.sheet_control_bg, l.sheet_control_border, l.sheet_control_text, l.sheet_track),
             (d.sheet_control_bg, d.sheet_control_border, d.sheet_control_text, d.sheet_track)
