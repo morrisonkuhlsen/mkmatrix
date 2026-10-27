@@ -291,17 +291,36 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                     }
                 }
                 "saveChanges" => {
-                    ui.label(format!("Do you want to save the changes you made to {}?", d.values.get("title").and_then(Json::as_str).unwrap_or("this workbook")));
+                    let lang = app.ui.language;
+                    let t = crate::theme::Tokens::get(ui.ctx());
+                    let title = d.values.get("title").and_then(Json::as_str).unwrap_or("this workbook");
+                    ui.set_min_width(360.0);
+                    ui.add_space(4.0);
+                    ui.label(lang.tr("Do you want to save the changes you made to {title}?").replace("{title}", title));
+                    ui.add_space(14.0);
                     let quitting = d.values.get("quit").and_then(Json::as_bool) == Some(true);
+                    // One row on the right, the buttons one width; Save, the default, in the accent.
+                    let mut answer = None;
                     ui.horizontal(|ui| {
-                        for (label, answer) in
-                            [("Don't Save", crate::SaveAnswer::DontSave), ("Cancel", crate::SaveAnswer::Cancel), ("Save", crate::SaveAnswer::Save)]
-                        {
-                            if ui.button(label).clicked() && app.answer_save_changes(answer, quitting, ui.ctx()) {
-                                open = false;
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let size = egui::vec2(104.0, 28.0);
+                            let save = egui::Button::new(egui::RichText::new(lang.tr("Save")).color(t.on_accent)).fill(t.accent);
+                            if ui.add_sized(size, save).clicked() || ui.input(|i| i.key_pressed(Key::Enter)) {
+                                answer = Some(crate::SaveAnswer::Save);
                             }
-                        }
+                            if ui.add_sized(size, egui::Button::new(lang.tr("Cancel"))).clicked() {
+                                answer = Some(crate::SaveAnswer::Cancel);
+                            }
+                            if ui.add_sized(size, egui::Button::new(lang.tr("Don't Save"))).clicked() {
+                                answer = Some(crate::SaveAnswer::DontSave);
+                            }
+                        });
                     });
+                    if let Some(answer) = answer
+                        && app.answer_save_changes(answer, quitting, ui.ctx())
+                    {
+                        open = false;
+                    }
                 }
                 "start" => {
                     ui.heading("Start a new workbook");

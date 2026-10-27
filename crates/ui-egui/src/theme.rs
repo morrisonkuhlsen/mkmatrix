@@ -283,8 +283,8 @@ pub fn apply(ctx: &egui::Context, dark: bool) {
         v.widgets.hovered.corner_radius = egui::CornerRadius::ZERO;
         v.widgets.active.corner_radius = egui::CornerRadius::ZERO;
         v.widgets.open.corner_radius = egui::CornerRadius::ZERO;
-        v.window_corner_radius = egui::CornerRadius::same(10);
-        v.menu_corner_radius = egui::CornerRadius::same(8);
+        v.window_corner_radius = egui::CornerRadius::ZERO;
+        v.menu_corner_radius = egui::CornerRadius::ZERO;
         v.popup_shadow = egui::epaint::Shadow { offset: [0, 4], blur: 16, spread: 0, color: t.shadow };
         ctx.set_visuals_of(theme, v);
     }
