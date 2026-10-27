@@ -2,7 +2,7 @@
 //!
 //! `cargo run --release -p mkmatrix-ui-egui --example snapshot -- [--sample sales] [--in file.xlsx]
 //!  [--size 1440x900] [--scale 2] [--cmd 'id={json}']... [--tab Insert] [--dark] [--language en|es|zh|ja|ko|ru|pt|de|cs|fr|tr]
-//!  [--dialog 'name={json}'] [--hf-edit header|footer] [--splash] [--backstage] [--density normal|compact|minimal] [--ui 'id={json}']... out.png`
+//!  [--dialog 'name={json}'] [--hf-edit header|footer] [--splash] [--backstage] [--density normal|compact|minimal] [--ui 'id={json}']... [--pointer x,y] out.png`
 //!
 //! `--splash` renders the splash screen alone, at its own size.
 
@@ -28,6 +28,7 @@ fn main() {
     let mut backstage = false;
     let mut density: Option<String> = None;
     let mut ui_cmds: Vec<String> = vec![];
+    let mut pointer: Option<egui::Pos2> = None;
     let mut out = "snapshot.png".to_string();
     let mut i = 0;
     while i < args.len() {
@@ -83,6 +84,10 @@ fn main() {
             }
             "--splash" => splash = true,
             "--backstage" => backstage = true,
+            "--pointer" => {
+                i += 1;
+                pointer = args.get(i).and_then(|s| s.split_once(',')).and_then(|(x, y)| Some(egui::pos2(x.parse().ok()?, y.parse().ok()?)));
+            }
             "--ui" => {
                 i += 1;
                 if let Some(c) = args.get(i) {
@@ -183,6 +188,10 @@ fn main() {
     // The workbook's installed fonts bind once the font scan is done; frames past the first few
     // apply them, so the snapshot shows them as the app does.
     harness.run_steps(14);
+    if let Some(p) = pointer {
+        harness.input_mut().events.push(egui::Event::PointerMoved(p));
+        harness.run_steps(2);
+    }
     let img = harness.render().expect("render");
     img.save(&out).expect("save png");
     eprintln!("wrote {out} ({}x{})", img.width(), img.height());

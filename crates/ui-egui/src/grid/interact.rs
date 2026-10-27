@@ -220,6 +220,14 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
             let _ = app.session.run("selection.set", json!({"range": RangeRef::all().a1()}));
             return;
         }
+        // The + on a column heading's edge inserts a column there (a drag from it still resizes).
+        if primary_clicked
+            && let Some(col) = on_insert_col_button(geo, sh, p)
+            && let Some(next) = col.checked_add(1).filter(|&n| n < mkmatrix_engine::core::MAX_COLS)
+        {
+            app.run_or_alert("home.insertColumns", json!({"cols": RangeRef::cols(next, next).a1()}));
+            return;
+        }
         if in_col_header {
             if let Some((c, x)) = col_edge(geo, sh, p.x) {
                 app.grid.drag = Drag::ResizeCol { col: c, start: p.x, orig: sh.col_width(c).max(0.0) * 0.0 + (x - geo.x(sh, c)) / geo.z };
@@ -798,6 +806,29 @@ pub(super) fn paint_freeze_handles(p: &Painter, geo: &Geo, sh: &Sheet, drag: &Dr
             p.line_segment([pos2(geo.head_left(), y), pos2(geo.cells.right(), y)], stroke);
         }
     }
+}
+
+/// Radius of the insert-column button on a column heading's edge.
+pub(super) const INSERT_PLUS_R: f32 = 6.5;
+
+/// The insert-column button the pointer at `p` (sheet coordinates) brings up: on the column
+/// headings within reach of an edge, the column a new one goes after and the button's centre.
+pub(super) fn insert_col_button(geo: &Geo, sh: &Sheet, p: Pos2) -> Option<(u32, Pos2)> {
+    if !(p.y < geo.cells.top() && p.y >= geo.head_top() && p.x >= geo.cells.left()) {
+        return None;
+    }
+    let c = geo.col_at(sh, p.x);
+    let right = geo.x(sh, c) + sh.col_width(c) * geo.z;
+    let (col, edge) = match c.checked_sub(1) {
+        Some(before) if (p.x - geo.x(sh, c)).abs() < (right - p.x).abs() => (before, geo.x(sh, c)),
+        _ => (c, right),
+    };
+    ((p.x - edge).abs() <= 10.0 && sh.col_width(col) > 0.0).then(|| (col, pos2(edge, (geo.head_top() + geo.cells.top()) / 2.0)))
+}
+
+/// Whether `p` is on the insert-column button itself (not just near the edge that shows it).
+pub(super) fn on_insert_col_button(geo: &Geo, sh: &Sheet, p: Pos2) -> Option<u32> {
+    insert_col_button(geo, sh, p).filter(|(_, at)| (p - *at).length() <= INSERT_PLUS_R + 2.0).map(|(col, _)| col)
 }
 
 pub(super) fn col_edge(geo: &Geo, sh: &Sheet, x: f32) -> Option<(u32, f32)> {

@@ -68,6 +68,10 @@ fn hover_cursor(app: &SheetApp, ctx: &egui::Context, resp: &egui::Response, poin
     let in_col_header = p.y < geo.cells.top() && p.y >= geo.head_top() && p.x >= geo.cells.left();
     let in_row_header = p.x < geo.cells.left() && p.x >= geo.head_left() && p.y >= geo.cells.top();
     let near_col_edge = in_col_header && col_edge(geo, sh, p.x).is_some();
+    if app.grid.drag == Drag::None && super::interact::on_insert_col_button(geo, sh, p).is_some() {
+        ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
+        return;
+    }
     let sel = app.session.active().map(|d| d.selection.clone()).unwrap_or_default();
     let cur_rect = geo.range_rect(sh, sel.current());
     let handle = Rect::from_center_size(cur_rect.right_bottom(), vec2(9.0, 9.0));

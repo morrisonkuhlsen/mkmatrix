@@ -53,6 +53,7 @@ mod host_chrome;
 mod hyperlink_ctrl_click;
 mod in_cell_editor_size;
 mod in_cell_editor_wrap;
+mod insert_column_button;
 mod insert_copied_cells;
 mod interaction;
 mod interface_scale;

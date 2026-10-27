@@ -1,7 +1,7 @@
 use super::cursor::update_cursor;
 use super::editor::{in_cell_editor, list_picker, validation_arrow};
 use super::geo::Geo;
-use super::interact::{interact, paint_freeze_handles};
+use super::interact::{INSERT_PLUS_R, insert_col_button, interact, paint_freeze_handles};
 use super::menus::{context_menu, error_check_tag, fill_menu, fill_options_tag, filter_menu, header_menu, object_menu};
 use super::quadrant::{mirror_painted, paint_quadrant};
 use super::selection::paint_selection;
@@ -240,6 +240,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
         let headings = table_headings(&geo, sh, sel.active);
         paint_headers(&painter, &geo, sh, &sel, &t, &quads, &headings, app.ui.numbered_columns);
         paint_freeze_handles(&painter, &geo, sh, &app.grid.drag, &t);
+        paint_insert_col_button(app, ui, &painter, &geo, sh, &t);
     }
     crate::outline::paint(&painter, &geo, sh, &t);
     if geo.rtl {
@@ -733,6 +734,28 @@ fn paint_pages(app: &mut SheetApp, p: &Painter, geo: &Geo, sh: &Sheet) {
         );
     }
     p.rect_stroke(pr, 0.0, Stroke::new(3.0, blue), StrokeKind::Outside);
+}
+
+/// The + that shows on a column heading's edge under the pointer. Over it, it fills with the accent
+/// and a line down the sheet marks where the new column goes.
+fn paint_insert_col_button(app: &SheetApp, ui: &egui::Ui, p: &Painter, geo: &Geo, sh: &Sheet, t: &Tokens) {
+    if app.grid.drag != crate::grid::Drag::None || app.editor.is_some() {
+        return;
+    }
+    let Some(pointer) = ui.input(|i| i.pointer.hover_pos()) else { return };
+    let at_sheet = geo.mirror_pos(pointer);
+    let Some((_, centre)) = insert_col_button(geo, sh, at_sheet) else { return };
+    let over = (at_sheet - centre).length() <= INSERT_PLUS_R + 2.0;
+    let at = geo.mirror_pos(centre);
+    if over {
+        p.with_clip_rect(geo.rect).line_segment([pos2(at.x, geo.cells.top()), pos2(at.x, geo.cells.bottom())], Stroke::new(2.0, t.accent));
+    }
+    let (fill, ink) = if over { (t.accent, t.on_accent) } else { (t.header_bg, t.accent) };
+    p.circle_filled(at, INSERT_PLUS_R, fill);
+    p.circle_stroke(at, INSERT_PLUS_R, Stroke::new(1.25, t.accent));
+    let arm = INSERT_PLUS_R * 0.55;
+    p.line_segment([pos2(at.x - arm, at.y), pos2(at.x + arm, at.y)], Stroke::new(1.5, ink));
+    p.line_segment([pos2(at.x, at.y - arm), pos2(at.x, at.y + arm)], Stroke::new(1.5, ink));
 }
 
 #[cfg(test)]
