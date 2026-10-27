@@ -47,7 +47,7 @@ const _: () = assert!(TITLE_CONTROL_H < TITLE_BAR_H, "title-bar controls keep a 
 pub fn show(app: &mut SheetApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let collapsed = app.ui.ribbon_collapsed;
-    let h = if collapsed { 34.0 } else { 34.0 + 92.0 };
+    let h = if collapsed { 34.0 } else { 34.0 + 108.0 };
     // A contextual tab exists only while its object is selected (Excel hides Table Design once the
     // cell leaves the table); a remembered one that is gone would draw an empty ribbon.
     if CONTEXTUAL_TABS.contains(&app.ui.ribbon_tab.as_str()) && !contextual_tabs(app).contains(&app.ui.ribbon_tab.as_str()) {
@@ -120,7 +120,7 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
             let screen = ui.ctx().content_rect();
             let fits = (screen.right() - left - (left - screen.left()).max(0.0)).max(0.0);
             // MK Matrix draws it borderless and transparent: the controls sit on the window itself.
-            let card = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width().min(fits), 88.0));
+            let card = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width().min(fits), 104.0));
             let inner = card.shrink2(vec2(10.0, 6.0));
             ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
                 // One scroll state per tab: a tab opened after scrolling another starts at its
@@ -140,6 +140,7 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                 let scroll = area.show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
+                        controls::group_begin(ui);
                         match app.ui.ribbon_tab.as_str() {
                             "Home" => home(app, ui),
                             "Insert" => insert(app, ui),
@@ -155,11 +156,30 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                             crate::paper_view::TAB => crate::paper_view::ribbon_tab(app, ui),
                             _ => home(app, ui),
                         }
+                        controls::group_end(ui, last_group(&app.ui.ribbon_tab));
                     });
                 });
                 scroll_arrows(ui, &t, tab.as_str(), scroll);
             });
         });
+}
+
+/// The name of a tab's last group, which no separator closes.
+fn last_group(tab: &str) -> &'static str {
+    match tab {
+        "Insert" => "Text",
+        "Draw" => "Convert",
+        "Page Layout" => "Sheet Options",
+        "Formulas" => "Calculation",
+        "Data" => "Solver",
+        "Review" => "Protect",
+        "View" => "Interface",
+        "Automate" => "Automate",
+        "Table Design" => "Table Styles",
+        "Chart Design" => "Chart",
+        crate::paper_view::TAB => "",
+        _ => "Editing",
+    }
 }
 
 /// How much of the active tab's groups the ribbon card shows, recorded each frame for the scroll

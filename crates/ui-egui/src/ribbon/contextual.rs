@@ -25,7 +25,7 @@ pub(super) fn table_design(app: &mut SheetApp, ui: &mut Ui) {
     if __k.clicked() {
         app.open_dialog("tableResize", json!({}));
     }
-    sep(ui);
+    sep(ui, "Properties");
     let __k = big_button(ui, Icon::Duplicates, "Remove\nDuplicates", "Remove Duplicates", false);
     control_keytip(app, ui, &__k, "data.removeDuplicates");
     if __k.clicked() {
@@ -36,11 +36,11 @@ pub(super) fn table_design(app: &mut SheetApp, ui: &mut Ui) {
     if __k.clicked() {
         act(app, "table.convertToRange", json!({"table": tname}));
     }
-    sep(ui);
+    sep(ui, "Tools");
     if big_button(ui, Icon::Filter, "Insert\nSlicer", "Insert Slicer", false).clicked() {
         act(app, "table.insertSlicer", json!({"table": tname}));
     }
-    sep(ui);
+    sep(ui, "Slicers");
     ui.vertical(|ui| {
         for (label, cmd, v) in [
             ("Header Row", "table.headerRow", header && filter),
@@ -65,7 +65,7 @@ pub(super) fn table_design(app: &mut SheetApp, ui: &mut Ui) {
             }
         }
     });
-    sep(ui);
+    sep(ui, "Table Style Options");
     table_style_strip(app, ui, &tname, &style);
 }
 

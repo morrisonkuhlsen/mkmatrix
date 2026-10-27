@@ -17,7 +17,7 @@ pub(super) fn review(app: &mut SheetApp, ui: &mut Ui) {
     if __k.clicked() {
         app.open_dialog("accessibility", json!({}));
     }
-    sep(ui);
+    sep(ui, "Proofing");
     let __k = big_button(ui, Icon::Comment, "New\nComment", "New Comment", false);
     control_keytip(app, ui, &__k, "dialog:comment");
     if __k.clicked() {
@@ -64,7 +64,7 @@ pub(super) fn review(app: &mut SheetApp, ui: &mut Ui) {
             ],
         );
     });
-    sep(ui);
+    sep(ui, "Comments");
     let protected = app.session.active().and_then(|d| d.wb.active().map(|s| s.is_protected())).unwrap_or(false);
     let __k = big_button(ui, Icon::Lock, if protected { "Unprotect\nSheet" } else { "Protect\nSheet" }, "Protect Sheet", false);
     control_keytip(app, ui, &__k, "dialog:protectSheet");

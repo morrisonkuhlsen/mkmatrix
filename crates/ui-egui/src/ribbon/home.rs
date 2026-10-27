@@ -101,7 +101,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
             }
         }
     });
-    sep(ui);
+    sep(ui, "Clipboard");
     // Font
     ui.vertical(|ui| {
         ui.horizontal(|ui| {
@@ -224,7 +224,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
                 });
         });
     });
-    sep(ui);
+    sep(ui, "Font");
     // Alignment
     ui.vertical(|ui| {
         ui.horizontal(|ui| {
@@ -309,7 +309,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
             });
         });
     });
-    sep(ui);
+    sep(ui, "Alignment");
     // Number
     ui.vertical(|ui| {
         number_combo(app, ui, &st);
@@ -347,7 +347,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
             }
         });
     });
-    sep(ui);
+    sep(ui, "Number");
     // Styles
     let cf = big_button(ui, Icon::CondFormat, "Conditional\nFormatting", "Conditional Formatting", true);
     anchor_keytip(app, ui, &cf, &["home.conditionalFormat", "home.manageRules", "home.clearRules"]);
@@ -358,7 +358,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
     let cs = big_button(ui, Icon::CellStyles, "Cell\nStyles", "Cell Styles", true);
     anchor_keytip(app, ui, &cs, &["home.newCellStyle"]);
     egui::Popup::menu(&cs).show(|ui| cell_style_gallery(app, ui));
-    sep(ui);
+    sep(ui, "Styles");
     // Cells
     ui.vertical(|ui| {
         let ins = small_button(ui, Icon::Insert, "Insert", "Insert", true);
@@ -457,7 +457,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
             );
         });
     });
-    sep(ui);
+    sep(ui, "Cells");
     // Editing
     ui.vertical(|ui| {
         ui.horizontal(|ui| {

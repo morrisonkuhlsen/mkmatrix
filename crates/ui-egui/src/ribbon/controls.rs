@@ -1,9 +1,46 @@
 use super::*;
 
-pub(super) fn sep(ui: &mut Ui) {
+/// The height of a group's controls; its name sits in the row below.
+pub(super) const GROUP_H: f32 = 72.0;
+
+fn group_start_id() -> egui::Id {
+    egui::Id::unique("ribbon_group_start")
+}
+
+/// Marks where a tab's first group starts.
+pub(super) fn group_begin(ui: &Ui) {
+    let x = ui.cursor().min.x;
+    ui.ctx().data_mut(|d| d.insert_temp(group_start_id(), x));
+}
+
+/// Names the group that ends here, centred under it in the row below the controls, as Excel's
+/// ribbon does.
+pub(super) fn group_end(ui: &mut Ui, name: &str) {
     let t = Tokens::get(ui.ctx());
-    let (r, _) = ui.allocate_exact_size(vec2(13.0, 72.0), Sense::hover());
-    ui.painter().line_segment([pos2(r.center().x, r.top() + 6.0), pos2(r.center().x, r.bottom() - 6.0)], Stroke::new(1.0, t.separator));
+    let start = ui.ctx().data(|d| d.get_temp::<f32>(group_start_id())).unwrap_or(ui.max_rect().left());
+    let label = crate::i18n::current(ui.ctx()).tr(name).to_string();
+    if label.is_empty() || ui.cursor().min.x <= start {
+        return;
+    }
+    let galley = ui.painter().layout_no_wrap(label, theme::ui_font(11.0), t.text_dim);
+    // A group narrower than its name widens to fit it (Clipboard's "Área de Transferência").
+    let short = galley.size().x + 12.0 - (ui.cursor().min.x - start);
+    if short > 0.0 {
+        ui.add_space(short);
+    }
+    let end = ui.cursor().min.x;
+    let top = ui.max_rect().top() + GROUP_H;
+    let row = egui::Rect::from_min_max(pos2(start, top), pos2(end, top + 16.0));
+    ui.painter().with_clip_rect(row.intersect(ui.clip_rect())).galley(row.center() - galley.size() / 2.0, galley, t.text_dim);
+}
+
+/// The line between two groups, naming the group before it.
+pub(super) fn sep(ui: &mut Ui, group: &str) {
+    group_end(ui, group);
+    let t = Tokens::get(ui.ctx());
+    let (r, _) = ui.allocate_exact_size(vec2(13.0, GROUP_H), Sense::hover());
+    ui.painter().line_segment([pos2(r.center().x, r.top() + 6.0), pos2(r.center().x, r.bottom() + 12.0)], Stroke::new(1.0, t.separator));
+    group_begin(ui);
 }
 
 pub(super) fn active_style(app: &SheetApp) -> Style {

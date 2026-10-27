@@ -17,7 +17,7 @@ pub(super) fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
             });
         }
     });
-    sep(ui);
+    sep(ui, "Themes");
     let m = big_button(ui, Icon::Margins, "Margins", "Margins", true);
     for sequence in keytip_table::group_extension(app.keytips.prefix().unwrap_or_default(), &["pageLayout.margins", "dialog:pageSetup"]) {
         keytip(app, ui, sequence, m.rect.center_bottom());
@@ -106,7 +106,7 @@ pub(super) fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
     if __k.clicked() {
         app.open_dialog("pageSetup", json!({"tab": "Sheet"}));
     }
-    sep(ui);
+    sep(ui, "Page Setup");
     let sh = app
         .session
         .active()
