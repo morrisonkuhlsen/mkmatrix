@@ -2,6 +2,8 @@ use super::*;
 
 /// The height of a group's controls; its name sits in the row below.
 pub(super) const GROUP_H: f32 = 72.0;
+/// The height of the toolbar's single row of controls, above the groups' names.
+pub(super) const TOOL_ROW_H: f32 = 30.0;
 
 fn group_start_id() -> egui::Id {
     egui::Id::unique("ribbon_group_start")
@@ -68,7 +70,8 @@ pub(super) fn group_end(ui: &mut Ui, name: &str) {
         ui.add_space(short);
     }
     let end = ui.cursor().min.x;
-    let top = ui.max_rect().top() + GROUP_H;
+    // Under the controls: the ribbon's stacked groups, or the toolbar's single row.
+    let top = ui.max_rect().top() + if single_row(ui) { TOOL_ROW_H } else { GROUP_H };
     let row = egui::Rect::from_min_max(pos2(start, top), pos2(end, top + 16.0));
     ui.painter().with_clip_rect(row.intersect(ui.clip_rect())).galley(row.center() - galley.size() / 2.0, galley, t.text_dim);
 }
@@ -77,9 +80,11 @@ pub(super) fn group_end(ui: &mut Ui, name: &str) {
 pub(super) fn sep(ui: &mut Ui, group: &str) {
     let t = Tokens::get(ui.ctx());
     if single_row(ui) {
-        // The toolbar: a short, light line between groups.
+        // The toolbar: the group's name under it, a short, light line to the next.
+        group_end(ui, group);
         let (r, _) = ui.allocate_exact_size(vec2(13.0, 28.0), Sense::hover());
         ui.painter().line_segment([pos2(r.center().x, r.top() + 6.0), pos2(r.center().x, r.bottom() - 6.0)], Stroke::new(1.0, t.separator));
+        group_begin(ui);
         return;
     }
     group_end(ui, group);

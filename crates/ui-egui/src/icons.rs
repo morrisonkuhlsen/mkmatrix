@@ -656,7 +656,7 @@ fn paint_with(p: &Painter, rect: Rect, icon: Icon, c: Color32, pal: &Palette) {
             g.frame(1.5, 1.5, 14.5, 14.5, c);
             g.line(&[(4.0, 8.0), (6.75, 10.75), (12.0, 5.25)], a, 1.4);
         }
-        Icon::Fx | Icon::Function => g.text(8.0, 8.0, "fx", 11.0, c, false, true),
+        Icon::Fx | Icon::Function => g.text(7.5, 7.5, "fx", 14.0, c, false, true),
         Icon::Plus => {
             g.line(&[(8.0, 2.5), (8.0, 13.5)], c, 1.2);
             g.line(&[(2.5, 8.0), (13.5, 8.0)], c, 1.2);

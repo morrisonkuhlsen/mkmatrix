@@ -177,8 +177,10 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
 /// only. View › Classic Ribbon brings the tabs back.
 fn toolbar(app: &mut SheetApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
-    let menu_h = if app.ui.density.compact() { 26.0 } else { 30.0 };
-    let row_h = 36.0;
+    let compact = app.ui.density.compact();
+    let menu_h = if compact { 26.0 } else { 30.0 };
+    // The row of controls, and under it the groups' names (not in compact density).
+    let row_h = if compact { 36.0 } else { 50.0 };
     let with_row = app.ui.density != crate::Density::Minimal;
     let h = menu_h + if with_row { row_h + 2.0 } else { 0.0 };
     egui::Panel::top("ribbon")
@@ -232,10 +234,14 @@ fn toolbar(app: &mut SheetApp, ui: &mut Ui) {
                     .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
                     .show(ui, |ui| {
                         ui.set_min_height(row_h);
-                        ui.horizontal_centered(|ui| {
+                        ui.horizontal_top(|ui| {
                             ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
+                            ui.set_height(controls::TOOL_ROW_H);
                             controls::set_single_row(ui, true);
+                            controls::show_group_names(ui, !compact);
+                            controls::group_begin(ui);
                             home(app, ui);
+                            controls::group_end(ui, "Editing");
                             controls::set_single_row(ui, false);
                         });
                     });

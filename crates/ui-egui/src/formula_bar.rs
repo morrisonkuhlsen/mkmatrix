@@ -99,7 +99,14 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
                 if crate::widgets::icon_button(ui, Icon::Check, c, "Enter", vec2(22.0, 24.0)).clicked() && editing {
                     app.commit_edit(0, 0, false, false);
                 }
-                let fx = crate::widgets::icon_button(ui, Icon::Fx, t.text, "Insert Function", vec2(26.0, 24.0));
+                // Insert Function: the fx drawn large, the bar's one label-like button.
+                let (fx_rect, fx) = ui.allocate_exact_size(vec2(30.0, 24.0), egui::Sense::click());
+                if fx.hovered() {
+                    ui.painter().rect_filled(fx_rect, 0.0, t.hover);
+                }
+                icons::paint(ui.painter(), egui::Rect::from_center_size(fx_rect.center(), vec2(20.0, 20.0)), Icon::Fx, t.text);
+                let fx = fx.on_hover_text(app.ui.language.tr("Insert Function"));
+                fx.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Insert Function"));
                 if fx.clicked() {
                     app.open_dialog("insertFunction", json!({}));
                 }

@@ -29,9 +29,9 @@ fn the_menu_bar_lists_the_menus_and_runs_an_item() {
 #[test]
 fn the_toolbar_is_one_row_of_the_home_controls() {
     let mut h = app_harness(toolbar_app(), 4);
-    // One row: the controls stand no taller than a button.
+    // One row: a button high, the groups' names under it.
     let row = RibbonOverflow::get(&h.ctx);
-    assert!(row.content_height > 0.0 && row.content_height <= 36.5, "{} px of controls", row.content_height);
+    assert!(row.content_height > 0.0 && row.content_height <= 50.5, "{} px of controls and group names", row.content_height);
     // View › Classic Ribbon brings the stacked groups back.
     h.state_mut().run("view.classicRibbon", serde_json::json!({"on": true})).unwrap();
     h.run_steps(3);
