@@ -120,19 +120,25 @@ pub(crate) fn paint_selection(
             }
         }
     }
-    if cur_here {
-        for side in outline_bands(outline.expand(0.5), 2.0, p.clip_rect()) {
+    // MK Matrix's selection: one cell gets a firm outline. A range is a soft fill with its active
+    // cell outlined; while it is being dragged out that is all, and once let go a fine border
+    // closes it and the fill handle shows as a dot.
+    let single = sel.is_single_cell();
+    let dragging = app.grid.drag_select && !single;
+    if cur_here && !dragging {
+        let width = if single { 2.0 } else { 1.0 };
+        for side in outline_bands(outline.expand(if single { 0.5 } else { 0.0 }), width, p.clip_rect()) {
             p.rect_filled(side, 0.0, t.sel_border);
         }
     }
-    if active_here && sel.ranges.len() > 1 {
-        p.rect_stroke(active, 0.0, Stroke::new(1.0, t.sel_border), StrokeKind::Inside);
+    if active_here && !single {
+        p.rect_stroke(active, 0.0, Stroke::new(2.0, t.sel_border), StrokeKind::Inside);
     }
-    // Fill handle (bottom-right of the current area).
-    if app.editor.is_none() && range_in_pane(RangeRef::cell(sel.current().end), rows, cols) {
-        let h = Rect::from_center_size(outline.right_bottom(), vec2(6.0, 6.0));
-        p.rect_filled(h.expand(1.0), 0.0, Color32::WHITE);
-        p.rect_filled(h, 0.0, t.sel_border);
+    // Fill handle (bottom-right of the current area): a dot ringed with white.
+    if app.editor.is_none() && !dragging && range_in_pane(RangeRef::cell(sel.current().end), rows, cols) {
+        let at = outline.right_bottom();
+        p.circle_filled(at, 5.0, Color32::WHITE);
+        p.circle_filled(at, 3.5, t.sel_border);
     }
     // Fill-handle drag preview.
     if let crate::grid::Drag::Fill { target: Some(tr), .. } = &app.grid.drag

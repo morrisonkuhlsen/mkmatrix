@@ -188,7 +188,7 @@ impl Tokens {
             header_sel_bg: pick(dark, Color32::from_rgb(0xE1, 0xE1, 0xE1), Color32::from_rgb(0x1C, 0x2B, 0x29)),
             header_sel_text: pick(dark, Color32::from_rgb(0x0A, 0x64, 0x52), Color32::from_rgb(0x6F, 0xDB, 0xC0)),
             header_all_bg: pick(dark, Color32::from_rgb(0xC6, 0xEB, 0xE1), Color32::from_rgb(0x1F, 0x52, 0x48)),
-            sel_fill: pick(dark, Color32::from_rgba_unmultiplied(0x0B, 0x7A, 0x63, 0x1C), Color32::from_rgba_unmultiplied(0x0B, 0x7A, 0x63, 0x24)),
+            sel_fill: pick(dark, Color32::from_rgba_unmultiplied(0x2E, 0xC4, 0xA0, 0x26), Color32::from_rgba_unmultiplied(0x2E, 0xC4, 0xA0, 0x22)),
             sel_border: pick(dark, Color32::from_rgb(0x0B, 0x7A, 0x63), Color32::from_rgb(0x2E, 0xC4, 0xA0)),
             input_bg: pick(dark, Color32::WHITE, Color32::from_rgb(0x10, 0x12, 0x17)),
             input_border: pick(dark, Color32::from_rgb(0xD1, 0xD1, 0xD1), Color32::from_rgb(0x2E, 0x33, 0x3D)),
