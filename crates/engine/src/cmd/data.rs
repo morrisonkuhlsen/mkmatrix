@@ -3,8 +3,8 @@
 use std::cmp::Ordering;
 use std::sync::Arc;
 
-use gridcraft_core::{CellRef, RangeRef, Value, sort_compare};
-use gridcraft_model::*;
+use mkmatrix_core::{CellRef, RangeRef, Value, sort_compare};
+use mkmatrix_model::*;
 use serde_json::{Value as Json, json};
 
 use super::*;
@@ -148,7 +148,7 @@ pub fn specs() -> Vec<CommandSpec> {
 
 fn col_param(v: Option<&Json>, base: u32) -> Option<u32> {
     match v? {
-        Json::String(s) => gridcraft_core::letters_to_col(s.trim_start_matches('$')),
+        Json::String(s) => mkmatrix_core::letters_to_col(s.trim_start_matches('$')),
         Json::Number(n) => n.as_u64().and_then(|o| u32::try_from(o).ok()).and_then(|o| base.checked_add(o)),
         _ => None,
     }

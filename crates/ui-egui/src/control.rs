@@ -19,7 +19,7 @@
 use std::sync::mpsc::Sender;
 
 use craft_ui::capture::CaptureSlot;
-use gridcraft_engine::core::CellRef;
+use mkmatrix_engine::core::CellRef;
 use serde_json::{Value as Json, json};
 
 use crate::SheetApp;
@@ -107,7 +107,7 @@ fn run(app: &mut SheetApp, id: &str, params: Json) -> Result<Json, String> {
 
 /// [`run`] in another window (`window` or `doc` from the request), bringing back the active
 /// window afterwards unless the command itself switched windows.
-fn run_in(app: &mut SheetApp, target: gridcraft_engine::Target, id: &str, params: Json) -> Result<Json, String> {
+fn run_in(app: &mut SheetApp, target: mkmatrix_engine::Target, id: &str, params: Json) -> Result<Json, String> {
     let guard = app.session.enter_target(target).map_err(|e| e.to_string())?;
     let r = run(app, id, params);
     app.session.leave_target(guard);
@@ -118,10 +118,10 @@ fn run_in(app: &mut SheetApp, target: gridcraft_engine::Target, id: &str, params
 /// except for the window commands, whose own params those are.
 fn direct(app: &mut SheetApp, id: &str, p: &Json, via_app: bool) -> Result<Json, String> {
     let mut params = p.clone();
-    let target = if gridcraft_engine::windows::is_window_command(id) {
-        gridcraft_engine::Target::Active
+    let target = if mkmatrix_engine::windows::is_window_command(id) {
+        mkmatrix_engine::Target::Active
     } else {
-        let t = gridcraft_engine::Target::from_json(p).map_err(|e| e.to_string())?;
+        let t = mkmatrix_engine::Target::from_json(p).map_err(|e| e.to_string())?;
         if let Some(o) = params.as_object_mut() {
             o.remove("window");
             o.remove("doc");
@@ -178,7 +178,7 @@ pub fn handle(app: &mut SheetApp, ctx: &egui::Context, method: &str, p: &Json) -
         "engine.execute" | "command" | "ui.menu.invoke" => {
             let Some(id) = s("command").or(s("id")) else { return err("missing `command`") };
             let params = p.get("params").cloned().unwrap_or(json!({}));
-            let target = match gridcraft_engine::Target::from_json(p) {
+            let target = match mkmatrix_engine::Target::from_json(p) {
                 Ok(t) => t,
                 Err(e) => return err(e),
             };
@@ -195,6 +195,7 @@ pub fn handle(app: &mut SheetApp, ctx: &egui::Context, method: &str, p: &Json) -
                 ("view.darkMode", "Dark Mode", ""),
                 ("view.theme", "Display Theme", ""),
                 ("view.animations", "Animations", "{on?: bool} (toggles without it) → {on}"),
+                ("view.numberedColumns", "Numbered Columns", "{on?: bool} (toggles without it) → {on}"),
                 ("options.autoComplete", "Enable AutoComplete for cell values", "{on?: bool} (toggles without it) → {on}"),
                 ("view.interfaceScale", "Interface Size", "{percent: 75–200 | \"auto\"} (100 = auto; clamped)"),
                 ("ui.dialog", "Open Dialog", ""),
@@ -409,7 +410,7 @@ pub fn handle(app: &mut SheetApp, ctx: &egui::Context, method: &str, p: &Json) -
             ok(Json::Null)
         }
         // Anything else that names a command runs it.
-        other if gridcraft_engine::find_command(other).is_some() => wrap(direct(app, other, p, true)),
+        other if mkmatrix_engine::find_command(other).is_some() => wrap(direct(app, other, p, true)),
         other => err(format!("unknown method `{other}`")),
     };
     ctx.request_repaint();

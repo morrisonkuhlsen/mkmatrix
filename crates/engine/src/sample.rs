@@ -3,12 +3,17 @@
 
 use std::sync::Arc;
 
-use gridcraft_model::{Sheet, Workbook};
+use mkmatrix_model::{Sheet, Workbook};
 use serde_json::json;
 
 use crate::{DocState, Session};
 
-pub const SAMPLES: &[(&str, &str)] = &[("budget", "Household Budget"), ("sales", "Quarterly Sales Dashboard"), ("grades", "Gradebook")];
+pub const SAMPLES: &[(&str, &str)] = &[
+    ("regression", "Linear Regression by Matrices"),
+    ("budget", "Household Budget"),
+    ("sales", "Quarterly Sales Dashboard"),
+    ("grades", "Gradebook"),
+];
 
 pub fn title(name: &str) -> String {
     SAMPLES.iter().find(|(n, _)| *n == name).map(|(_, t)| t.to_string()).unwrap_or_else(|| "Sample".into())
@@ -20,6 +25,7 @@ pub fn build(name: &str) -> Option<Workbook> {
     let mut wb = Workbook::new();
     if let Some(sh) = wb.sheet_mut(0) {
         sh.name = match name {
+            "regression" => "Regression".into(),
             "budget" => "Budget".into(),
             "sales" => "Sales".into(),
             "grades" => "Grades".into(),
@@ -28,6 +34,7 @@ pub fn build(name: &str) -> Option<Workbook> {
     }
     s.add_document(DocState::new(wb, None, title(name), crate::Trust::Local));
     let ok = match name {
+        "regression" => regression(&mut s),
         "budget" => budget(&mut s),
         "sales" => sales(&mut s),
         "grades" => grades(&mut s),
@@ -39,7 +46,7 @@ pub fn build(name: &str) -> Option<Workbook> {
     let mut wb = (*s.doc().ok()?.wb).clone();
     wb.set_active_sheet(0);
     if let Some(sh) = wb.sheet_mut(0) {
-        sh.view_active = gridcraft_core::CellRef::default();
+        sh.view_active = mkmatrix_core::CellRef::default();
     }
     Some(wb)
 }
@@ -52,6 +59,86 @@ fn run(s: &mut Session, id: &str, p: serde_json::Value) -> bool {
             false
         }
     }
+}
+
+/// MK Matrix's own sample: ordinary least squares worked as matrices, each step a block on the
+/// sheet: the design matrix X and y, X'X, its inverse, X'y, then beta = (X'X)^-1 X'y, the fitted
+/// values and the residuals, all as spilled array formulas.
+fn regression(s: &mut Session) -> bool {
+    // Eight students: an intercept column, hours studied, hours slept; and the exam score.
+    let x = json!([["const", "Hours", "Sleep"], [1, 2, 8], [1, 3, 6], [1, 4, 7], [1, 5, 5], [1, 6, 8], [1, 7, 6], [1, 8, 7], [1, 9, 8]]);
+    let y = json!([["Score"], [73], [75], [79], [82], [88], [91], [95], [99]]);
+    let mut ok = run(s, "range.setValues", json!({"range": "B2", "values": [["Linear Regression by Matrices"]]}));
+    ok &= run(s, "home.cellStyle", json!({"range": "B2", "name": "Title"}));
+    ok &= run(
+        s,
+        "range.setValues",
+        json!({"range": "B3", "values": [["beta = (X'X)^-1 X'y, every step a block you can see. Change a score and watch it recalculate."]]}),
+    );
+    ok &= run(s, "home.cellStyle", json!({"range": "B3", "name": "Explanatory Text"}));
+    // Labels over each block.
+    for (cell, label) in [
+        ("B5", "X (design matrix)"),
+        ("F5", "y"),
+        ("G5", "X beta"),
+        ("H5", "y - X beta"),
+        ("J5", "X'X"),
+        ("J10", "(X'X)^-1"),
+        ("O5", "X'y"),
+        ("N10", "beta"),
+        ("B16", "Fit"),
+    ] {
+        ok &= run(s, "range.setValues", json!({"range": cell, "values": [[label]]}));
+        ok &= run(s, "home.bold", json!({"range": cell, "on": true}));
+    }
+    ok &= run(s, "range.setValues", json!({"range": "B6", "values": x}));
+    ok &= run(s, "range.setValues", json!({"range": "F6", "values": y}));
+    ok &= run(s, "range.setValues", json!({"range": "G6", "values": [["y-hat"]]}));
+    ok &= run(s, "range.setValues", json!({"range": "H6", "values": [["e"]]}));
+    // The matrices, as spilled array formulas.
+    ok &= run(s, "cell.set", json!({"cell": "J6", "input": "=MMULT(TRANSPOSE(B7:D14),B7:D14)"}));
+    ok &= run(s, "cell.set", json!({"cell": "J11", "input": "=MINVERSE(J6:L8)"}));
+    ok &= run(s, "cell.set", json!({"cell": "O6", "input": "=MMULT(TRANSPOSE(B7:D14),F7:F14)"}));
+    ok &= run(s, "range.setValues", json!({"range": "M11", "values": [["Intercept"], ["Hours"], ["Sleep"]]}));
+    ok &= run(s, "cell.set", json!({"cell": "N11", "input": "=MMULT(J11:L13,O6:O8)"}));
+    ok &= run(s, "cell.set", json!({"cell": "G7", "input": "=MMULT(B7:D14,N11:N13)"}));
+    ok &= run(s, "cell.set", json!({"cell": "H7", "input": "=F7:F14-G7:G14"}));
+    // How good the fit is.
+    ok &= run(s, "range.setValues", json!({"range": "B17", "values": [["R squared"], ["RSS"], ["det(X'X)"]]}));
+    ok &= run(s, "cell.set", json!({"cell": "D17", "input": "=1-SUMSQ(H7:H14)/DEVSQ(F7:F14)"}));
+    ok &= run(s, "cell.set", json!({"cell": "D18", "input": "=SUMSQ(H7:H14)"}));
+    ok &= run(s, "cell.set", json!({"cell": "D19", "input": "=MDETERM(J6:L8)"}));
+    // Each block shaded and boxed, the headers bold.
+    for block in ["B7:D14", "F7:F14", "G7:H14", "J6:L8", "J11:L13", "O6:O8", "N11:N13"] {
+        ok &= run(s, "home.fillColor", json!({"range": block, "color": "#DCF4EE"}));
+        ok &= run(s, "home.borders", json!({"range": block, "preset": "outside"}));
+    }
+    ok &= run(s, "home.fillColor", json!({"range": "N11:N13", "color": "#B8F2E2"}));
+    ok &= run(s, "home.bold", json!({"range": "B6:H6", "on": true}));
+    ok &= run(s, "home.alignCenter", json!({"range": "B6:H6"}));
+    ok &= run(s, "home.italic", json!({"range": "M11:M13", "on": true}));
+    ok &= run(s, "home.numberFormat", json!({"range": "G7:H14", "code": "0.00"}));
+    ok &= run(s, "home.numberFormat", json!({"range": "J11:L13", "code": "0.0000"}));
+    ok &= run(s, "home.numberFormat", json!({"range": "N11:N13", "code": "0.000"}));
+    ok &= run(s, "home.numberFormat", json!({"range": "D17", "code": "0.0000"}));
+    ok &= run(s, "home.numberFormat", json!({"range": "D18", "code": "0.00"}));
+    ok &= run(s, "home.columnWidth", json!({"cols": "A:A", "width": 20}));
+    ok &= run(s, "home.columnWidth", json!({"cols": "B:D", "width": 64}));
+    ok &= run(s, "home.columnWidth", json!({"cols": "E:E", "width": 20}));
+    ok &= run(s, "home.columnWidth", json!({"cols": "F:H", "width": 90}));
+    ok &= run(s, "home.columnWidth", json!({"cols": "I:I", "width": 20}));
+    ok &= run(s, "home.columnWidth", json!({"cols": "J:L", "width": 74}));
+    ok &= run(s, "home.columnWidth", json!({"cols": "M:M", "width": 70}));
+    ok &= run(s, "home.columnWidth", json!({"cols": "N:O", "width": 74}));
+    ok &= run(s, "review.newNote", json!({"cell": "N10", "text": "beta = (X'X)^-1 X'y: MMULT of the inverse and X'y."}));
+    // The fit: actual and fitted scores against hours studied.
+    ok &= run(
+        s,
+        "insert.chart",
+        json!({"range": "F6:G14", "type": "line", "title": "Score: actual and fitted", "at": "B21", "width": 520, "height": 260}),
+    );
+    ok &= run(s, "selection.set", json!({"cell": "F7"}));
+    ok
 }
 
 fn sales(s: &mut Session) -> bool {
@@ -100,7 +187,7 @@ fn sales(s: &mut Session) -> bool {
         if let Some(sh) = wb.sheet_mut(0)
             && let Some(c) = sh.charts.last_mut()
         {
-            c.series = vec![gridcraft_model::Series {
+            c.series = vec![mkmatrix_model::Series {
                 name: Some("Sales!$G$4".into()),
                 categories: Some("Sales!$B$5:$B$10".into()),
                 values: "Sales!$G$5:$G$10".into(),

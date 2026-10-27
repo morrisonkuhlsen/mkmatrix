@@ -1,5 +1,5 @@
-//! GridCraft's egui frontend: an Excel-style window (title bar with Quick Access Toolbar,
-//! ribbon, formula bar, grid, sheet tabs, status bar) over `gridcraft-engine`.
+//! MK Matrix's egui frontend: an Excel-style window (title bar with Quick Access Toolbar,
+//! ribbon, formula bar, grid, sheet tabs, status bar) over `mkmatrix-engine`.
 //!
 //! The UI is thin: it reads engine state and acts through [`SheetApp::run`] (engine commands by
 //! id). Everything it can do is also reachable over the control channel ([`control`]).
@@ -34,11 +34,14 @@ pub mod pivot_pane;
 pub mod printing;
 pub mod ribbon;
 pub mod selection_glide;
+pub mod splash;
 pub mod tabs;
 pub mod text_box;
 pub mod theme;
 #[cfg(not(target_arch = "wasm32"))]
 mod updates_ui;
+#[cfg(not(target_arch = "wasm32"))]
+pub use updates_ui::MKMATRIX as UPDATER_APP;
 pub mod widgets;
 mod window_ui;
 
@@ -46,8 +49,8 @@ pub use window_ui::WindowUi;
 
 use std::collections::HashMap;
 
-use gridcraft_engine::core::{CellRef, RangeRef};
-use gridcraft_engine::{Session, UiRequest};
+use mkmatrix_engine::core::{CellRef, RangeRef};
+use mkmatrix_engine::{Session, UiRequest};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value as Json, json};
 
@@ -98,6 +101,10 @@ pub struct UiState {
     /// [`INTERFACE_SCALE_MIN`]..=[`INTERFACE_SCALE_MAX`]; a malformed saved value reads as 100.
     #[serde(deserialize_with = "lenient_interface_scale")]
     pub interface_scale: u16,
+    /// Columns headed 1, 2, 3… rather than A, B, C (View ▸ Numbered Columns), and the Name Box
+    /// showing the active cell as (row, column), as a matrix's element a(i,j). On by default in
+    /// MK Matrix; formulas and files keep A1 references either way.
+    pub numbered_columns: bool,
 }
 
 pub const INTERFACE_SCALE_MIN: u16 = 75;
@@ -130,6 +137,7 @@ impl Default for UiState {
             keytip_invoke: None,
             language: i18n::Language::En,
             interface_scale: 100,
+            numbered_columns: true,
         }
     }
 }
@@ -170,7 +178,7 @@ impl UiState {
 }
 
 /// A dismissible bar under the ribbon, in the spirit of Excel's message bar. Used to tell the
-/// user what an opened file carried that GridCraft handled differently (e.g. preserved macros).
+/// user what an opened file carried that MK Matrix handled differently (e.g. preserved macros).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Notice {
     pub text: String,
@@ -255,11 +263,11 @@ pub struct SheetApp {
     pub(crate) capture_geometry_from_raw: bool,
     /// Chart selected on the sheet (id).
     pub selected_chart: Option<u32>,
-    /// The system clipboard's text when GridCraft last copied without publishing to it (a
+    /// The system clipboard's text when MK Matrix last copied without publishing to it (a
     /// control-channel or MCP `edit.copy`/`edit.cut`). While the system clipboard still holds this
-    /// text, GridCraft's copy is the newer one and Paste uses it.
+    /// text, MK Matrix's copy is the newer one and Paste uses it.
     clipboard_text_at_copy: Option<String>,
-    /// The system clipboard's text right after GridCraft's last cut (the published text, or the
+    /// The system clipboard's text right after MK Matrix's last cut (the published text, or the
     /// text noted for an unpublished cut); `None` after a copy, or once the clipboard is seen
     /// holding other text. Once the cut has been pasted, Paste leaves this text alone.
     cut_text: Option<String>,

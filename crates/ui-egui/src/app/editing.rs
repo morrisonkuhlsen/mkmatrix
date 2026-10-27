@@ -27,7 +27,7 @@ impl SheetApp {
         } else {
             match sh.cell(at) {
                 Some(c) if c.formula.is_some() => formula_locale::display(&c.input_text(), locale, &d.wb, d.wb.active_sheet()),
-                _ => gridcraft_engine::display::edit_text(&d.wb, sh, at),
+                _ => mkmatrix_engine::display::edit_text(&d.wb, sh, at),
             }
         };
         let (text, replace) = match text {
@@ -41,7 +41,7 @@ impl SheetApp {
             ed.completion = editor::column_completion(sh, at, &ed.text);
         }
         self.editor = Some(ed);
-        self.session.mode = if replace { gridcraft_engine::Mode::Enter } else { gridcraft_engine::Mode::Edit };
+        self.session.mode = if replace { mkmatrix_engine::Mode::Enter } else { mkmatrix_engine::Mode::Edit };
     }
 
     /// Commits the edit; `then` moves the selection (dr, dc) afterwards.
@@ -90,7 +90,7 @@ impl SheetApp {
 
     fn commit_edit_here(&mut self, dr: i64, dc: i64, array: bool, fill_selection: bool) -> bool {
         let Some(ed) = self.editor.take() else { return true };
-        self.session.mode = gridcraft_engine::Mode::Ready;
+        self.session.mode = mkmatrix_engine::Mode::Ready;
         let text = match &ed.completion {
             Some(full) if full.to_lowercase().starts_with(&ed.text.to_lowercase()) => full.clone(),
             _ => ed.text.clone(),
@@ -105,22 +105,22 @@ impl SheetApp {
         let text = match self.session.active().map(|d| formula_locale::canonical(&text, ed.locale, &d.wb, ed.sheet, ed.cell)) {
             Some(Ok(text)) => text,
             Some(Err(error)) => {
-                self.message = Some(("GridCraft".into(), error.to_string()));
+                self.message = Some(("MK Matrix".into(), error.to_string()));
                 self.editor = Some(ed);
-                self.session.mode = gridcraft_engine::Mode::Edit;
+                self.session.mode = mkmatrix_engine::Mode::Edit;
                 return false;
             }
             None => text,
         };
         // Data validation.
         if let Some(d) = self.session.active()
-            && let Some((dv, msg)) = gridcraft_engine::cmd::data::check_validation(&d.wb, ed.sheet, ed.cell, &text)
+            && let Some((dv, msg)) = mkmatrix_engine::cmd::data::check_validation(&d.wb, ed.sheet, ed.cell, &text)
         {
-            if dv.error_style == gridcraft_engine::model::ErrorStyle::Stop {
-                let title = if dv.error_title.is_empty() { "GridCraft".to_string() } else { dv.error_title.clone() };
+            if dv.error_style == mkmatrix_engine::model::ErrorStyle::Stop {
+                let title = if dv.error_title.is_empty() { "MK Matrix".to_string() } else { dv.error_title.clone() };
                 self.message = Some((title, msg));
                 self.editor = Some(ed);
-                self.session.mode = gridcraft_engine::Mode::Edit;
+                self.session.mode = mkmatrix_engine::Mode::Edit;
                 return false;
             }
             self.toast = Some((msg, now_ms()));
@@ -129,9 +129,9 @@ impl SheetApp {
         if self.session.active().is_some_and(|d| d.wb.active_sheet() != ed.sheet)
             && let Err(e) = self.session.run("sheet.activate", json!({"sheet": ed.sheet}))
         {
-            self.message = Some(("GridCraft".into(), clean_error(&e)));
+            self.message = Some(("MK Matrix".into(), clean_error(&e)));
             self.editor = Some(ed);
-            self.session.mode = gridcraft_engine::Mode::Edit;
+            self.session.mode = mkmatrix_engine::Mode::Edit;
             return false;
         }
         // Committing nothing into an empty cell changes nothing: no undo step (#1855, Backspace has
@@ -143,7 +143,7 @@ impl SheetApp {
                 .session
                 .active()
                 .and_then(|d| d.wb.sheet(ed.sheet))
-                .is_some_and(|sh| sh.cell(ed.cell).is_none_or(|c| c.formula.is_none() && c.value == gridcraft_engine::core::Value::Empty));
+                .is_some_and(|sh| sh.cell(ed.cell).is_none_or(|c| c.formula.is_none() && c.value == mkmatrix_engine::core::Value::Empty));
         let r = if unchanged {
             Ok(json!({}))
         } else if fill_selection {
@@ -160,9 +160,9 @@ impl SheetApp {
                 true
             }
             Err(e) => {
-                self.message = Some(("GridCraft".into(), clean_error(&e)));
+                self.message = Some(("MK Matrix".into(), clean_error(&e)));
                 self.editor = Some(ed);
-                self.session.mode = gridcraft_engine::Mode::Edit;
+                self.session.mode = mkmatrix_engine::Mode::Edit;
                 false
             }
         }
@@ -179,7 +179,7 @@ impl SheetApp {
 
     pub fn cancel_edit(&mut self) {
         self.editor = None;
-        self.session.mode = gridcraft_engine::Mode::Ready;
+        self.session.mode = mkmatrix_engine::Mode::Ready;
     }
 
     /// Enter/Tab move inside a multi-cell selection, otherwise to the next cell.

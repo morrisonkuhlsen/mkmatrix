@@ -18,6 +18,7 @@ use serde_json::{Value as Json, json};
 use crate::SheetApp;
 use crate::i18n::{self, Language};
 use crate::icons::{self, Icon};
+use crate::splash;
 use crate::theme::{self, Tokens};
 
 mod options;
@@ -164,8 +165,8 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
     let t = Tokens::get(&ctx);
     let lang = app.ui.language;
     let mut out = Outcome::default();
-    let (nav_bg, nav_text, nav_sel) =
-        if t.dark { (t.accent_soft, t.text, Color32::from_white_alpha(30)) } else { (t.accent, Color32::WHITE, Color32::from_black_alpha(46)) };
+    // The column is Morrison Kühlsen's ink in both modes, as in MK Sigma and MK Perth.
+    let (nav_bg, nav_text, nav_sel) = (splash::INK, splash::ON_INK, Color32::from_white_alpha(26));
     egui::Panel::left("backstage_nav")
         .exact_size(NAV_W)
         .resizable(false)
@@ -175,7 +176,7 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
             if nav_item(ui, Icon::Back, lang.tr("Back"), false, nav_text, nav_sel).clicked() {
                 out.close = true;
             }
-            ui.add_space(10.0);
+            brand_row(ui);
             for page in [Page::Home, Page::New, Page::Open] {
                 if nav_item(ui, page.icon(), lang.tr(page.label()), bs.page == page, nav_text, nav_sel).clicked() {
                     out.page = Some(page);
@@ -202,6 +203,7 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
             }
             // Bottom up: Account sits just above Options, as in Excel.
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+                house(ui);
                 for page in [Page::Options, Page::Account] {
                     if nav_item(ui, page.icon(), lang.tr(page.label()), bs.page == page, nav_text, nav_sel).clicked() {
                         out.page = Some(page);
@@ -271,13 +273,33 @@ fn nav_item(ui: &mut Ui, icon: Icon, label: &str, selected: bool, text: Color32,
     let p = ui.painter();
     if selected {
         p.rect_filled(rect, 0.0, sel);
-        p.rect_filled(Rect::from_min_size(rect.min, vec2(4.0, rect.height())), 0.0, text);
+        p.rect_filled(Rect::from_min_size(rect.min, vec2(4.0, rect.height())), 0.0, splash::BRAND);
     } else if resp.hovered() {
         p.rect_filled(rect, 0.0, sel.gamma_multiply(0.55));
     }
     icons::paint(p, Rect::from_center_size(pos2(rect.left() + 30.0, rect.center().y), vec2(17.0, 17.0)), icon, text);
     p.text(pos2(rect.left() + 50.0, rect.center().y), Align2::LEFT_CENTER, label, theme::ui_font(14.0), text);
     resp
+}
+
+/// MK Matrix's mark and name, under Back.
+fn brand_row(ui: &mut Ui) {
+    let (rect, _) = ui.allocate_exact_size(vec2(NAV_W, 58.0), Sense::hover());
+    let p = ui.painter();
+    splash::mark(p, Rect::from_center_size(pos2(rect.left() + 32.0, rect.center().y), vec2(26.0, 26.0)), splash::BRAND);
+    p.text(pos2(rect.left() + 54.0, rect.center().y), Align2::LEFT_CENTER, splash::NAME, theme::ui_font(18.0), splash::ON_INK);
+}
+
+/// The house at the foot of the column: the Morrison Kühlsen wordmark.
+fn house(ui: &mut Ui) {
+    let (rect, resp) = ui.allocate_exact_size(vec2(NAV_W, 52.0), Sense::hover());
+    if let Some(texture) = splash::wordmark(ui.ctx()) {
+        let width = 104.0;
+        let size = vec2(width, width * texture.size_vec2().y / texture.size_vec2().x.max(1.0));
+        let at = Rect::from_center_size(pos2(rect.left() + 20.0 + width / 2.0, rect.center().y), size);
+        ui.painter().image(texture.id(), at, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), splash::ON_INK);
+    }
+    resp.on_hover_text("Morrison Kühlsen");
 }
 
 fn nav_separator(ui: &mut Ui, text: Color32) {
@@ -347,7 +369,7 @@ fn new_tiles(app: &mut SheetApp, ui: &mut Ui, out: &mut Outcome) {
             app.run_or_alert("file.new", json!({}));
             out.close = true;
         }
-        for (i, (name, title)) in gridcraft_engine::sample::SAMPLES.iter().enumerate() {
+        for (i, (name, title)) in mkmatrix_engine::sample::SAMPLES.iter().enumerate() {
             if tile(ui, title, Some(i)).clicked() {
                 app.run_or_alert("file.new", json!({"sample": name}));
                 out.close = true;
@@ -472,7 +494,7 @@ fn ask(ctx: egui::Context, paths: Vec<String>, found: Arc<Mutex<HashMap<String, 
             ASKING.store(false, Ordering::SeqCst);
         }
     }
-    let asking = std::thread::Builder::new().name("gridcraft-recent-files".into()).spawn(move || {
+    let asking = std::thread::Builder::new().name("mkmatrix-recent-files".into()).spawn(move || {
         let _done = Done;
         for path in paths {
             let changed = std::fs::metadata(&path).and_then(|m| m.modified()).ok().and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok());
@@ -550,6 +572,12 @@ fn square_button(ui: &mut Ui, icon: Icon, label: &str) -> egui::Response {
 
 fn home(app: &mut SheetApp, ui: &mut Ui, bs: &mut Backstage, out: &mut Outcome) {
     let lang = app.ui.language;
+    let t = Tokens::get(ui.ctx());
+    ui.label(RichText::new(lang.tr("Welcome to MK Matrix")).font(theme::ui_bold(17.0)).color(t.text));
+    ui.label(
+        RichText::new(lang.tr("Spreadsheets of matrices: every cell a number, every block an algebra.")).font(theme::ui_font(13.0)).color(t.text_dim),
+    );
+    ui.add_space(14.0);
     section(ui, lang, "New");
     new_tiles(app, ui, out);
     ui.add_space(22.0);
@@ -750,13 +778,13 @@ pub fn export_as(app: &mut SheetApp, fmt: &str) -> bool {
         return match app.run(id, json!({"path": path})) {
             Ok(_) => true,
             Err(e) => {
-                app.message = Some(("GridCraft".into(), crate::clean_error(&e)));
+                app.message = Some(("MK Matrix".into(), crate::clean_error(&e)));
                 false
             }
         };
     }
     if app.services.download.is_none() {
-        app.message = Some(("GridCraft".into(), "Exporting needs a file picker, which this window doesn't have.".into()));
+        app.message = Some(("MK Matrix".into(), "Exporting needs a file picker, which this window doesn't have.".into()));
         return false;
     }
     if fmt == "pdf" {
@@ -764,7 +792,7 @@ pub fn export_as(app: &mut SheetApp, fmt: &str) -> bool {
         return match app.run(id, json!({})) {
             Ok(_) => true,
             Err(e) => {
-                app.message = Some(("GridCraft".into(), crate::clean_error(&e)));
+                app.message = Some(("MK Matrix".into(), crate::clean_error(&e)));
                 false
             }
         };
@@ -772,7 +800,7 @@ pub fn export_as(app: &mut SheetApp, fmt: &str) -> bool {
     app.store_view_state();
     match app.session.run("file.saveBytes", json!({"format": fmt})) {
         Ok(r) => {
-            let bytes = r.get("base64").and_then(Json::as_str).and_then(gridcraft_engine::io::base64_decode);
+            let bytes = r.get("base64").and_then(Json::as_str).and_then(mkmatrix_engine::io::base64_decode);
             let name = r.get("name").and_then(Json::as_str).map_or_else(|| format!("{stem}.{fmt}"), str::to_string);
             match (bytes, &app.services.download) {
                 (Some(b), Some(dl)) => {
@@ -783,7 +811,7 @@ pub fn export_as(app: &mut SheetApp, fmt: &str) -> bool {
             }
         }
         Err(e) => {
-            app.message = Some(("GridCraft".into(), crate::clean_error(&e)));
+            app.message = Some(("MK Matrix".into(), crate::clean_error(&e)));
             false
         }
     }
@@ -794,7 +822,7 @@ fn account(app: &mut SheetApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let lang = app.ui.language;
     section(ui, lang, "Product Information");
-    ui.label(RichText::new("GridCraft").font(theme::ui_bold(16.0)).color(t.text));
+    ui.label(RichText::new("MK Matrix").font(theme::ui_bold(16.0)).color(t.text));
     ui.add_space(8.0);
     egui::Grid::new("backstage_account").num_columns(2).spacing(vec2(18.0, 8.0)).show(ui, |ui| {
         for (label, value) in
@@ -807,13 +835,13 @@ fn account(app: &mut SheetApp, ui: &mut Ui) {
     });
     ui.add_space(18.0);
     ui.horizontal(|ui| {
-        if square_button(ui, Icon::Info, lang.tr("About GridCraft")).clicked() {
+        if square_button(ui, Icon::Info, lang.tr("About MK Matrix")).clicked() {
             app.open_dialog("about", json!({}));
         }
         ui.add_space(12.0);
         ui.vertical(|ui| {
             ui.add_space(14.0);
-            ui.label(RichText::new(lang.tr("About GridCraft")).font(theme::ui_bold(13.5)).color(t.text));
+            ui.label(RichText::new(lang.tr("About MK Matrix")).font(theme::ui_bold(13.5)).color(t.text));
             dim(ui, lang.tr("Version, contributors and the AI models that helped"));
         });
     });
@@ -865,7 +893,7 @@ mod tests {
 
     #[test]
     fn the_recent_list_learns_when_its_files_were_last_changed() {
-        let dir = std::env::temp_dir().join(format!("gridcraft-recent-files-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("mkmatrix-recent-files-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let there = dir.join("There.xlsx").to_string_lossy().into_owned();

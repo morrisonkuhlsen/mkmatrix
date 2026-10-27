@@ -1,11 +1,11 @@
 kind = "app"
 categories = ["Office"]
-icon = "assets/app-icon/hicolor/256x256/apps/ai.storyteller.gridcraft.png"
+icon = "assets/app-icon/hicolor/256x256/apps/com.morrisonkuhlsen.mkmatrix.png"
 
 [linux.x86_64]
-asset = "gridcraft-{version}-linux-x86_64.tar.gz"
-exec = "gridcraft-{version}-linux-x86_64/bin/gridcraft"
+asset = "mkmatrix-{version}-linux-x86_64.tar.gz"
+exec = "mkmatrix-{version}-linux-x86_64/bin/mkmatrix"
 
 [linux.aarch64]
-asset = "gridcraft-{version}-linux-aarch64.tar.gz"
-exec = "gridcraft-{version}-linux-aarch64/bin/gridcraft"
+asset = "mkmatrix-{version}-linux-aarch64.tar.gz"
+exec = "mkmatrix-{version}-linux-aarch64/bin/mkmatrix"

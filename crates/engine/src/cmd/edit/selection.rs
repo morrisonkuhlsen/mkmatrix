@@ -3,7 +3,7 @@ use super::*;
 // ---------------------------------------------------------------- selection
 
 /// Whether the cell may be selected: a protected sheet can forbid selecting locked and/or unlocked cells.
-fn cell_selectable(wb: &gridcraft_model::Workbook, sheet: &gridcraft_model::Sheet, c: CellRef) -> bool {
+fn cell_selectable(wb: &mkmatrix_model::Workbook, sheet: &mkmatrix_model::Sheet, c: CellRef) -> bool {
     let Some(p) = sheet.protection.as_ref() else { return true };
     if wb.styles.get(sheet.style_id(c)).protection.locked { p.select_locked } else { p.select_unlocked }
 }

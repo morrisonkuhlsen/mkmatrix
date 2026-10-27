@@ -1,5 +1,5 @@
-use gridcraft_core::{CellRef, MAX_COLS, MAX_ROWS};
-use gridcraft_engine::Session;
+use mkmatrix_core::{CellRef, MAX_COLS, MAX_ROWS};
+use mkmatrix_engine::Session;
 use serde_json::json;
 
 #[test]

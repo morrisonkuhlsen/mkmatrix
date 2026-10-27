@@ -229,7 +229,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Command\nPalette" => "Paleta de\nComandos",
         "Agent\nControl" => "Controle\ndo Agente",
         "Action\nJournal" => "Registro\nde Ações",
-        "About\nGridCraft" => "Sobre o\nGridCraft",
+        "About\nMK Matrix" => "Sobre o\nMK Matrix",
         "Share" => "Compartilhar",
         "Add Chart\nElement" => "Adicionar\nElemento de Gráfico",
         "Change\nChart Type" => "Alterar\nTipo de Gráfico",
@@ -480,7 +480,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Conditional Formatting Rules Manager" => "Gerenciador de Regras de Formatação Condicional",
         "Search Commands" => "Pesquisar Comandos",
         "Agent Control" => "Controle por Agentes",
-        "About GridCraft" => "Sobre o GridCraft",
+        "About MK Matrix" => "Sobre o MK Matrix",
         "Insert Chart" => "Inserir Gráfico",
         "Select Data Source" => "Selecionar Fonte de Dados",
         "Action Journal" => "Registro de Ações",
@@ -904,7 +904,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Hide Sheet" => "Ocultar Planilha",
         "Hierarchy & more" => "Hierarquia e mais",
         "Highlighter" => "Marca-texto",
-        "How agents drive GridCraft (MCP / control channel)" => "Como os agentes controlam o GridCraft (MCP / canal de controle)",
+        "How agents drive MK Matrix (MCP / control channel)" => "Como os agentes controlam o MK Matrix (MCP / canal de controle)",
         "Import a text or CSV file" => "Importar um arquivo de texto ou CSV",
         "Insert Function" => "Inserir Função",
         "Insert Function (⇧F3)" => "Inserir Função (⇧F3)",
@@ -982,6 +982,29 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
             "Salvamento automático: salvar após cada alteração (pastas de trabalho salvas em um arquivo)"
         }
         "All sheets" => "Todas as planilhas",
+        "Welcome to MK Matrix" => "Bem-vindo ao MK Matrix",
+        "Numbered Columns" => "Colunas Numeradas",
+        "Head the columns 1, 2, 3… as a matrix's a(i,j), rather than A, B, C" => {
+            "Numerar as colunas 1, 2, 3… como o a(i,j) de uma matriz, em vez de A, B, C"
+        }
+        // The splash screen.
+        "Spreadsheets of matrices: every cell a number, every block an algebra." => {
+            "Planilhas de matrizes: cada célula um número, cada bloco uma álgebra."
+        }
+        "Loading {component}…" => "Carregando {component}…",
+        "A Morrison Kühlsen project" => "Um projeto Morrison Kühlsen",
+        "the formula parser" => "o analisador de fórmulas",
+        "the calculation engine" => "o motor de cálculo",
+        "the function library" => "a biblioteca de funções",
+        "matrix algebra" => "a álgebra matricial",
+        "dynamic arrays" => "as matrizes dinâmicas",
+        "number formats" => "os formatos de número",
+        "the XLSX reader and writer" => "o leitor e gravador de XLSX",
+        "charts" => "os gráficos",
+        "PDF export" => "a exportação para PDF",
+        "the grid" => "a grade",
+        "the control channel" => "o canal de controle",
+        "the MCP server for agents" => "o servidor MCP para agentes",
         _ => return None,
     })
 }

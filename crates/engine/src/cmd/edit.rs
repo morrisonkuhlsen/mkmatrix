@@ -1,7 +1,7 @@
 //! Cell entry, selection, undo/redo, clipboard, clear, fill, find & replace.
 
-use gridcraft_core::{CellRef, MAX_ROWS, RangeRef, Value};
-use gridcraft_model::{Cell, Formula, StyleId};
+use mkmatrix_core::{CellRef, MAX_ROWS, RangeRef, Value};
+use mkmatrix_model::{Cell, Formula, StyleId};
 use serde_json::{Value as Json, json};
 
 use super::*;
@@ -249,7 +249,7 @@ fn clear(s: &mut Session, p: &Json, what: &str) -> Result<Json> {
                     } else {
                         cell.value = Value::Empty;
                         if checkbox {
-                            cell.style = cx.wb.styles.derive(cell.style, |st| st.num_fmt = gridcraft_model::NumFmt::new("General"));
+                            cell.style = cx.wb.styles.derive(cell.style, |st| st.num_fmt = mkmatrix_model::NumFmt::new("General"));
                         }
                     }
                 }
@@ -290,7 +290,7 @@ fn clear(s: &mut Session, p: &Json, what: &str) -> Result<Json> {
                     let blocked: Vec<_> = sh
                         .cells
                         .iter_range(reach)
-                        .filter(|(_, cell)| cell.formula.is_some() && cell.value == Value::Error(gridcraft_core::CellError::Spill))
+                        .filter(|(_, cell)| cell.formula.is_some() && cell.value == Value::Error(mkmatrix_core::CellError::Spill))
                         .map(|(c, _)| (sheet, c))
                         .collect();
                     cx.changed.extend(blocked);

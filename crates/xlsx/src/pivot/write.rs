@@ -210,7 +210,7 @@ fn resolve_source(wb: &Workbook, text: &str, default_sheet: usize, depth: u32) -
         let xml = if valid { format!("<worksheetSource name=\"{}\"/>", esc_attr(&tb.name)) } else { range_source_xml(&sh.name, r) };
         return Some((si, r, xml));
     }
-    let (sheet, body) = gridcraft_core::split_sheet(t);
+    let (sheet, body) = mkmatrix_core::split_sheet(t);
     if let Some(r) = RangeRef::parse(body) {
         let si = match &sheet {
             Some(n) => wb.sheet_index(n)?,
@@ -517,7 +517,7 @@ fn cache_xml(c: &Cache, records_rid: Option<&str>, sys: DateSystem) -> String {
         }
         _ => s.push_str(" saveData=\"0\""),
     }
-    s.push_str(" refreshOnLoad=\"1\" refreshedBy=\"GridCraft\" createdVersion=\"6\" refreshedVersion=\"6\" minRefreshableVersion=\"3\">");
+    s.push_str(" refreshOnLoad=\"1\" refreshedBy=\"MK Matrix\" createdVersion=\"6\" refreshedVersion=\"6\" minRefreshableVersion=\"3\">");
     let _ = write!(s, "<cacheSource type=\"worksheet\">{}</cacheSource>", c.source_xml);
     let _ = write!(s, "<cacheFields count=\"{}\">", c.fields.len());
     for f in &c.fields {

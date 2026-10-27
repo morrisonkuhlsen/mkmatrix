@@ -29,7 +29,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     let place = (d.uid, si);
     let mut view = app.view();
     // Page Layout view: pages on a desk, rulers above and left of the headings.
-    let paper = sh.view == gridcraft_engine::model::SheetViewMode::PageLayout;
+    let paper = sh.view == mkmatrix_engine::model::SheetViewMode::PageLayout;
     let ruler = if paper && !app.session.hide_ruler { crate::paper_view::RULER } else { 0.0 };
     // Right-to-left sheets carry the vertical ruler on the right, beside the row headings.
     let grid_rect = if rtl {
@@ -226,7 +226,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     }
     let objects = crate::chartview::paint_objects(app, &painter.with_clip_rect(geo.cells), &geo, &wb, si, sh);
     paint_overlays(app, ui, &painter.with_clip_rect(geo.cells), &geo, &wb, si, sh, &sel);
-    if sh.view == gridcraft_engine::model::SheetViewMode::PageBreakPreview {
+    if sh.view == mkmatrix_engine::model::SheetViewMode::PageBreakPreview {
         paint_pages(app, &painter.with_clip_rect(geo.cells), &geo, sh);
     }
     if geo.paper.is_some() {
@@ -235,7 +235,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     // Headers.
     if sh.show_headings {
         let headings = table_headings(&geo, sh, sel.active);
-        paint_headers(&painter, &geo, sh, &sel, &t, &quads, &headings);
+        paint_headers(&painter, &geo, sh, &sel, &t, &quads, &headings, app.ui.numbered_columns);
         paint_freeze_handles(&painter, &geo, sh, &app.grid.drag, &t);
     }
     crate::outline::paint(&painter, &geo, sh, &t);
@@ -295,7 +295,7 @@ fn paint_panes(
     wb: &Workbook,
     si: usize,
     sh: &Sheet,
-    sel: &gridcraft_engine::Selection,
+    sel: &mkmatrix_engine::Selection,
     outline: Rect,
     cf: &mut CfCache,
     t: &Tokens,
@@ -444,10 +444,11 @@ pub(crate) fn paint_headers(
     p: &Painter,
     geo: &Geo,
     sh: &Sheet,
-    sel: &gridcraft_engine::Selection,
+    sel: &mkmatrix_engine::Selection,
     t: &Tokens,
     quads: &[((u32, u32), (u32, u32), Rect)],
     headings: &[TableHeading],
+    numbered: bool,
 ) {
     let font = theme::ui_font(heading_font_size(geo.z));
     // The headers' own area: inside the outline bands.
@@ -503,7 +504,9 @@ pub(crate) fn paint_headers(
                         }
                     }
                     None => {
-                        pc.text(cr.center(), Align2::CENTER_CENTER, col_to_letters(c), font.clone(), color);
+                        // MK Matrix numbers its columns as it does its rows, as a matrix's a(i,j).
+                        let label = if numbered { (u64::from(c) + 1).to_string() } else { col_to_letters(c) };
+                        pc.text(cr.center(), Align2::CENTER_CENTER, label, font.clone(), color);
                     }
                 }
             }
@@ -565,7 +568,7 @@ pub(crate) fn paint_overlays(
     wb: &Workbook,
     si: usize,
     sh: &Sheet,
-    sel: &gridcraft_engine::Selection,
+    sel: &mkmatrix_engine::Selection,
 ) {
     // Validation dropdown arrow for the active cell.
     if app.editor.is_none()
@@ -738,7 +741,7 @@ mod trace_arrow_tests {
     use super::*;
 
     fn app() -> SheetApp {
-        let mut s = gridcraft_engine::Session::new();
+        let mut s = mkmatrix_engine::Session::new();
         s.new_workbook();
         SheetApp::new(s, Default::default())
     }

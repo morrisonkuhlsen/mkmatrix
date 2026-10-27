@@ -2,8 +2,8 @@
 //! dark mode instead of showing a light square (#2086).
 
 use egui::{Shape, pos2};
-use gridcraft_engine::Session;
-use gridcraft_ui_egui::{SheetApp, theme::Tokens};
+use mkmatrix_engine::Session;
+use mkmatrix_ui_egui::{SheetApp, theme::Tokens};
 use serde_json::json;
 
 #[test]

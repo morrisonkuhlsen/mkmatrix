@@ -1,147 +1,147 @@
 {
-  "id": "gridcraft",
-  "name": "GridCraft",
+  "id": "mkmatrix",
+  "name": "MK Matrix",
   "upgradeCode": "5511327B-F305-41BE-92D0-EB84944E7C4D",
   "sources": [
-    "gridcraft.wxs"
+    "mkmatrix.wxs"
   ],
-  "icon": "assets/app-icon/gridcraft.ico",
+  "icon": "assets/app-icon/mkmatrix.ico",
   "localization": [],
   "extensions": [],
   "payloads": [
-    "gridcraft-cli.exe",
-    "gridcraft.exe"
+    "mkmatrix-cli.exe",
+    "mkmatrix.exe"
   ],
   "registry": [
     [
       "-1",
-      "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\gridcraft.exe",
+      "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\mkmatrix.exe",
       "",
-      "[#GridcraftExe]"
+      "[#MkMatrixExe]"
     ],
     [
       "-1",
-      "Software\\Classes\\GridCraft.Workbook",
+      "Software\\Classes\\MK Matrix.Workbook",
       "",
-      "GridCraft Workbook"
+      "MK Matrix Workbook"
     ],
     [
       "-1",
-      "Software\\Classes\\GridCraft.Workbook\\DefaultIcon",
+      "Software\\Classes\\MK Matrix.Workbook\\DefaultIcon",
       "",
-      "\"[#GridcraftExe]\",0"
+      "\"[#MkMatrixExe]\",0"
     ],
     [
       "-1",
-      "Software\\Classes\\GridCraft.Workbook\\shell\\open\\command",
+      "Software\\Classes\\MK Matrix.Workbook\\shell\\open\\command",
       "",
-      "\"[#GridcraftExe]\" \"%1\""
+      "\"[#MkMatrixExe]\" \"%1\""
     ],
     [
       "-1",
-      "Software\\Classes\\GridCraft.TextData",
+      "Software\\Classes\\MK Matrix.TextData",
       "",
-      "GridCraft Text Data"
+      "MK Matrix Text Data"
     ],
     [
       "-1",
-      "Software\\Classes\\GridCraft.TextData\\DefaultIcon",
+      "Software\\Classes\\MK Matrix.TextData\\DefaultIcon",
       "",
-      "\"[#GridcraftExe]\",0"
+      "\"[#MkMatrixExe]\",0"
     ],
     [
       "-1",
-      "Software\\Classes\\GridCraft.TextData\\shell\\open\\command",
+      "Software\\Classes\\MK Matrix.TextData\\shell\\open\\command",
       "",
-      "\"[#GridcraftExe]\" \"%1\""
+      "\"[#MkMatrixExe]\" \"%1\""
     ],
     [
       "-1",
       "Software\\Classes\\.xlsx\\OpenWithProgids",
-      "GridCraft.Workbook",
-      "GridCraft.Workbook"
+      "MK Matrix.Workbook",
+      "MK Matrix.Workbook"
     ],
     [
       "-1",
       "Software\\Classes\\.xlsm\\OpenWithProgids",
-      "GridCraft.Workbook",
-      "GridCraft.Workbook"
+      "MK Matrix.Workbook",
+      "MK Matrix.Workbook"
     ],
     [
       "-1",
       "Software\\Classes\\.xlsb\\OpenWithProgids",
-      "GridCraft.Workbook",
-      "GridCraft.Workbook"
+      "MK Matrix.Workbook",
+      "MK Matrix.Workbook"
     ],
     [
       "-1",
       "Software\\Classes\\.ods\\OpenWithProgids",
-      "GridCraft.Workbook",
-      "GridCraft.Workbook"
+      "MK Matrix.Workbook",
+      "MK Matrix.Workbook"
     ],
     [
       "-1",
       "Software\\Classes\\.csv\\OpenWithProgids",
-      "GridCraft.TextData",
-      "GridCraft.TextData"
+      "MK Matrix.TextData",
+      "MK Matrix.TextData"
     ],
     [
       "-1",
       "Software\\Classes\\.tsv\\OpenWithProgids",
-      "GridCraft.TextData",
-      "GridCraft.TextData"
+      "MK Matrix.TextData",
+      "MK Matrix.TextData"
     ],
     [
       "-1",
-      "Software\\GridCraft\\Capabilities",
+      "Software\\MK Matrix\\Capabilities",
       "ApplicationName",
-      "GridCraft"
+      "MK Matrix"
     ],
     [
       "-1",
-      "Software\\GridCraft\\Capabilities",
+      "Software\\MK Matrix\\Capabilities",
       "ApplicationDescription",
       "Open-source spreadsheet for .xlsx, CSV and TSV files"
     ],
     [
       "-1",
-      "Software\\GridCraft\\Capabilities\\FileAssociations",
+      "Software\\MK Matrix\\Capabilities\\FileAssociations",
       ".xlsx",
-      "GridCraft.Workbook"
+      "MK Matrix.Workbook"
     ],
     [
       "-1",
-      "Software\\GridCraft\\Capabilities\\FileAssociations",
+      "Software\\MK Matrix\\Capabilities\\FileAssociations",
       ".xlsm",
-      "GridCraft.Workbook"
+      "MK Matrix.Workbook"
     ],
     [
       "-1",
-      "Software\\GridCraft\\Capabilities\\FileAssociations",
+      "Software\\MK Matrix\\Capabilities\\FileAssociations",
       ".csv",
-      "GridCraft.TextData"
+      "MK Matrix.TextData"
     ],
     [
       "-1",
-      "Software\\GridCraft\\Capabilities\\FileAssociations",
+      "Software\\MK Matrix\\Capabilities\\FileAssociations",
       ".tsv",
-      "GridCraft.TextData"
+      "MK Matrix.TextData"
     ],
     [
       "-1",
       "Software\\RegisteredApplications",
-      "GridCraft",
-      "Software\\GridCraft\\Capabilities"
+      "MK Matrix",
+      "Software\\MK Matrix\\Capabilities"
     ],
     [
       "-1",
-      "Software\\GridCraft\\Installer",
+      "Software\\MK Matrix\\Installer",
       "DesktopShortcut",
       "[DESKTOPSHORTCUT]"
     ],
     [
       "-1",
-      "Software\\GridCraft\\Installer",
+      "Software\\MK Matrix\\Installer",
       "DesktopShortcutComponent",
       "#1"
     ]

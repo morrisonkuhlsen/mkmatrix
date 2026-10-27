@@ -2,12 +2,17 @@
 //! offers the new release: Update and Restart (direct self-update), Download or Later. The flow
 //! itself is `craft_update::updater::Updater`.
 
-use craft_update::suite::GRIDCRAFT;
+use craft_update::app::App;
 use craft_update::updater::{Action, Status, Updater};
 
 use crate::SheetApp;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// MK Matrix as the updater (and the self-update helper in `main.rs`) sees it. Its releases have
+/// no repository yet, so the app doesn't check at start; Help ▸ Check for Updates… reports that
+/// the check failed.
+pub const MKMATRIX: App = App::new("mkmatrix", "MK Matrix", "Spreadsheets of matrices", "morrisonkuhlsen/mkmatrix");
 
 pub(crate) struct Runtime {
     updater: Updater,
@@ -19,7 +24,7 @@ pub(crate) struct Runtime {
 
 impl Default for Runtime {
     fn default() -> Self {
-        Self { updater: Updater::new(&GRIDCRAFT, VERSION), startup: false, manual: false }
+        Self { updater: Updater::new(&MKMATRIX, VERSION), startup: false, manual: false }
     }
 }
 
@@ -42,13 +47,13 @@ pub(crate) fn tick(app: &mut SheetApp, ctx: &egui::Context) {
     rt.updater.tick(ctx);
     let lang = app.ui.language;
     let outcome = match rt.updater.status() {
-        Status::UpToDate => Some(lang.tr("GridCraft {version} is up to date.").replace("{version}", VERSION)),
+        Status::UpToDate => Some(lang.tr("MK Matrix {version} is up to date.").replace("{version}", VERSION)),
         Status::Failed(e) => Some(lang.tr("Could not check for updates: {error}").replace("{error}", e)),
         Status::Idle | Status::Checking => None,
     };
     if let Some(message) = outcome {
         rt.updater.dismiss_status();
-        app.message = Some(("GridCraft".into(), message));
+        app.message = Some(("MK Matrix".into(), message));
     }
 }
 

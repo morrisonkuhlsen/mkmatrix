@@ -158,7 +158,7 @@ impl SheetApp {
     /// minimized request has no size, so no hidden pass can reach issuance: the restore pass issues
     /// it instead. Native eframe honours `RequestPaintWhileHidden`; the web runner does not (hidden
     /// tabs only run `run_logic`), so a hidden web tab queues the work until it is shown again.
-    /// This is a shared eframe web follow-up, not a GridCraft-local workaround, and the control
+    /// This is a shared eframe web follow-up, not a MK Matrix-local workaround, and the control
     /// protocol documents the limitation.
     fn request_hidden_paint(&self, ctx: &egui::Context) {
         if !(self.shots.needs_hidden_paint() || self.synthetic_pending || !self.synthetic.is_empty()) {
@@ -268,7 +268,7 @@ impl SheetApp {
             for n in &d.wb.names {
                 let target = n.formula.replace('$', "");
                 let (sheet, body) = match target.rsplit_once('!') {
-                    Some((s, b)) => (Some(gridcraft_engine::core::unquote_sheet(s)), b.to_string()),
+                    Some((s, b)) => (Some(mkmatrix_engine::core::unquote_sheet(s)), b.to_string()),
                     None => (None, target.clone()),
                 };
                 if sheet.as_deref().is_none_or(|s| s.eq_ignore_ascii_case(&sh.name)) && RangeRef::parse(&body) == Some(cur) {
@@ -279,12 +279,39 @@ impl SheetApp {
         if self.grid.drag_select && !cur.is_single() {
             return format!("{}R x {}C", cur.height(), cur.width());
         }
+        if self.ui.numbered_columns {
+            return format!("({}, {})", u64::from(sel.active.row) + 1, u64::from(sel.active.col) + 1);
+        }
         sel.active.a1()
     }
 }
 
+/// A cell given as `(row, column)` or `row, column` (1-based, as the Name Box shows it with
+/// numbered columns) in A1 form; `None` for anything else or a cell off the sheet.
+pub(crate) fn row_col_to_a1(text: &str) -> Option<String> {
+    let inner = text.strip_prefix('(').and_then(|t| t.strip_suffix(')')).unwrap_or(text);
+    let (row, col) = inner.split_once(',')?;
+    let row: u32 = row.trim().parse().ok()?;
+    let col: u32 = col.trim().parse().ok()?;
+    if row == 0 || col == 0 || row > mkmatrix_engine::core::MAX_ROWS || col > mkmatrix_engine::core::MAX_COLS {
+        return None;
+    }
+    Some(CellRef { row: row - 1, col: col - 1 }.a1())
+}
+
 #[cfg(test)]
 mod lifecycle_tests {
+
+    #[test]
+    fn the_name_box_reads_row_and_column() {
+        assert_eq!(row_col_to_a1("(21, 18)").as_deref(), Some("R21"));
+        assert_eq!(row_col_to_a1("1,1").as_deref(), Some("A1"));
+        assert_eq!(row_col_to_a1(" 3 , 28 ").as_deref(), Some("AB3"));
+        for bad in ["", "A1", "(0, 1)", "(1, 0)", "(1)", "(-1, 2)", "(1048577, 1)", "(1, 16385)", "(x, y)", "(99999999999, 1)"] {
+            assert_eq!(row_col_to_a1(bad), None, "{bad}");
+        }
+    }
+
     use super::*;
 
     /// Builds a key-A press or release event without modifiers.
@@ -448,7 +475,7 @@ mod lifecycle_tests {
     fn a_logic_only_tick_autosaves_a_dirty_workbook_once() {
         let ctx = egui::Context::default();
         let mut app = app();
-        let dir = std::env::temp_dir().join(format!("gridcraft-logic-autosave-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("mkmatrix-logic-autosave-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("autosave.xlsx");

@@ -1,7 +1,7 @@
 //! Legacy `.xls` (BIFF8) import. Every test file is assembled here from the [MS-CFB] and
 //! [MS-XLS] structures; no Excel-produced file is used.
 
-use gridcraft_core::{CellError, CellRef, DateSystem, RangeRef, Value};
+use mkmatrix_core::{CellError, CellRef, DateSystem, RangeRef, Value};
 
 use crate::{Format, IoError, read_xls, read_xlsx, sniff, write_xlsx};
 
@@ -285,11 +285,11 @@ fn sample(date1904: bool) -> Vec<u8> {
     cat(&[&globals([p1, p2, p3]), &sheet1, &data, &chart])
 }
 
-fn v(wb: &gridcraft_model::Workbook, sheet: usize, a1: &str) -> Value {
+fn v(wb: &mkmatrix_model::Workbook, sheet: usize, a1: &str) -> Value {
     wb.sheets[sheet].value(CellRef::parse(a1).unwrap())
 }
 
-fn ftext(wb: &gridcraft_model::Workbook, a1: &str) -> Option<String> {
+fn ftext(wb: &mkmatrix_model::Workbook, a1: &str) -> Option<String> {
     wb.sheets[0].cell(CellRef::parse(a1).unwrap()).and_then(|c| c.formula.as_ref()).map(|f| f.text.clone())
 }
 
@@ -566,11 +566,11 @@ fn reads_iterative_calculation_settings() {
     let (wb, _) = read_xls(&compound("Workbook", &cat(&[&globals(p1, p2), &sheet1, &sheet2]))).unwrap();
     assert!(wb.calc.iterative);
     assert_eq!((wb.calc.max_iterations, wb.calc.max_change), (50, 0.01));
-    assert_eq!(wb.calc.mode, gridcraft_model::CalcMode::Manual);
+    assert_eq!(wb.calc.mode, mkmatrix_model::CalcMode::Manual);
     assert!(wb.calc.precision_as_displayed);
     // Without the records: Excel's defaults, iteration off.
     let (wb, _) = read_xls(&compound("Workbook", &sample(false))).unwrap();
-    assert_eq!(wb.calc, gridcraft_model::CalcSettings::default());
+    assert_eq!(wb.calc, mkmatrix_model::CalcSettings::default());
 }
 
 #[test]

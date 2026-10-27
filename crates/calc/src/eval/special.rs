@@ -64,7 +64,7 @@ pub fn precedents(wb: &Workbook, sheet: usize, e: &Expr) -> (Vec<Area>, bool) {
             dynamic = true
         }
         Expr::Name(_) | Expr::Struct(_) => dynamic = true,
-        Expr::Call(n, _) if gridcraft_functions::lookup(n).is_none() && !is_special(n) => dynamic = true,
+        Expr::Call(n, _) if mkmatrix_functions::lookup(n).is_none() && !is_special(n) => dynamic = true,
         // A range ending in a function's result (`A1:INDEX(B1:B9,n)`) covers the cells between
         // the references inside it, not only those references.
         Expr::Binary(BinOp::Range, a, b) if !matches!((&**a, &**b), (Expr::Ref(_), Expr::Ref(_))) => {
@@ -160,7 +160,7 @@ pub const SPECIAL_FUNCTIONS: &[&str] = &[
 ];
 
 pub fn is_known_function(n: &str) -> bool {
-    is_special(&n.to_ascii_uppercase()) || gridcraft_functions::lookup(n).is_some()
+    is_special(&n.to_ascii_uppercase()) || mkmatrix_functions::lookup(n).is_some()
 }
 
 #[allow(dead_code)]

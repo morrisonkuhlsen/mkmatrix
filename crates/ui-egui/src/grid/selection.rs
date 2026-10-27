@@ -6,7 +6,7 @@ use super::show::hidden_around;
 use super::*;
 
 /// Where the active cell is on screen: the whole merged cell when it is part of one.
-fn active_rect(geo: &Geo, sh: &Sheet, sel: &gridcraft_engine::Selection) -> Rect {
+fn active_rect(geo: &Geo, sh: &Sheet, sel: &mkmatrix_engine::Selection) -> Rect {
     match sh.merge_at(sel.active) {
         Some(m) => geo.range_rect(sh, m),
         None => geo.cell_rect(sh, sel.active),
@@ -16,12 +16,12 @@ fn active_rect(geo: &Geo, sh: &Sheet, sel: &gridcraft_engine::Selection) -> Rect
 /// The rectangles shaded for a selection: every area except the active cell, which stays clear so
 /// it is plain where typing goes. A single selected cell has no fill. `outline` is where the
 /// current area is drawn this frame: it glides to a new selection, and its fill with it.
-pub fn selection_fill(geo: &Geo, sh: &Sheet, sel: &gridcraft_engine::Selection, outline: Rect) -> Vec<Rect> {
+pub fn selection_fill(geo: &Geo, sh: &Sheet, sel: &mkmatrix_engine::Selection, outline: Rect) -> Vec<Rect> {
     selection_fill_where(geo, sh, sel, outline, |_| true)
 }
 
 /// `selection_fill` for the areas `keep` accepts (a frozen pane draws only the areas it shows).
-fn selection_fill_where(geo: &Geo, sh: &Sheet, sel: &gridcraft_engine::Selection, outline: Rect, keep: impl Fn(&RangeRef) -> bool) -> Vec<Rect> {
+fn selection_fill_where(geo: &Geo, sh: &Sheet, sel: &mkmatrix_engine::Selection, outline: Rect, keep: impl Fn(&RangeRef) -> bool) -> Vec<Rect> {
     if sel.is_single_cell() {
         return vec![];
     }
@@ -83,7 +83,7 @@ pub(crate) fn paint_selection(
     p: &Painter,
     geo: &Geo,
     sh: &Sheet,
-    sel: &gridcraft_engine::Selection,
+    sel: &mkmatrix_engine::Selection,
     outline: Rect,
     t: &Tokens,
     app: &SheetApp,

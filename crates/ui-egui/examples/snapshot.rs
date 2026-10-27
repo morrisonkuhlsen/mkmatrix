@@ -1,11 +1,13 @@
-//! Renders the whole GridCraft window offscreen (wgpu, no window) to a PNG.
+//! Renders the whole MK Matrix window offscreen (wgpu, no window) to a PNG.
 //!
-//! `cargo run --release -p gridcraft-ui-egui --example snapshot -- [--sample sales] [--in file.xlsx]
+//! `cargo run --release -p mkmatrix-ui-egui --example snapshot -- [--sample sales] [--in file.xlsx]
 //!  [--size 1440x900] [--scale 2] [--cmd 'id={json}']... [--tab Insert] [--dark] [--language en|es|zh|ja|ko|ru|pt|de|cs|fr|tr]
-//!  [--dialog 'name={json}'] [--hf-edit header|footer] out.png`
+//!  [--dialog 'name={json}'] [--hf-edit header|footer] [--splash] [--backstage] out.png`
+//!
+//! `--splash` renders the splash screen alone, at its own size.
 
-use gridcraft_engine::Session;
-use gridcraft_ui_egui::SheetApp;
+use mkmatrix_engine::Session;
+use mkmatrix_ui_egui::SheetApp;
 use serde_json::json;
 
 fn main() {
@@ -22,6 +24,8 @@ fn main() {
     let mut dialog: Option<String> = None;
     let mut language: Option<String> = None;
     let mut hf_edit: Option<String> = None;
+    let mut splash = false;
+    let mut backstage = false;
     let mut out = "snapshot.png".to_string();
     let mut i = 0;
     while i < args.len() {
@@ -75,13 +79,32 @@ fn main() {
                 i += 1;
                 language = args.get(i).cloned();
             }
+            "--splash" => splash = true,
+            "--backstage" => backstage = true,
             other => out = other.to_string(),
         }
         i += 1;
     }
+    if splash {
+        let language = language.as_deref().and_then(mkmatrix_ui_egui::i18n::Language::parse).unwrap_or_default();
+        let [w, h] = mkmatrix_ui_egui::splash::SIZE;
+        let mut harness = egui_kittest::Harness::builder()
+            .with_size(egui::vec2(w, h))
+            .with_pixels_per_point(scale)
+            .with_step_dt(0.4)
+            .with_max_steps(4)
+            .wgpu()
+            .build_ui_state(|ui, s: &mut mkmatrix_ui_egui::splash::SplashScreen| s.ui(ui), mkmatrix_ui_egui::splash::SplashScreen::new(language));
+        // Part-way through, so the bar and a part's name show.
+        harness.run_steps(3);
+        let img = harness.render().expect("render");
+        img.save(&out).expect("save png");
+        eprintln!("wrote {out} ({}x{})", img.width(), img.height());
+        return;
+    }
     // Catalog the installed fonts first (the app scans in the background from its first frame), so
     // the workbook's fonts are drawn in their own faces, not a substitute.
-    let _ = gridcraft_ui_egui::fonts::catalog();
+    let _ = mkmatrix_ui_egui::fonts::catalog();
     let mut session = Session::new();
     if let Some(p) = &input {
         session.execute("file.open", json!({"path": p})).expect("open");
@@ -107,12 +130,15 @@ fn main() {
                 let mut app = SheetApp::new(session, Default::default());
                 app.ui.dark = dark;
                 if let Some(code) = &language
-                    && let Some(l) = gridcraft_ui_egui::i18n::Language::parse(code)
+                    && let Some(l) = mkmatrix_ui_egui::i18n::Language::parse(code)
                 {
                     app.ui.language = l;
                 }
                 if let Some(t) = tab {
                     app.ui.ribbon_tab = t;
+                }
+                if backstage {
+                    app.open_backstage(mkmatrix_ui_egui::backstage::Page::Home);
                 }
                 app.grid.pane = pane;
                 app.selected_chart = chart;
@@ -124,8 +150,8 @@ fn main() {
                 // Page Layout view: edit the first page's centre header (or footer) section.
                 let active = app.session.active().and_then(|d| d.wb.active().cloned().map(|s| (d.wb.active_sheet(), s)));
                 if let (Some(part), Some((si, sh))) = (&hf_edit, active) {
-                    let zone = gridcraft_engine::paper::HfZone { footer: part == "footer", section: 1 };
-                    gridcraft_ui_egui::paper_view::begin(&mut app, si, &sh, (0, 0), zone);
+                    let zone = mkmatrix_engine::paper::HfZone { footer: part == "footer", section: 1 };
+                    mkmatrix_ui_egui::paper_view::begin(&mut app, si, &sh, (0, 0), zone);
                 }
                 app
             },

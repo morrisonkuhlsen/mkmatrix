@@ -1,9 +1,9 @@
 //! Shrink to fit (#375): too-wide content is drawn in a smaller font inside its cell.
 
 use egui::Shape;
-use gridcraft_engine::Session;
-use gridcraft_engine::core::CellRef;
-use gridcraft_ui_egui::{SheetApp, grid::Geo};
+use mkmatrix_engine::Session;
+use mkmatrix_engine::core::CellRef;
+use mkmatrix_ui_egui::{SheetApp, grid::Geo};
 use serde_json::json;
 
 type Harness = egui_kittest::Harness<'static, SheetApp>;

@@ -169,9 +169,9 @@ impl Tokens {
             text: pick(dark, Color32::from_rgb(0x24, 0x24, 0x24), Color32::from_rgb(0xEE, 0xEE, 0xEE)),
             text_dim: pick(dark, Color32::from_rgb(0x61, 0x61, 0x61), Color32::from_rgb(0xB0, 0xB0, 0xB0)),
             text_disabled: pick(dark, Color32::from_rgb(0xB0, 0xB0, 0xB0), Color32::from_rgb(0x70, 0x70, 0x70)),
-            accent: pick(dark, Color32::from_rgb(0x10, 0x7C, 0x41), Color32::from_rgb(0x5C, 0xC5, 0x87)),
-            accent_dark: pick(dark, Color32::from_rgb(0x0B, 0x5E, 0x31), Color32::from_rgb(0x3F, 0xA8, 0x6C)),
-            accent_soft: pick(dark, Color32::from_rgb(0xDF, 0xF1, 0xE6), Color32::from_rgb(0x23, 0x45, 0x31)),
+            accent: pick(dark, Color32::from_rgb(0x0B, 0x7A, 0x63), Color32::from_rgb(0x2E, 0xC4, 0xA0)),
+            accent_dark: pick(dark, Color32::from_rgb(0x0A, 0x64, 0x52), Color32::from_rgb(0x22, 0xA3, 0x85)),
+            accent_soft: pick(dark, Color32::from_rgb(0xDC, 0xF4, 0xEE), Color32::from_rgb(0x17, 0x40, 0x39)),
             hover: pick(dark, Color32::from_rgb(0xEB, 0xEB, 0xEB), Color32::from_rgb(0x42, 0x42, 0x42)),
             pressed: pick(dark, Color32::from_rgb(0xDD, 0xDD, 0xDD), Color32::from_rgb(0x4D, 0x4D, 0x4D)),
             separator: pick(dark, Color32::from_rgb(0xE0, 0xE0, 0xE0), Color32::from_rgb(0x48, 0x48, 0x48)),
@@ -182,10 +182,10 @@ impl Tokens {
             header_text: pick(dark, Color32::from_rgb(0x42, 0x42, 0x42), Color32::from_rgb(0xCC, 0xCC, 0xCC)),
             header_line: pick(dark, Color32::from_rgb(0xD6, 0xD6, 0xD6), Color32::from_rgb(0x45, 0x45, 0x45)),
             header_sel_bg: pick(dark, Color32::from_rgb(0xE1, 0xE1, 0xE1), Color32::from_rgb(0x45, 0x45, 0x45)),
-            header_sel_text: pick(dark, Color32::from_rgb(0x0B, 0x5E, 0x31), Color32::from_rgb(0x6F, 0xD3, 0x9A)),
-            header_all_bg: pick(dark, Color32::from_rgb(0xC8, 0xE6, 0xD3), Color32::from_rgb(0x2E, 0x55, 0x3E)),
-            sel_fill: pick(dark, Color32::from_rgba_unmultiplied(0x10, 0x7C, 0x41, 0x1C), Color32::from_rgba_unmultiplied(0x10, 0x7C, 0x41, 0x24)),
-            sel_border: Color32::from_rgb(0x10, 0x7C, 0x41),
+            header_sel_text: pick(dark, Color32::from_rgb(0x0A, 0x64, 0x52), Color32::from_rgb(0x6F, 0xDB, 0xC0)),
+            header_all_bg: pick(dark, Color32::from_rgb(0xC6, 0xEB, 0xE1), Color32::from_rgb(0x1F, 0x52, 0x48)),
+            sel_fill: pick(dark, Color32::from_rgba_unmultiplied(0x0B, 0x7A, 0x63, 0x1C), Color32::from_rgba_unmultiplied(0x0B, 0x7A, 0x63, 0x24)),
+            sel_border: Color32::from_rgb(0x0B, 0x7A, 0x63),
             input_bg: pick(dark, Color32::WHITE, Color32::from_rgb(0x1F, 0x1F, 0x1F)),
             input_border: pick(dark, Color32::from_rgb(0xD1, 0xD1, 0xD1), Color32::from_rgb(0x50, 0x50, 0x50)),
             tab_bar: pick(dark, Color32::from_rgb(0xF3, 0xF3, 0xF3), Color32::from_rgb(0x29, 0x29, 0x29)),
@@ -202,7 +202,7 @@ impl Tokens {
             notice_warn_border: pick(dark, Color32::from_rgb(0xF0, 0xC3, 0x6E), Color32::from_rgb(0x7A, 0x67, 0x30)),
             notice_info_bg: pick(dark, Color32::from_rgb(0xEA, 0xF2, 0xFB), Color32::from_rgb(0x24, 0x33, 0x44)),
             notice_info_border: pick(dark, Color32::from_rgb(0xB9, 0xD2, 0xEC), Color32::from_rgb(0x3B, 0x55, 0x72)),
-            on_accent: pick(dark, Color32::WHITE, rgb(0x0F2A1A)),
+            on_accent: pick(dark, Color32::WHITE, rgb(0x0A2A23)),
             cat: pick(
                 dark,
                 [rgb(0x2F6FCF), rgb(0x1E8A4C), rgb(0xC8601A), rgb(0xC8372D), rgb(0x8350C8), rgb(0x13808A), rgb(0x9C6C00), rgb(0x5A6B7D)],
@@ -275,7 +275,7 @@ pub fn apply(ctx: &egui::Context, dark: bool) {
         v.widgets.hovered.weak_bg_fill = t.hover;
         v.widgets.active.weak_bg_fill = t.pressed;
         v.widgets.inactive.bg_stroke = Stroke::new(1.0, t.input_border);
-        // 0.37 raises the default widget corner radii; GridCraft keeps its 0.36 shape (#8617).
+        // 0.37 raises the default widget corner radii; MK Matrix keeps its 0.36 shape (#8617).
         v.widgets.noninteractive.corner_radius = egui::CornerRadius::same(2);
         v.widgets.inactive.corner_radius = egui::CornerRadius::same(2);
         v.widgets.hovered.corner_radius = egui::CornerRadius::same(3);

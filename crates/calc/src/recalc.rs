@@ -13,9 +13,9 @@
 use std::collections::{BTreeSet, VecDeque};
 use std::hash::{BuildHasherDefault, Hasher};
 
-use gridcraft_core::{Array, CellError, CellRef, RangeRef, Value};
-use gridcraft_formula::Expr;
-use gridcraft_model::{CalcMode, Workbook};
+use mkmatrix_core::{Array, CellError, CellRef, RangeRef, Value};
+use mkmatrix_formula::Expr;
+use mkmatrix_model::{CalcMode, Workbook};
 
 use crate::eval::{Area, Evaluator, Host, precedents, stack_position};
 
@@ -285,7 +285,7 @@ impl Calc {
         let t1 = prof_now();
         let n = dirty.len();
         self.run(wb, dirty, false);
-        if std::env::var_os("GRIDCRAFT_PROFILE").is_some() {
+        if std::env::var_os("MKMATRIX_PROFILE").is_some() {
             eprintln!("recalc: {} seeds, closure {} cells {:.1} ms, run {:.1} ms", seeds.len(), n, t1 - t0, prof_now() - t1);
         }
     }
@@ -350,14 +350,14 @@ impl Calc {
                 }
                 if host.iterate && !host.members.is_empty() {
                     let passes = host.iterate_loops(&dirty, wb.calc.max_iterations, wb.calc.max_change);
-                    if std::env::var_os("GRIDCRAFT_PROFILE").is_some() {
+                    if std::env::var_os("MKMATRIX_PROFILE").is_some() {
                         eprintln!("  iterative calculation: {} passes over {} formulas", passes, host.tainted.len());
                     }
                 }
                 (host.results, host.spills, host.cycles)
             };
             self.rng = rng;
-            if std::env::var_os("GRIDCRAFT_PROFILE").is_some() {
+            if std::env::var_os("MKMATRIX_PROFILE").is_some() {
                 eprintln!("  eval {} formulas {:.1} ms", results.len(), prof_now() - tp);
             }
             let tw = prof_now();
@@ -404,8 +404,8 @@ impl Calc {
                 if let Some(arr) = new {
                     let end = CellRef::new(k.1.row.saturating_add(arr.rows as u32 - 1), k.1.col.saturating_add(arr.cols as u32 - 1));
                     let range = RangeRef::new(k.1, end);
-                    let blocked = end.row >= gridcraft_core::MAX_ROWS
-                        || end.col >= gridcraft_core::MAX_COLS
+                    let blocked = end.row >= mkmatrix_core::MAX_ROWS
+                        || end.col >= mkmatrix_core::MAX_COLS
                         || range.iter().any(|c| c != k.1 && (sheet.cells.has(c) || sheet.spill.contains_key(&c)))
                         || sheet.merges.iter().any(|m| m.intersects(&range))
                         || sheet.tables.iter().any(|t| t.range.contains(k.1));
@@ -470,7 +470,7 @@ impl Calc {
             if full {
                 // Everything was already evaluated once; spill dependents need another pass.
             }
-            if std::env::var_os("GRIDCRAFT_PROFILE").is_some() {
+            if std::env::var_os("MKMATRIX_PROFILE").is_some() {
                 eprintln!("  write-back {:.1} ms", prof_now() - tw);
             }
             spill_changes.sort_by_key(|(s, c)| (*s, c.row, c.col));
@@ -494,14 +494,14 @@ impl Calc {
 /// UTC; the local offset isn't available without platform calls. Falls back to a fixed date only
 /// when no clock is available.
 pub fn now_serial() -> f64 {
-    gridcraft_core::date::unix_now_ms().map_or(46302.5, gridcraft_core::date::serial_from_unix_ms)
+    mkmatrix_core::date::unix_now_ms().map_or(46302.5, mkmatrix_core::date::serial_from_unix_ms)
 }
 
 /// Evaluates a formula in the context of a cell without storing it (conditional formats, data
 /// validation, Evaluate Formula, Name Manager previews, the CLI `eval`).
 pub fn evaluate(wb: &Workbook, sheet: usize, at: CellRef, formula: &str) -> Value {
     let body = formula.strip_prefix('=').unwrap_or(formula);
-    let Ok(expr) = gridcraft_formula::parse(body) else { return Value::Error(CellError::Name) };
+    let Ok(expr) = mkmatrix_formula::parse(body) else { return Value::Error(CellError::Name) };
     evaluate_expr(wb, sheet, at, &expr)
 }
 
@@ -529,8 +529,8 @@ fn prof_now() -> f64 {
 pub(crate) mod tests {
     use std::time::{Duration, Instant};
 
-    use gridcraft_core::{CellRef, RangeRef, Value};
-    use gridcraft_model::{Cell, Formula, Workbook};
+    use mkmatrix_core::{CellRef, RangeRef, Value};
+    use mkmatrix_model::{Cell, Formula, Workbook};
 
     use super::{Calc, HashMap, Host, Intervals, Key, PassHost};
 
@@ -723,7 +723,7 @@ pub(crate) mod tests {
         set(&mut wb, &mut calc, "CZ3", "30");
         assert_eq!(num(&wb, "DA6"), 36.0);
         // Ranges on another sheet.
-        wb.sheets.push(std::sync::Arc::new(gridcraft_model::Sheet::new("Data")));
+        wb.sheets.push(std::sync::Arc::new(mkmatrix_model::Sheet::new("Data")));
         set(&mut wb, &mut calc, "DA9", "=SUM(Data!A1:A3)+SUM(Data!A:CZ)");
         assert_eq!(num(&wb, "DA9"), 0.0);
         wb.sheet_mut(1).unwrap().cells.set(CellRef::parse("A2").unwrap(), Cell::value(Value::Number(4.0)));
@@ -744,7 +744,7 @@ pub(crate) mod tests {
         let mut put = |wb: &mut Workbook, at: String, text: String| {
             let at = CellRef::parse(&at).unwrap();
             wb.sheet_mut(0).unwrap().cells.set(at, Cell::formula(Formula::new(&text)));
-            exprs.insert((0, at), std::sync::Arc::new(gridcraft_formula::parse(&text[1..]).unwrap()));
+            exprs.insert((0, at), std::sync::Arc::new(mkmatrix_formula::parse(&text[1..]).unwrap()));
         };
         // A1 reads A2, ..., A64 (the 64th formula deep) reads a wide range of formulas.
         for r in 1..64 {
@@ -769,7 +769,7 @@ pub(crate) mod tests {
     pub(crate) fn probe_visit_range(wb: &Workbook, pending: &[(&str, &str)], range: RangeRef) -> Option<Vec<Value>> {
         let mut exprs = HashMap::default();
         for (at, formula) in pending {
-            let expr = gridcraft_formula::parse(formula.strip_prefix('=').unwrap_or(formula)).ok()?;
+            let expr = mkmatrix_formula::parse(formula.strip_prefix('=').unwrap_or(formula)).ok()?;
             exprs.insert((0, CellRef::parse(at)?), std::sync::Arc::new(expr));
         }
 

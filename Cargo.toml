@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "apps/*", "xtask"]
-default-members = ["crates/*", "apps/gridcraft", "apps/gridcraft-cli", "xtask"]
+default-members = ["crates/*", "apps/mkmatrix", "apps/mkmatrix-cli", "xtask"]
 
 [workspace.package]
 version = "0.12.1"
@@ -12,18 +12,18 @@ repository = "https://github.com/storytold/gridcraft"
 
 [workspace.dependencies]
 # internal
-gridcraft-core = { path = "crates/core" }
-gridcraft-numfmt = { path = "crates/numfmt" }
-gridcraft-formula = { path = "crates/formula" }
-gridcraft-functions = { path = "crates/functions" }
-gridcraft-model = { path = "crates/model" }
-gridcraft-calc = { path = "crates/calc" }
-gridcraft-xlsx = { path = "crates/xlsx" }
-gridcraft-chart = { path = "crates/chart" }
-gridcraft-engine = { path = "crates/engine" }
-gridcraft-ui-egui = { path = "crates/ui-egui" }
-gridcraft-mcp = { path = "crates/mcp" }
-gridcraft-pdf = { path = "crates/pdf" }
+mkmatrix-core = { path = "crates/core" }
+mkmatrix-numfmt = { path = "crates/numfmt" }
+mkmatrix-formula = { path = "crates/formula" }
+mkmatrix-functions = { path = "crates/functions" }
+mkmatrix-model = { path = "crates/model" }
+mkmatrix-calc = { path = "crates/calc" }
+mkmatrix-xlsx = { path = "crates/xlsx" }
+mkmatrix-chart = { path = "crates/chart" }
+mkmatrix-engine = { path = "crates/engine" }
+mkmatrix-ui-egui = { path = "crates/ui-egui" }
+mkmatrix-mcp = { path = "crates/mcp" }
+mkmatrix-pdf = { path = "crates/pdf" }
 # Every craft-libs crate (craft-update and craft-window here, craft-ui in ui-egui, craft-print in
 # the app) comes from one storytold/craft-libs revision.
 craft-update = { git = "https://github.com/storytold/craft-libs", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0", version = "=0.1.0", features = ["egui"] }

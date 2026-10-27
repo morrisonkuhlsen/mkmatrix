@@ -22,7 +22,7 @@ jobs:
     # Immutable supporting workflow revision until the new install contract lands upstream.
     uses: storytold/craft-common-actions/.github/workflows/windows-arm64.yml@8bb4e5ab95443171104ad88113fe1ef9b0e5ce3f
     with:
-      app-name: gridcraft
-      app-dir: GridCraft
-      install-relative-path: Programs/ArtCraft/GridCraft
+      app-name: mkmatrix
+      app-dir: MK Matrix
+      install-relative-path: Programs/ArtCraft/MK Matrix
       install-scope: perUser

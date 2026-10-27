@@ -3,8 +3,8 @@
 
 use std::collections::HashMap;
 
-use gridcraft_core::{CellRef, RangeRef, Value, compare};
-use gridcraft_model::{CfOperator, CfRule, CfValueKind, Color, CondFormat, PatternType, Sheet, Style, Underline, Workbook, default_icon_thresholds};
+use mkmatrix_core::{CellRef, RangeRef, Value, compare};
+use mkmatrix_model::{CfOperator, CfRule, CfValueKind, Color, CondFormat, PatternType, Sheet, Style, Underline, Workbook, default_icon_thresholds};
 
 /// The conditional look of one cell.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -121,7 +121,7 @@ fn threshold(wb: &Workbook, sheet: usize, at: CellRef, st: &RuleStats, k: &CfVal
         CfValueKind::Number(n) => *n,
         CfValueKind::Percent(p) => min + (max - min) * p / 100.0,
         CfValueKind::Percentile(p) => percentile(&st.sorted, *p),
-        CfValueKind::Formula(f) => gridcraft_calc::evaluate(wb, sheet, at, f).to_number().unwrap_or(0.0),
+        CfValueKind::Formula(f) => mkmatrix_calc::evaluate(wb, sheet, at, f).to_number().unwrap_or(0.0),
     }
 }
 
@@ -134,7 +134,7 @@ fn lerp(a: [u8; 3], b: [u8; 3], t: f64) -> [u8; 3] {
     ]
 }
 
-pub use gridcraft_model::icon_count;
+pub use mkmatrix_model::icon_count;
 
 impl CfCache {
     pub fn new() -> Self {
@@ -163,7 +163,7 @@ impl CfCache {
             let text = v.display();
             let matched_style: Option<&Style> = match &cf.rule {
                 CfRule::CellIs { op, a, b, style } => {
-                    let eval = |f: &str| gridcraft_calc::evaluate(wb, sheet, c, &relative(f, first, c));
+                    let eval = |f: &str| mkmatrix_calc::evaluate(wb, sheet, c, &relative(f, first, c));
                     let av = eval(a);
                     let ok = match op {
                         CfOperator::Between | CfOperator::NotBetween => {
@@ -183,7 +183,7 @@ impl CfCache {
                     (ok && !v.is_error()).then_some(style.as_ref())
                 }
                 CfRule::Expression { formula, style } => {
-                    gridcraft_calc::evaluate(wb, sheet, c, &relative(formula, first, c)).to_bool().unwrap_or(false).then_some(style.as_ref())
+                    mkmatrix_calc::evaluate(wb, sheet, c, &relative(formula, first, c)).to_bool().unwrap_or(false).then_some(style.as_ref())
                 }
                 // As in Excel, an error value never contains, begins or ends with anything (its rule
                 // formulas SEARCH/LEFT/RIGHT fail on it), so it always "does not contain" (#1162).
@@ -230,13 +230,13 @@ impl CfCache {
                 },
                 CfRule::TimePeriod { period, style } => match v.as_f64() {
                     Some(n) => {
-                        let today = gridcraft_core::date::serial_in_system(wb.date_system, gridcraft_calc::now_serial()).floor();
+                        let today = mkmatrix_core::date::serial_in_system(wb.date_system, mkmatrix_calc::now_serial()).floor();
                         let d = n.floor();
-                        let wd = gridcraft_core::date::datetime_from_serial(wb.date_system, today).map(|x| x.weekday as f64).unwrap_or(0.0);
+                        let wd = mkmatrix_core::date::datetime_from_serial(wb.date_system, today).map(|x| x.weekday as f64).unwrap_or(0.0);
                         let week_start = today - wd;
                         let (ty, tm) =
-                            gridcraft_core::date::datetime_from_serial(wb.date_system, today).map(|x| (x.year, x.month)).unwrap_or((2026, 1));
-                        let ym = gridcraft_core::date::datetime_from_serial(wb.date_system, d).map(|x| (x.year, x.month));
+                            mkmatrix_core::date::datetime_from_serial(wb.date_system, today).map(|x| (x.year, x.month)).unwrap_or((2026, 1));
+                        let ym = mkmatrix_core::date::datetime_from_serial(wb.date_system, d).map(|x| (x.year, x.month));
                         let month_off = |k: i32| {
                             let m = tm as i32 + k;
                             let y = ty + (m - 1).div_euclid(12);
@@ -385,9 +385,9 @@ fn relative(f: &str, first: CellRef, c: CellRef) -> String {
     if first == c {
         return f.to_string();
     }
-    match gridcraft_formula::parse(f.trim_start_matches('=')) {
+    match mkmatrix_formula::parse(f.trim_start_matches('=')) {
         Ok(e) => {
-            gridcraft_formula::print(&gridcraft_formula::adjust::shift_relative(e, c.row as i64 - first.row as i64, c.col as i64 - first.col as i64))
+            mkmatrix_formula::print(&mkmatrix_formula::adjust::shift_relative(e, c.row as i64 - first.row as i64, c.col as i64 - first.col as i64))
         }
         Err(_) => f.to_string(),
     }

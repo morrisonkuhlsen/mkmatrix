@@ -198,11 +198,11 @@ pub(crate) fn paint_quadrant(
             let s = (11.0 * z * 1.2).clamp(8.0, 24.0);
             let b = Rect::from_center_size(rect.center(), vec2(s, s));
             let on = v == Value::Bool(true);
-            p.rect_filled(b, 2.0, if on { Color32::from_rgb(0x10, 0x7C, 0x41) } else { Color32::WHITE });
+            p.rect_filled(b, 2.0, if on { Color32::from_rgb(0x0B, 0x7A, 0x63) } else { Color32::WHITE });
             p.rect_stroke(
                 b,
                 2.0,
-                Stroke::new(1.0, if on { Color32::from_rgb(0x10, 0x7C, 0x41) } else { Color32::from_gray(110) }),
+                Stroke::new(1.0, if on { Color32::from_rgb(0x0B, 0x7A, 0x63) } else { Color32::from_gray(110) }),
                 StrokeKind::Inside,
             );
             if on {
@@ -427,7 +427,7 @@ pub(crate) fn paint_quadrant(
             ));
         }
         // Background error checking: a number stored as text gets Excel's green corner (#1994).
-        if !sh.show_formulas && sh.cell(*c).and_then(gridcraft_engine::cmd::formulas::number_stored_as_text).is_some() {
+        if !sh.show_formulas && sh.cell(*c).and_then(mkmatrix_engine::cmd::formulas::number_stored_as_text).is_some() {
             let s = 6.0 * z.max(0.7);
             p.add(egui::Shape::convex_polygon(
                 vec![rect.left_top(), pos2(rect.left() + s, rect.top()), pos2(rect.left(), rect.top() + s)],
@@ -442,12 +442,12 @@ pub(crate) fn paint_quadrant(
             continue;
         }
         let rect = geo.cell_rect(sh, sp.cell).shrink(3.0);
-        let vals: Vec<Option<f64>> = match gridcraft_engine::calc::evaluate(wb, si, sp.cell, &sp.source) {
+        let vals: Vec<Option<f64>> = match mkmatrix_engine::calc::evaluate(wb, si, sp.cell, &sp.source) {
             Value::Array(a) => a.data.iter().map(Value::as_f64).collect(),
             v => vec![v.as_f64()],
         };
         let col = sp.color.resolve(&wb.theme).unwrap_or([0x2B, 0x7C, 0xD3]);
-        let prims = gridcraft_chart::render_sparkline(sp.kind, &vals, [col[0], col[1], col[2], 255], sp.markers, rect.width(), rect.height());
+        let prims = mkmatrix_chart::render_sparkline(sp.kind, &vals, [col[0], col[1], col[2], 255], sp.markers, rect.width(), rect.height());
         crate::chartview::paint_prims(p, rect.min, &prims, 1.0);
     }
     // Filter buttons.

@@ -2,7 +2,7 @@
 
 use std::cmp::Ordering;
 
-use gridcraft_core::{Array, CellError, Value, compare_text};
+use mkmatrix_core::{Array, CellError, Value, compare_text};
 
 use crate::util::{A, MAX_CELLS, R, S, has, scalar, text};
 use crate::{Arg, Ctx, FnSpec, VAR};
@@ -113,7 +113,7 @@ fn info(a: &[Arg], _c: &mut dyn Ctx) -> R<Value> {
         "directory" => "/".into(),
         "numfile" => Value::Number(1.0),
         "origin" => "$A:$A$1".into(),
-        "osversion" => "GridCraft".into(),
+        "osversion" => "MK Matrix".into(),
         "recalc" => "Automatic".into(),
         "release" => "16.0".into(),
         "system" => "pcdos".into(),
@@ -497,7 +497,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
 
 #[cfg(test)]
 mod tests {
-    use gridcraft_core::{CellError, Value};
+    use mkmatrix_core::{CellError, Value};
 
     use crate::util::testutil::*;
 

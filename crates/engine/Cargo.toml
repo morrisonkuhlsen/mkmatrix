@@ -1,29 +1,29 @@
 [package]
-name = "gridcraft-engine"
+name = "mkmatrix-engine"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "GridCraft engine: sessions, commands, history, clipboard, fill, sort, filter"
+description = "MK Matrix engine: sessions, commands, history, clipboard, fill, sort, filter"
 
 [lints]
 workspace = true
 
 [dependencies]
-gridcraft-core = { workspace = true }
-gridcraft-numfmt = { workspace = true }
-gridcraft-formula = { workspace = true }
-gridcraft-functions = { workspace = true }
-gridcraft-model = { workspace = true }
-gridcraft-calc = { workspace = true }
+mkmatrix-core = { workspace = true }
+mkmatrix-numfmt = { workspace = true }
+mkmatrix-formula = { workspace = true }
+mkmatrix-functions = { workspace = true }
+mkmatrix-model = { workspace = true }
+mkmatrix-calc = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
-gridcraft-xlsx = { workspace = true }
-gridcraft-chart = { workspace = true }
-gridcraft-pdf = { workspace = true }
+mkmatrix-xlsx = { workspace = true }
+mkmatrix-chart = { workspace = true }
+mkmatrix-pdf = { workspace = true }
 image = { workspace = true }
 
 [dev-dependencies]
-gridcraft-xlsx = { workspace = true, features = ["test-support"] }
+mkmatrix-xlsx = { workspace = true, features = ["test-support"] }
 zip = { workspace = true }

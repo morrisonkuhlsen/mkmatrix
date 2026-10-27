@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- MK Matrix icon: its mark, a matrix's brackets around a 3×3 of cells with the diagonal lit,
+       in MK Matrix teal on Morrison Kühlsen ink; the same mark the splash screen draws in code
+       (crates/ui-egui/src/splash.rs). Original work. Palette: ink #14161c, teal #2ec4a0. -->
+  <defs>
+    <clipPath id="tile"><rect width="512" height="512" rx="112"/></clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect width="512" height="512" fill="#14161c"/>
+    <g fill="none" stroke="#2ec4a0" stroke-width="26" stroke-linecap="square">
+      <path d="M152 112 H108 V400 H152"/>
+      <path d="M360 112 H404 V400 H360"/>
+    </g>
+    <g fill="#2ec4a0">
+      <rect x="160" y="160" width="52" height="52" rx="10"/>
+      <rect x="230" y="230" width="52" height="52" rx="10"/>
+      <rect x="300" y="300" width="52" height="52" rx="10"/>
+    </g>
+    <g fill="#2ec4a0" fill-opacity="0.4">
+      <rect x="230" y="160" width="52" height="52" rx="10"/>
+      <rect x="300" y="160" width="52" height="52" rx="10"/>
+      <rect x="160" y="230" width="52" height="52" rx="10"/>
+      <rect x="300" y="230" width="52" height="52" rx="10"/>
+      <rect x="160" y="300" width="52" height="52" rx="10"/>
+      <rect x="230" y="300" width="52" height="52" rx="10"/>
+    </g>
+  </g>
+</svg>
