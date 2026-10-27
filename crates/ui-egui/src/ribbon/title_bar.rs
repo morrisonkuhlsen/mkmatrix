@@ -34,7 +34,9 @@ pub(super) const TITLE_CONTROL_H: f32 = if MAC { 22.0 } else { 26.0 };
 pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let ch = TITLE_CONTROL_H;
-    egui::Panel::top("title_bar").exact_size(TITLE_BAR_H).frame(egui::Frame::NONE.fill(t.window)).show(ui, |ui| {
+    // Compact: a lower bar, except on macOS, where the window's lights set its height.
+    let bar_h = if !MAC && app.ui.density.compact() { 30.0 } else { TITLE_BAR_H };
+    egui::Panel::top("title_bar").exact_size(bar_h).frame(egui::Frame::NONE.fill(t.window)).show(ui, |ui| {
         let rect = ui.max_rect();
         // Dragging the empty title area moves the window.
         let bg = ui.interact(rect, ui.scope_id().with("drag_title"), Sense::click_and_drag());

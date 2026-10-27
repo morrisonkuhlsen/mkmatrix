@@ -1013,6 +1013,9 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Interface" => "Interface",
         "Slicers" => "Segmentações",
         "Table Style Options" => "Opções de Estilo de Tabela",
+        "Density" => "Densidade",
+        "Compact" => "Compacta",
+        "Minimal" => "Mínima",
         "Welcome to MK Matrix" => "Bem-vindo ao MK Matrix",
         "Numbered Columns" => "Colunas Numeradas",
         "Head the columns 1, 2, 3… as a matrix's a(i,j), rather than A, B, C" => {

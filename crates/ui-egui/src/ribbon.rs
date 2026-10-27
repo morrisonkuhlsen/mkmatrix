@@ -47,7 +47,10 @@ const _: () = assert!(TITLE_CONTROL_H < TITLE_BAR_H, "title-bar controls keep a 
 pub fn show(app: &mut SheetApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let collapsed = app.ui.ribbon_collapsed;
-    let h = if collapsed { 34.0 } else { 34.0 + 108.0 };
+    // Compact: lower tabs, and a card without the groups' names.
+    let compact = app.ui.density.compact();
+    let (tabs_h, card_h) = if compact { (28.0, 88.0) } else { (34.0, 104.0) };
+    let h = if collapsed { tabs_h } else { tabs_h + card_h + 4.0 };
     // A contextual tab exists only while its object is selected (Excel hides Table Design once the
     // cell leaves the table); a remembered one that is gone would draw an empty ribbon.
     if CONTEXTUAL_TABS.contains(&app.ui.ribbon_tab.as_str()) && !contextual_tabs(app).contains(&app.ui.ribbon_tab.as_str()) {
@@ -58,7 +61,7 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
         .frame(egui::Frame::NONE.fill(t.window).inner_margin(egui::Margin { left: 10, right: 10, top: 0, bottom: 6 }))
         .show(ui, |ui| {
             // Tabs row.
-            let tabs_rect = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), 32.0));
+            let tabs_rect = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), tabs_h - 2.0));
             ui.scope_builder(egui::UiBuilder::new().max_rect(tabs_rect), |ui| {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
@@ -75,7 +78,7 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                         let font = theme::ui_font(13.5);
                         let label = app.ui.language.tr(tab);
                         let tw = ui.painter().layout_no_wrap(label.to_string(), font.clone(), t.text).size().x;
-                        let (r, resp) = ui.allocate_exact_size(vec2(tw + 22.0, 30.0), Sense::click());
+                        let (r, resp) = ui.allocate_exact_size(vec2(tw + 22.0, tabs_h - 4.0), Sense::click());
                         if resp.hovered() && !active {
                             ui.painter().rect_filled(r.shrink2(vec2(2.0, 4.0)), 5.0, t.hover);
                         }
@@ -120,7 +123,7 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
             let screen = ui.ctx().content_rect();
             let fits = (screen.right() - left - (left - screen.left()).max(0.0)).max(0.0);
             // MK Matrix draws it borderless and transparent: the controls sit on the window itself.
-            let card = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width().min(fits), 104.0));
+            let card = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width().min(fits), card_h));
             let inner = card.shrink2(vec2(10.0, 6.0));
             ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
                 // One scroll state per tab: a tab opened after scrolling another starts at its
@@ -141,6 +144,7 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
                         controls::group_begin(ui);
+                        controls::show_group_names(ui, !compact);
                         match app.ui.ribbon_tab.as_str() {
                             "Home" => home(app, ui),
                             "Insert" => insert(app, ui),

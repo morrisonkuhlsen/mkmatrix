@@ -74,14 +74,16 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     // Height follows the content's line count (last frame's), 1 to MAX_LINES; the chevron pins it
     // at MAX_LINES. It eases only when that target changes.
     let lines = if app.ui.formula_bar_expanded { MAX_LINES } else { last.lines.clamp(1, MAX_LINES) };
-    let target = one_line(row_h) + (lines - 1) as f32 * row_h;
+    // Compact: two points less margin above and below the bar's first line.
+    let (squeeze, pad) = if app.ui.density.compact() { (4.0, 1) } else { (0.0, 3) };
+    let target = one_line(row_h) - squeeze + (lines - 1) as f32 * row_h;
     let h = ui.ctx().animate_value_with_time(egui::Id::unique("formula_bar.height"), target, EASE_SECONDS);
     let mut layout = BarLayout { height: h, ..Default::default() };
     egui::Panel::top("formula_bar")
         .exact_size(h)
         // No line between the bar and the column headings.
         .show_separator_line(false)
-        .frame(egui::Frame::NONE.fill(t.window).inner_margin(egui::Margin { left: 8, right: 8, top: 3, bottom: 3 }))
+        .frame(egui::Frame::NONE.fill(t.window).inner_margin(egui::Margin { left: 8, right: 8, top: pad, bottom: pad }))
         .show(ui, |ui| {
             // Top-aligned: the Name Box and buttons stay on the first line as the field grows.
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {

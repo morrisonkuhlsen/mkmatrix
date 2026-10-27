@@ -105,6 +105,58 @@ pub struct UiState {
     /// showing the active cell as (row, column), as a matrix's element a(i,j). On by default in
     /// MK Matrix; formulas and files keep A1 references either way.
     pub numbered_columns: bool,
+    /// How much room the bars above and below the sheet take (View › Interface › Density).
+    #[serde(deserialize_with = "lenient_density")]
+    pub density: Density,
+}
+
+/// How much room the bars above and below the sheet take; the sheet itself is never scaled.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Density {
+    /// The bars at their full size, the ribbon's groups named.
+    #[default]
+    Normal,
+    /// Lower bars: title, tabs, ribbon (its groups unnamed), formula bar, sheet tabs, status bar.
+    Compact,
+    /// Compact, the ribbon collapsed to its tabs and no status bar.
+    Minimal,
+}
+
+impl Density {
+    pub const ALL: [Density; 3] = [Density::Normal, Density::Compact, Density::Minimal];
+
+    /// Whether the bars are lowered.
+    pub fn compact(self) -> bool {
+        self != Density::Normal
+    }
+
+    pub fn code(self) -> &'static str {
+        match self {
+            Density::Normal => "normal",
+            Density::Compact => "compact",
+            Density::Minimal => "minimal",
+        }
+    }
+
+    pub fn parse(code: &str) -> Option<Density> {
+        Density::ALL.into_iter().find(|d| d.code().eq_ignore_ascii_case(code.trim()))
+    }
+
+    /// The name shown in the View tab.
+    pub fn label(self) -> &'static str {
+        match self {
+            Density::Normal => "Normal",
+            Density::Compact => "Compact",
+            Density::Minimal => "Minimal",
+        }
+    }
+}
+
+/// A saved density, or Normal for anything unreadable (rather than failing the whole `UiState`).
+fn lenient_density<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Density, D::Error> {
+    let v = Json::deserialize(d)?;
+    Ok(v.as_str().and_then(Density::parse).unwrap_or_default())
 }
 
 pub const INTERFACE_SCALE_MIN: u16 = 75;
@@ -138,6 +190,7 @@ impl Default for UiState {
             language: i18n::Language::En,
             interface_scale: 100,
             numbered_columns: true,
+            density: Density::Normal,
         }
     }
 }

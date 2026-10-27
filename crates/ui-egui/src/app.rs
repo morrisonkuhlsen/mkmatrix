@@ -214,7 +214,7 @@ impl SheetApp {
             if self.session.prefs.formula_bar {
                 formula_bar::show(self, ui);
             }
-            if self.ui.status_bar {
+            if self.ui.status_bar && self.ui.density != crate::Density::Minimal {
                 tabs::status_bar(self, ui);
             }
             tabs::sheet_tabs(self, ui);

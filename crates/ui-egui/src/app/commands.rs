@@ -159,6 +159,20 @@ impl SheetApp {
                 }
                 Ok(json!({"mode": self.ui.theme_mode()}))
             }
+            "view.density" => {
+                // `{"mode": "normal" | "compact" | "minimal"}`. Minimal collapses the ribbon to its
+                // tabs; leaving it opens the ribbon again.
+                let Some(d) = p.get("mode").and_then(Json::as_str).and_then(crate::Density::parse) else {
+                    return Some(Err("missing `mode` (normal, compact or minimal)".into()));
+                };
+                if d == crate::Density::Minimal {
+                    self.ui.ribbon_collapsed = true;
+                } else if self.ui.density == crate::Density::Minimal {
+                    self.ui.ribbon_collapsed = false;
+                }
+                self.ui.density = d;
+                Ok(json!({"mode": d.code()}))
+            }
             "view.numberedColumns" => {
                 self.ui.numbered_columns = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.numbered_columns);
                 Ok(json!({"on": self.ui.numbered_columns}))

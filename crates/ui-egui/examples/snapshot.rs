@@ -2,7 +2,7 @@
 //!
 //! `cargo run --release -p mkmatrix-ui-egui --example snapshot -- [--sample sales] [--in file.xlsx]
 //!  [--size 1440x900] [--scale 2] [--cmd 'id={json}']... [--tab Insert] [--dark] [--language en|es|zh|ja|ko|ru|pt|de|cs|fr|tr]
-//!  [--dialog 'name={json}'] [--hf-edit header|footer] [--splash] [--backstage] out.png`
+//!  [--dialog 'name={json}'] [--hf-edit header|footer] [--splash] [--backstage] [--density normal|compact|minimal] out.png`
 //!
 //! `--splash` renders the splash screen alone, at its own size.
 
@@ -26,6 +26,7 @@ fn main() {
     let mut hf_edit: Option<String> = None;
     let mut splash = false;
     let mut backstage = false;
+    let mut density: Option<String> = None;
     let mut out = "snapshot.png".to_string();
     let mut i = 0;
     while i < args.len() {
@@ -81,6 +82,10 @@ fn main() {
             }
             "--splash" => splash = true,
             "--backstage" => backstage = true,
+            "--density" => {
+                i += 1;
+                density = args.get(i).cloned();
+            }
             other => out = other.to_string(),
         }
         i += 1;
@@ -136,6 +141,9 @@ fn main() {
                 }
                 if let Some(t) = tab {
                     app.ui.ribbon_tab = t;
+                }
+                if let Some(d) = &density {
+                    let _ = app.run("view.density", json!({"mode": d}));
                 }
                 if backstage {
                     app.open_backstage(mkmatrix_ui_egui::backstage::Page::Home);

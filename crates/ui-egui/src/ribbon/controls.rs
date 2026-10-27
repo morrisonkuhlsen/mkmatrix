@@ -7,6 +7,15 @@ fn group_start_id() -> egui::Id {
     egui::Id::unique("ribbon_group_start")
 }
 
+fn group_names_id() -> egui::Id {
+    egui::Id::unique("ribbon_group_names")
+}
+
+/// Whether this frame's groups get their names (not in the compact ribbon).
+pub(super) fn show_group_names(ui: &Ui, on: bool) {
+    ui.ctx().data_mut(|d| d.insert_temp(group_names_id(), on));
+}
+
 /// Marks where a tab's first group starts.
 pub(super) fn group_begin(ui: &Ui) {
     let x = ui.cursor().min.x;
@@ -19,7 +28,8 @@ pub(super) fn group_end(ui: &mut Ui, name: &str) {
     let t = Tokens::get(ui.ctx());
     let start = ui.ctx().data(|d| d.get_temp::<f32>(group_start_id())).unwrap_or(ui.max_rect().left());
     let label = crate::i18n::current(ui.ctx()).tr(name).to_string();
-    if label.is_empty() || ui.cursor().min.x <= start {
+    let named = ui.ctx().data(|d| d.get_temp::<bool>(group_names_id())).unwrap_or(true);
+    if !named || label.is_empty() || ui.cursor().min.x <= start {
         return;
     }
     let galley = ui.painter().layout_no_wrap(label, theme::ui_font(11.0), t.text_dim);

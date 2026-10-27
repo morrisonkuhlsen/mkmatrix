@@ -153,6 +153,23 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
             .response
             .labelled_by(label.id);
     });
+    // Density: how much room the bars above and below the sheet take.
+    ui.vertical(|ui| {
+        let label = ui.label(egui::RichText::new(lang.tr("Density")).font(theme::ui_font(11.5)).color(t.text_dim));
+        let current = app.ui.density;
+        craft_ui::ComboBox::from_id_salt("ui_density")
+            .width(110.0)
+            .selected_text(egui::RichText::new(lang.tr(current.label())).font(theme::ui_font(12.5)))
+            .show_ui(ui, |ui| {
+                for d in crate::Density::ALL {
+                    if ui.selectable_label(d == current, lang.tr(d.label())).clicked() {
+                        act(app, "view.density", json!({"mode": d.code()}));
+                    }
+                }
+            })
+            .response
+            .labelled_by(label.id);
+    });
     // Interface language: settings live in the View tab, like Excel's Options. The label follows
     // the current language so it stays readable; the choices are always shown in their own script.
     ui.vertical(|ui| {
