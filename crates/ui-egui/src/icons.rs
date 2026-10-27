@@ -328,6 +328,18 @@ impl G<'_> {
         self.stroke(&pts, c);
         pts.last().copied().unwrap_or((x, y))
     }
+    /// A cubic Bézier curve from `p0` to `p3`, `w` units wide.
+    fn curve(&self, p0: (f32, f32), p1: (f32, f32), p2: (f32, f32), p3: (f32, f32), c: Color32, w: f32) {
+        let pts: Vec<(f32, f32)> = (0..=20)
+            .map(|i| {
+                let t = i as f32 / 20.0;
+                let u = 1.0 - t;
+                let (a, b, d, e) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
+                (a * p0.0 + b * p1.0 + d * p2.0 + e * p3.0, a * p0.1 + b * p1.1 + d * p2.1 + e * p3.1)
+            })
+            .collect();
+        self.line(&pts, c, w);
+    }
     /// A solid arrowhead with its tip at (x, y), pointing along angle `a` (radians).
     fn head(&self, x: f32, y: f32, a: f32, c: Color32) {
         let (len, half) = (3.0, 2.0);
@@ -656,7 +668,19 @@ fn paint_with(p: &Painter, rect: Rect, icon: Icon, c: Color32, pal: &Palette) {
             g.frame(1.5, 1.5, 14.5, 14.5, c);
             g.line(&[(4.0, 8.0), (6.75, 10.75), (12.0, 5.25)], a, 1.4);
         }
-        Icon::Fx | Icon::Function => g.text(7.5, 7.5, "fx", 14.0, c, false, true),
+        Icon::Fx | Icon::Function => {
+            // f(x) as LaTeX sets it: a math-italic f, hooked at the top and tailing below the
+            // baseline, crossed; curved parentheses; an italic x.
+            let w = 1.1;
+            g.curve((6.4, 2.4), (5.9, 1.1), (4.5, 1.2), (4.0, 4.4), c, w);
+            g.curve((4.0, 4.4), (3.5, 8.5), (3.3, 12.4), (2.3, 13.8), c, w);
+            g.curve((2.3, 13.8), (1.8, 14.6), (0.9, 14.3), (0.8, 13.4), c, w);
+            g.line(&[(2.1, 6.0), (5.8, 6.0)], c, 0.9);
+            g.curve((8.6, 2.6), (7.1, 5.3), (7.1, 10.9), (8.6, 13.6), c, 0.9);
+            g.curve((9.2, 7.0), (10.2, 7.0), (10.9, 11.6), (12.3, 12.2), c, 1.0);
+            g.curve((12.4, 7.0), (11.4, 7.6), (10.4, 11.6), (9.1, 12.2), c, 1.0);
+            g.curve((13.3, 2.6), (14.8, 5.3), (14.8, 10.9), (13.3, 13.6), c, 0.9);
+        }
         Icon::Plus => {
             g.line(&[(8.0, 2.5), (8.0, 13.5)], c, 1.2);
             g.line(&[(2.5, 8.0), (13.5, 8.0)], c, 1.2);
