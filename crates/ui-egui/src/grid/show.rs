@@ -542,12 +542,8 @@ pub(crate) fn paint_headers(
     // Corner (select all) and edges.
     let corner = Rect::from_min_max(r.min, geo.cells.min);
     p.rect_filled(corner, 0.0, t.header_bg);
-    // A right isosceles triangle in the bottom-right corner, the same inset from both edges.
-    let inset = 3.0;
-    let leg = (corner.width().min(corner.height()) - 2.0 * inset).max(0.0);
-    let (right, bottom) = (corner.right() - inset, corner.bottom() - inset);
-    let tri = vec![pos2(right, bottom - leg), pos2(right, bottom), pos2(right - leg, bottom)];
-    p.add(egui::Shape::convex_polygon(tri, Color32::from_gray(190), Stroke::NONE));
+    // MK Matrix marks select-all with an omega, the whole, centred in the corner.
+    p.text(corner.center(), Align2::CENTER_CENTER, "Ω", font.clone(), t.header_text);
     p.line_segment([pos2(r.left(), geo.cells.top() - 0.5), pos2(r.right(), geo.cells.top() - 0.5)], Stroke::new(1.0, t.header_line));
     p.line_segment([pos2(geo.cells.left() - 0.5, r.top()), pos2(geo.cells.left() - 0.5, r.bottom())], Stroke::new(1.0, t.header_line));
 }
