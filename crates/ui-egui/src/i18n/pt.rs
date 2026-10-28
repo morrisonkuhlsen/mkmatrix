@@ -744,7 +744,9 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Search" => "Pesquisar",
         "No functions match your search." => "Nenhuma função corresponde à pesquisa.",
         "{count} functions" => "{count} funções",
-        "A spreadsheet of matrices: open-source and Rust-native, forked from GridCraft." => "Uma planilha de matrizes: código aberto e nativa em Rust, derivada do GridCraft.",
+        "A spreadsheet of matrices: open-source and Rust-native, forked from GridCraft." => {
+            "Uma planilha de matrizes: código aberto e nativa em Rust, derivada do GridCraft."
+        }
         "A Morrison Kühlsen project." => "Um projeto Morrison Kühlsen.",
         "contributors" => "colaboradores",
         "commits" => "commits",

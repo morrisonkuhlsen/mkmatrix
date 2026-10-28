@@ -219,7 +219,9 @@ pub fn totals() -> (u64, u64, u64) {
 
 /// About ▸ Contributors, in Format Cells' style: which name to show, the sort and the view as a
 /// form of segments, then the list in a panel as a grab bag or a table.
-pub fn contributors_ui(ui: &mut egui::Ui) {
+/// `height` is the section's: the list's panel takes what the form leaves of it.
+pub fn contributors_ui(ui: &mut egui::Ui, height: f32) {
+    let top = ui.cursor().min.y;
     use crate::dialogs::kit::{form, heading, hint, label, panel, segments};
     let lang = crate::i18n::current(ui.ctx());
     let id = egui::Id::unique("credits_view");
@@ -263,8 +265,7 @@ pub fn contributors_ui(ui: &mut egui::Ui) {
             .replace("{count}", &group(list.len() as u64))
             .replace("{commits}", &group(TOTAL_COMMITS)),
     );
-    let height = ui.available_height().max(120.0);
-    panel(ui, height, |ui| {
+    panel(ui, (top + height - ui.cursor().min.y).max(120.0), |ui| {
         egui::Frame::NONE.inner_margin(10.0).show(ui, |ui| {
             egui::ScrollArea::both().id_salt("credits.list").auto_shrink([false, false]).show(ui, |ui| {
                 if list.is_empty() {
@@ -317,19 +318,20 @@ fn table(ui: &mut egui::Ui, list: &[&Contributor], v: &mut View) {
 
 /// About ▸ Models: the AI models credited in Co-Authored-By trailers, each a row with its share of
 /// the commits drawn as a bar in the accent.
-pub fn models_ui(ui: &mut egui::Ui) {
+/// `height` is the section's: the list's panel takes what the heading leaves of it.
+pub fn models_ui(ui: &mut egui::Ui, height: f32) {
+    let top = ui.cursor().min.y;
     use crate::dialogs::kit::{heading, hint, panel};
     let lang = crate::i18n::current(ui.ctx());
     let t = crate::theme::Tokens::get(ui.ctx());
-    heading(ui, lang.tr("AI models"));
+    heading(ui, lang.tr("Models"));
     if MODELS.is_empty() {
         hint(ui, lang.tr("No model credits were built into this copy."));
         return;
     }
     let assisted: u64 = MODELS.iter().map(|m| m.commits).max().unwrap_or(0).max(1);
     let all = TOTAL_COMMITS.max(assisted) as f32;
-    let height = ui.available_height().max(120.0);
-    panel(ui, height, |ui| {
+    panel(ui, (top + height - ui.cursor().min.y).max(120.0), |ui| {
         egui::ScrollArea::vertical().id_salt("credits.models").auto_shrink([false, false]).show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
             for m in MODELS {
