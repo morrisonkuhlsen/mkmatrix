@@ -439,12 +439,13 @@ fn language_switch_renders_the_ribbon_and_persists() {
     for id in ["app.language.set", "app.language.english", "app.language.japanese"] {
         assert!(ids.contains(&id), "engine.commands lists {id}");
     }
-    // A minimal CI image has egui's bundled faces but no Japanese/Korean/Chinese face. Those
-    // catalogs are exercised when the pinned craft-fonts input is present; skipping them here is
-    // the documented no-font gap, not a missing-glyph or accessibility opt-out.
+    // A minimal CI image has egui's bundled faces but no Japanese/Korean/Chinese face, and they
+    // lack Vietnamese's stacked diacritics (ẻ, ộ). Those catalogs are exercised when the pinned
+    // craft-fonts input is present; skipping them here is the documented no-font gap, not a
+    // missing-glyph or accessibility opt-out.
     let languages: Vec<Language> = Language::ALL
         .into_iter()
-        .filter(|l| mkmatrix_ui_egui::theme::craft_fonts_loaded() || !matches!(l, Language::Ja | Language::Ko | Language::Zh))
+        .filter(|l| mkmatrix_ui_egui::theme::craft_fonts_loaded() || !matches!(l, Language::Ja | Language::Ko | Language::Zh | Language::Vi))
         .collect();
     for language in languages {
         h.state_mut().run("app.language.set", json!({"language": language.code()})).unwrap();
@@ -862,14 +863,23 @@ fn column_autocomplete_skips_ambiguous_prefixes_and_numbers() {
 #[test]
 fn column_autocomplete_folds_case_beyond_ascii() {
     let mut s = blank();
-    s.execute("range.setValues", json!({"range": "A1", "values": [["Ébène"], ["Ébano"], ["ébano"], ["STRAẞENBAHN"]]})).unwrap();
-    s.execute("selection.set", json!({"cell": "A5"})).unwrap();
+    // egui's bundled faces have no capital sharp s (ẞ): that case needs the pinned craft-fonts input
+    // and is the documented no-font gap, not a missing-glyph opt-out.
+    let sharp_s = mkmatrix_ui_egui::theme::craft_fonts_loaded();
+    let values = if sharp_s { json!([["Ébène"], ["Ébano"], ["ébano"], ["STRAẞENBAHN"]]) } else { json!([["Ébène"], ["Ébano"], ["ébano"]]) };
+    s.execute("range.setValues", json!({"range": "A1", "values": values})).unwrap();
+    // The cell just below the column, which autocomplete reads.
+    s.execute("selection.set", json!({"cell": if sharp_s { "A5" } else { "A4" }})).unwrap();
     let mut h = harness(s);
     text(&mut h, "éba");
     assert_eq!(completion(&h), ("éba".into(), Some("ébano".into())), "Ébano and ébano are one entry, Ébène doesn't match");
     h.state_mut().cancel_edit();
     text(&mut h, "éb");
     assert_eq!(completion(&h).1, None, "Ébène and Ébano differ past the prefix");
+    if !sharp_s {
+        eprintln!("diagnostic: no CRAFT_FONTS_DIR; the ß/ẞ autocomplete case was not run");
+        return;
+    }
     h.state_mut().cancel_edit();
     // "ß" is two bytes, "ẞ" three: the proposed rest starts after the fifth character, not the sixth byte.
     text(&mut h, "straß");
