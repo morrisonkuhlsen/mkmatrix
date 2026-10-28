@@ -123,7 +123,12 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
             });
             let left_end = ui.min_rect().right();
             let right = ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.add_space(8.0);
+                if app.chrome.window_controls {
+                    window_controls(ui, bar_h);
+                    ui.add_space(4.0);
+                } else {
+                    ui.add_space(8.0);
+                }
                 let __k = icon_button(ui, Icon::Search, t.text_dim, "Search commands", vec2(28.0, ch));
                 control_keytip(app, ui, &__k, "commandSearch");
                 if __k.clicked() {
@@ -166,6 +171,85 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
             paint_title(ui, rect.center(), &title, dirty, max_w, t.text);
         });
     });
+}
+
+/// Minimize, maximize (or restore) and close, flush with the title bar's right end, for a window
+/// drawn without the system's frame (`Chrome::window_controls`). `ui` lays them out right to left.
+fn window_controls(ui: &mut Ui, h: f32) {
+    let t = Tokens::get(ui.ctx());
+    let lang = crate::i18n::current(ui.ctx());
+    let maximized = ui.ctx().input(|i| i.viewport().maximized).unwrap_or(false);
+    for (button, tip) in [("close", "Close"), ("max", if maximized { "Restore Down" } else { "Maximize" }), ("min", "Minimize")] {
+        let (r, resp) = ui.allocate_exact_size(vec2(46.0, h), Sense::click());
+        let close = button == "close";
+        if resp.hovered() {
+            ui.painter().rect_filled(r, 0.0, if close { t.danger } else { t.hover });
+        }
+        let ink = if close && resp.hovered() { Color32::WHITE } else { t.text };
+        let s = Stroke::new(1.0, ink);
+        let c = r.center();
+        let p = ui.painter();
+        match button {
+            "min" => {
+                p.line_segment([c + vec2(-5.0, 0.0), c + vec2(5.0, 0.0)], s);
+            }
+            "max" if maximized => {
+                // Restore: a window in front of another.
+                p.rect_stroke(Rect::from_min_size(c + vec2(-5.0, -3.0), vec2(8.0, 8.0)), 0.0, s, StrokeKind::Inside);
+                p.line_segment([c + vec2(-3.0, -5.0), c + vec2(5.0, -5.0)], s);
+                p.line_segment([c + vec2(5.0, -5.0), c + vec2(5.0, 3.0)], s);
+            }
+            "max" => {
+                p.rect_stroke(Rect::from_center_size(c, vec2(10.0, 10.0)), 0.0, s, StrokeKind::Inside);
+            }
+            _ => {
+                p.line_segment([c + vec2(-5.0, -5.0), c + vec2(5.0, 5.0)], s);
+                p.line_segment([c + vec2(-5.0, 5.0), c + vec2(5.0, -5.0)], s);
+            }
+        }
+        let name = lang.tr(tip).to_string();
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &name));
+        if resp.on_hover_text(name).clicked() {
+            ui.ctx().send_viewport_cmd(match button {
+                "min" => egui::ViewportCommand::Minimized(true),
+                "max" => egui::ViewportCommand::Maximized(!maximized),
+                _ => egui::ViewportCommand::Close,
+            });
+        }
+    }
+}
+
+/// How far in from the window's edges a press resizes a window drawn without the system's frame.
+const RESIZE_EDGE: f32 = 5.0;
+
+/// Resizing from the edges and corners of a window drawn without the system's frame
+/// (`Chrome::window_controls`): the cursor shows the direction, and a press there resizes.
+/// Run after the rest of the frame, so its cursor wins.
+pub fn resize_edges(ctx: &egui::Context) {
+    let maximized = ctx.input(|i| i.viewport().maximized).unwrap_or(false);
+    let Some(p) = ctx.input(|i| i.pointer.hover_pos()) else { return };
+    if maximized {
+        return;
+    }
+    let r = ctx.content_rect();
+    let (w, e) = (p.x - r.left() <= RESIZE_EDGE, r.right() - p.x <= RESIZE_EDGE);
+    let (n, s) = (p.y - r.top() <= RESIZE_EDGE, r.bottom() - p.y <= RESIZE_EDGE);
+    use egui::{CursorIcon as C, ResizeDirection as D};
+    let (dir, cursor) = match (n, s, w, e) {
+        (true, _, true, _) => (D::NorthWest, C::ResizeNwSe),
+        (true, _, _, true) => (D::NorthEast, C::ResizeNeSw),
+        (_, true, true, _) => (D::SouthWest, C::ResizeNeSw),
+        (_, true, _, true) => (D::SouthEast, C::ResizeNwSe),
+        (true, ..) => (D::North, C::ResizeVertical),
+        (_, true, ..) => (D::South, C::ResizeVertical),
+        (_, _, true, _) => (D::West, C::ResizeHorizontal),
+        (_, _, _, true) => (D::East, C::ResizeHorizontal),
+        _ => return,
+    };
+    ctx.set_cursor_icon(cursor);
+    if ctx.input(|i| i.pointer.primary_pressed()) {
+        ctx.send_viewport_cmd(egui::ViewportCommand::BeginResize(dir));
+    }
 }
 
 /// Lay out the title truncated to fit `max_w` together with the unsaved marker (when `dirty`).

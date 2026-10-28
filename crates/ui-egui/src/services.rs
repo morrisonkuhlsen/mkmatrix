@@ -52,10 +52,13 @@ pub struct Chrome {
     /// The ribbon's File tab and the Backstage view it opens (also reached by keyboard and
     /// commands such as `ui.backstage`).
     pub file_tab: bool,
+    /// Minimize, maximize and close at the title bar's right, and resizing from the window's
+    /// edges: for a window drawn without the system's frame (MK Matrix on Windows).
+    pub window_controls: bool,
 }
 
 impl Default for Chrome {
     fn default() -> Self {
-        Chrome { title_bar: true, file_tab: true }
+        Chrome { title_bar: true, file_tab: true, window_controls: false }
     }
 }
