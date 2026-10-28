@@ -103,6 +103,8 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
     let bar_h = if app.ui.density.compact() { 26.0 } else { 32.0 };
     egui::Panel::bottom("sheet_tabs").exact_size(bar_h).show_separator_line(false).frame(egui::Frame::NONE.fill(t.tab_bar)).show(ui, |ui| {
         let rect = ui.max_rect();
+        // The bar's own height: tabs paint over all of it, whatever the row's centring does.
+        let bar_y = rect.y_range();
         ui.painter().line_segment([rect.left_top(), rect.right_top()], Stroke::new(1.0, t.ribbon_border));
         ui.horizontal_centered(|ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
@@ -185,6 +187,7 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                                 let tw = ui.painter().layout_no_wrap(name.clone(), font.clone(), t.text).size().x;
                                 let w = (tw + 32.0).max(72.0);
                                 let (r, resp) = ui.allocate_exact_size(vec2(w, bar_h), Sense::click_and_drag());
+                                let r = Rect::from_x_y_ranges(r.x_range(), bar_y);
                                 if active && reveal_active {
                                     resp.scroll_to_me(None);
                                 }
