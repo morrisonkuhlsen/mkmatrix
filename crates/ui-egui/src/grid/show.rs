@@ -267,6 +267,9 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     }
     update_cursor(app, ui, &resp, &geo, sh);
     crate::text_box::show(app, ui, &geo, sh);
+    // The actions on a selected matrix, floating beside it.
+    let selected = geo.mirror_rect(geo.range_rect(sh, sel.current()));
+    crate::matrix_actions::show(app, ui.ctx(), selected, geo.cells);
     if app.editor.as_ref().is_some_and(|e| !e.from_formula_bar) {
         in_cell_editor(app, ui, &geo, sh, &wb);
     }

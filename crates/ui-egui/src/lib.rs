@@ -28,6 +28,7 @@ pub mod icons;
 pub mod keymap;
 pub mod keytips;
 pub mod matrices;
+mod matrix_actions;
 pub mod menus;
 pub mod outline;
 pub mod panes;

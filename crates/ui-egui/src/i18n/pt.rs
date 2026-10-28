@@ -1046,6 +1046,12 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "rank" => "posto",
         "singular" => "singular",
         "symmetric" => "simétrica",
+        "Name as a matrix" => "Nomear como matriz",
+        "Inverse" => "Inversa",
+        "Multiply by… (point at the second matrix)" => "Multiplicar por… (aponte a segunda matriz)",
+        "Solve… (point at the right-hand side)" => "Resolver… (aponte o lado direito)",
+        "Eigenvalues" => "Autovalores",
+        "Singular values" => "Valores singulares",
         "Welcome to MK Matrix" => "Bem-vindo ao MK Matrix",
         "Numbered Columns" => "Colunas Numeradas",
         "Head the columns 1, 2, 3… as a matrix's a(i,j), rather than A, B, C" => {
