@@ -12,11 +12,8 @@ pub(super) const REBUILT_KINDS: [&str; 1] = ["calcchain"];
 
 // ---------------------------------------------------------------- package validation
 
-fn local_name(name: &[u8]) -> &[u8] {
-    match name.iter().rposition(|&b| b == b':') {
-        Some(i) => name.get(i + 1..).unwrap_or(name),
-        None => name,
-    }
+fn local_name(name: &str) -> &str {
+    name.rsplit_once(':').map_or(name, |(_, n)| n)
 }
 
 /// `(element local name, attributes)` for every start/empty element of an XML part.
@@ -35,12 +32,12 @@ fn xml_elements(xml: &[u8]) -> Result<Vec<(String, Vec<(String, String)>)>, Stri
                     .map(|a| {
                         let v = match a.normalized_value(quick_xml::XmlVersion::Explicit1_0) {
                             Ok(v) => v.into_owned(),
-                            Err(_) => String::from_utf8_lossy(&a.value).into_owned(),
+                            Err(_) => a.value.clone().into_owned(),
                         };
-                        (String::from_utf8_lossy(local_name(a.key.as_ref())).into_owned(), v)
+                        (local_name(a.key.as_ref()).to_string(), v)
                     })
                     .collect();
-                out.push((String::from_utf8_lossy(local_name(e.name().as_ref())).into_owned(), attrs));
+                out.push((local_name(e.name().as_ref()).to_string(), attrs));
             }
             Ok(Event::Eof) => break,
             Ok(_) => {}
@@ -105,7 +102,9 @@ fn resolve_target(source_dir: &str, target: &str) -> String {
 type Zip<'a> = zip::ZipArchive<Cursor<&'a [u8]>>;
 
 fn zip_names(zip: &mut Zip<'_>) -> Vec<String> {
-    (0..zip.len().min(MAX_ENTRIES)).filter_map(|i| zip.by_index_raw(i).ok().filter(|f| !f.is_dir()).map(|f| f.name().to_string())).collect()
+    (0..zip.len().min(MAX_ENTRIES))
+        .filter_map(|i| zip.by_index_raw(i).ok().filter(|f| !f.is_dir()).and_then(|f| f.name().ok().map(|n| n.into_owned())))
+        .collect()
 }
 
 fn read_zip_part(zip: &mut Zip<'_>, name: &str) -> Result<Vec<u8>, String> {
@@ -301,9 +300,9 @@ fn holds_something_uncached(zip: &mut Zip<'_>, name: &str, marker: &'static str,
     let take = f.size().min(MAX_XML_PART).min(*budget);
     *budget -= take;
     let mut reader = quick_xml::Reader::from_reader(std::io::BufReader::new(f.take(take)));
-    let wanted: Option<&'static [u8]> = match marker {
-        "comment" => Some(b"comment"),
-        "shape" => Some(b"shape"),
+    let wanted: Option<&'static str> = match marker {
+        "comment" => Some("comment"),
+        "shape" => Some("shape"),
         _ => None,
     };
     let mut buf = Vec::new();
