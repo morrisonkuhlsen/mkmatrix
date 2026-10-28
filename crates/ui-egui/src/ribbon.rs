@@ -135,7 +135,7 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
         });
 }
 
-/// One of the top bar's tabs: underlined while active, in the accent colour when contextual.
+/// One of the top bar's tabs: bold while active, in the accent colour when contextual.
 fn tab_button(app: &mut SheetApp, ui: &mut Ui, tab: &str, contextual: bool, menu_h: f32) {
     let t = Tokens::get(ui.ctx());
     let active = app.ui.ribbon_tab == tab;
@@ -155,10 +155,6 @@ fn tab_button(app: &mut SheetApp, ui: &mut Ui, tab: &str, contextual: bool, menu
         t.text_dim
     };
     ui.painter().text(r.center(), Align2::CENTER_CENTER, label.clone(), if active { theme::ui_bold(13.0) } else { font }, color);
-    if active && !collapsed {
-        let ul = Rect::from_center_size(pos2(r.center().x, r.bottom() - 2.0), vec2(tw.clamp(20.0, 40.0), 3.0));
-        ui.painter().rect_filled(ul, 1.5, t.accent);
-    }
     resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Tab, true, active, &label));
     if resp.double_clicked() {
         app.ui.ribbon_collapsed = !collapsed;
