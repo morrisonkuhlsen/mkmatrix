@@ -8,10 +8,15 @@ use crate::by_hand::{Math, Step, derive, latex, number};
 use crate::icons::Icon;
 use crate::theme::{self, Tokens};
 
+/// What the panel says with no matrix formula in the active cell.
+const HINT: &str = "Select a cell with a matrix formula: a transpose (X'), a product (A@B), a system (A\\b), MX.DET, MX.INV, MX.TRACE, MX.POW, MX.RANK, MX.LU, MX.CHOL, MX.EIG or MX.EIGVEC.";
+
 /// The notation's base size, in points.
 const SIZE: f32 = 15.0;
 /// Space between the pieces of a row.
 const GAP: f32 = 4.0;
+/// The width of a root's radical sign.
+const RADICAL: f32 = 10.0;
 
 /// The formula the panel works: the active cell's own, or its spill anchor's.
 fn active_formula(app: &SheetApp) -> Option<(String, String)> {
@@ -56,11 +61,7 @@ pub(crate) fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
             });
             ui.add_space(4.0);
             match work {
-                None => hint(
-                    ui,
-                    lang.tr("Select a cell with a matrix formula: a transpose (X'), a product (A@B), a system (A\\b), MX.DET or MX.INV."),
-                    &t,
-                ),
+                None => hint(ui, lang.tr(HINT), &t),
                 Some((cell, formula, Err(why))) => {
                     ui.label(egui::RichText::new(format!("{cell}   {formula}")).font(FontId::monospace(12.5)).color(t.text_dim));
                     hint(ui, lang.tr(&why), &t);
@@ -127,6 +128,11 @@ fn measure(p: &Painter, m: &Math, size: f32) -> egui::Vec2 {
             let (widths, heights) = grid(p, rows, size);
             vec2(widths.iter().sum::<f32>() + 12.0 * widths.len() as f32 + 12.0, heights.iter().sum::<f32>() + 4.0 * heights.len() as f32 + 6.0)
         }
+        Math::Root(_, x) => {
+            let inner = measure(p, x, size);
+            vec2(RADICAL + inner.x + 3.0, inner.y + 3.0)
+        }
+        Math::Boxed(x) => measure(p, x, size) + vec2(6.0, 4.0),
         _ => vec2(0.0, 0.0),
     }
 }
@@ -202,6 +208,29 @@ fn paint(p: &Painter, m: &Math, size: f32, at: Pos2, t: &Tokens) {
                 }
                 y += h + 4.0;
             }
+        }
+        Math::Root(i, x) => {
+            // A radical drawn to the height of what it takes the root of, and a bar over it.
+            let inner = measure(p, x, size);
+            let (top, bottom) = (at.y + 1.0, at.y + inner.y + 3.0);
+            let stroke = Stroke::new(1.1, t.text);
+            let mid = pos2(at.x + 1.0, bottom - inner.y * 0.4);
+            let tick = pos2(at.x + 3.5, mid.y - 1.5);
+            let foot = pos2(at.x + RADICAL * 0.5, bottom);
+            let corner = pos2(at.x + RADICAL, top);
+            p.line_segment([mid, tick], stroke);
+            p.line_segment([tick, foot], stroke);
+            p.line_segment([foot, corner], stroke);
+            p.line_segment([corner, pos2(corner.x + inner.x + 3.0, top)], stroke);
+            if *i != 2 {
+                p.text(pos2(at.x, mid.y - 2.0), Align2::LEFT_BOTTOM, i.to_string(), FontId::proportional(size * 0.55), t.text);
+            }
+            paint(p, x, size, pos2(corner.x + 2.0, top + 2.0), t);
+        }
+        Math::Boxed(x) => {
+            let r = Rect::from_min_size(at, measure(p, m, size));
+            p.rect_stroke(r.shrink(0.5), 2.0, Stroke::new(1.2, t.accent), egui::StrokeKind::Inside);
+            paint(p, x, size, at + vec2(3.0, 2.0), t);
         }
         _ => {}
     }

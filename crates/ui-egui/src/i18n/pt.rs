@@ -1056,11 +1056,11 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Calculation by Hand" => "Cálculo à Mão",
         "Copy LaTeX" => "Copiar LaTeX",
         "LaTeX copied" => "LaTeX copiado",
-        "Select a cell with a matrix formula: a transpose (X'), a product (A@B), a system (A\\b), MX.DET or MX.INV." => {
-            "Selecione uma célula com uma fórmula de matriz: uma transposta (X'), um produto (A@B), um sistema (A\\b), MX.DET ou MX.INV."
+        "Select a cell with a matrix formula: a transpose (X'), a product (A@B), a system (A\\b), MX.DET, MX.INV, MX.TRACE, MX.POW, MX.RANK, MX.LU, MX.CHOL, MX.EIG or MX.EIGVEC." => {
+            "Selecione uma célula com uma fórmula de matriz: uma transposta (X'), um produto (A@B), um sistema (A\\b), MX.DET, MX.INV, MX.TRACE, MX.POW, MX.RANK, MX.LU, MX.CHOL, MX.EIG ou MX.EIGVEC."
         }
-        "By hand: a transpose (X'), a product (A@B), a system (A\\b), MX.DET or MX.INV." => {
-            "À mão: uma transposta (X'), um produto (A@B), um sistema (A\\b), MX.DET ou MX.INV."
+        "By hand: a transpose (X'), a product (A@B), a system (A\\b), MX.DET, MX.INV, MX.TRACE, MX.POW, MX.RANK, MX.LU, MX.CHOL, MX.EIG or MX.EIGVEC." => {
+            "À mão: uma transposta (X'), um produto (A@B), um sistema (A\\b), MX.DET, MX.INV, MX.TRACE, MX.POW, MX.RANK, MX.LU, MX.CHOL, MX.EIG ou MX.EIGVEC."
         }
         "Column {}" => "Coluna {}",
         "Column {}: already in place" => "Coluna {}: já no lugar",
@@ -1088,6 +1088,57 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Together" => "Juntando",
         "Next to the identity: [A | I]" => "Ao lado da identidade: [A | I]",
         "The right half is the inverse" => "A metade direita é a inversa",
+        // Traces, powers, ranks, LU, Cholesky and eigenvalues by hand.
+        "The sum of the main diagonal" => "A soma da diagonal principal",
+        "Any matrix to the power 0 is the identity" => "Qualquer matriz elevada a 0 é a identidade",
+        "A negative power multiplies the inverse: first [A | I]" => "Uma potência negativa multiplica a inversa: primeiro [A | I]",
+        "Each power is the one before times the matrix" => "Cada potência é a anterior vezes a matriz",
+        "The power" => "A potência",
+        "By hand works MX.POW with a whole number for k." => "À mão, MX.POW precisa de um número inteiro para k.",
+        "Row echelon form: eliminate below each pivot, column by column" => "Forma escalonada: eliminar abaixo de cada pivô, coluna por coluna",
+        "Column {}: no pivot" => "Coluna {}: sem pivô",
+        "Column {}: zeros below the pivot already" => "Coluna {}: já há zeros abaixo do pivô",
+        "Column {}: no pivot, nothing to eliminate" => "Coluna {}: sem pivô, nada a eliminar",
+        "The rank is the number of pivots" => "O posto é o número de pivôs",
+        "By hand works MX.RANK without a tolerance." => "À mão, MX.RANK funciona sem tolerância.",
+        "Eliminate below each pivot; each multiplier goes into L" => "Eliminar abaixo de cada pivô; cada multiplicador vai para L",
+        "L: ones on the diagonal, the multipliers below" => "L: uns na diagonal, os multiplicadores abaixo",
+        "U: the eliminated matrix" => "U: a matriz eliminada",
+        "P: the row swaps, applied to the identity" => "P: as trocas de linha, aplicadas à identidade",
+        "A = L·Lᵀ, column by column: the diagonal element first" => "A = L·Lᵀ, coluna por coluna: primeiro o elemento da diagonal",
+        "then the ones below it" => "depois os de baixo",
+        "The factor L" => "O fator L",
+        "Cholesky needs a symmetric matrix." => "Cholesky precisa de uma matriz simétrica.",
+        "The matrix isn't positive definite: a diagonal element would be the root of a number ≤ 0." => {
+            "A matriz não é definida positiva: um elemento da diagonal seria a raiz de um número ≤ 0."
+        }
+        "The characteristic equation" => "A equação característica",
+        "With the trace, the principal 2×2 minors and the determinant" => "Com o traço, os menores principais 2×2 e o determinante",
+        "The characteristic polynomial" => "O polinômio característico",
+        "The quadratic formula" => "A fórmula de Bhaskara",
+        "A whole-number root, a divisor of the constant term: λ = {}" => "Uma raiz inteira, divisor do termo constante: λ = {}",
+        "No whole-number root. With λ = t − b/3, the λ² term goes" => "Sem raiz inteira. Com λ = t − b/3, o termo em λ² some",
+        "Three real roots, as the discriminant D = {} ≤ 0: the trigonometric formula" => {
+            "Três raízes reais, pois o discriminante D = {} ≤ 0: a fórmula trigonométrica"
+        }
+        "One real root, as the discriminant D = {} > 0: Cardano's formula" => "Uma raiz real, pois o discriminante D = {} > 0: a fórmula de Cardano",
+        "Dividing it out leaves a quadratic" => "Dividindo por ela, sobra uma quadrática",
+        "The eigenvalues, largest first" => "Os autovalores, do maior para o menor",
+        "In the cell: real parts, then imaginary parts" => "Na célula: partes reais, depois partes imaginárias",
+        "Eigenvalues by hand: matrices up to 3×3." => "Autovalores à mão: matrizes até 3×3.",
+        "Eigenvectors by hand: matrices up to 3×3." => "Autovetores à mão: matrizes até 3×3.",
+        "Eigenvectors by hand need a symmetric matrix, as MX.EIGVEC does." => "Autovetores à mão precisam de uma matriz simétrica, como MX.EIGVEC.",
+        "For λ = {}: the vectors v with (A − λI)v = 0" => "Para λ = {}: os vetores v com (A − λI)v = 0",
+        "Reduced row echelon form" => "Forma escalonada reduzida",
+        "Each free variable set to 1 gives an eigenvector" => "Cada variável livre igual a 1 dá um autovetor",
+        "Scaled to unit length, the largest component positive" => "Normalizado, com a maior componente positiva",
+        "A repeated eigenvalue: an orthonormal basis of its vectors (any one works; the cell's may differ)" => {
+            "Um autovalor repetido: uma base ortonormal dos seus vetores (qualquer uma serve; a da célula pode ser outra)"
+        }
+        "The eigenvectors as columns, in the eigenvalues' order" => "Os autovetores como colunas, na ordem dos autovalores",
+        "The eigenvectors don't come out cleanly by hand; the cell's values stand." => {
+            "Os autovetores não saem limpos à mão; valem os valores da célula."
+        }
         "Welcome to MK Matrix" => "Bem-vindo ao MK Matrix",
         "Numbered Columns" => "Colunas Numeradas",
         "Head the columns 1, 2, 3… as a matrix's a(i,j), rather than A, B, C" => {

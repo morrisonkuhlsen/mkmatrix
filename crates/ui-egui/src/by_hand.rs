@@ -1,7 +1,11 @@
 //! "Calculation by hand": the steps that take a matrix formula's operands to its result, as a
 //! textbook writes them: transposes, products element by element (cᵢⱼ = Σₖ aᵢₖ bₖⱼ), determinants
-//! by cofactors, inverses by Gauss–Jordan. Each step is mathematical notation ([`Math`]) that the
-//! side panel draws and [`latex`] writes out for a paper.
+//! by cofactors, inverses by Gauss–Jordan, traces and powers; ranks, LU and Cholesky factors
+//! ([`factor`]); eigenvalues and eigenvectors ([`eigen`]). Each step is mathematical notation
+//! ([`Math`]) that the side panel draws and [`latex`] writes out for a paper.
+
+mod eigen;
+mod factor;
 
 use mkmatrix_engine::core::Value;
 use mkmatrix_engine::formula::{BinOp, Expr, UnOp};
@@ -24,6 +28,10 @@ pub enum Math {
     Matrix(Vec<Vec<Math>>),
     /// Pieces side by side.
     Row(Vec<Math>),
+    /// A root: `√x` (index 2) or `∛x` (index 3).
+    Root(u8, Box<Math>),
+    /// Framed, as a pivot is marked.
+    Boxed(Box<Math>),
 }
 
 /// One step: what it says, and the notation. The caption is fixed text (translated); `{}` in it is
@@ -58,6 +66,8 @@ pub const HAND_MAX: usize = 5;
 const EXPAND_MAX: usize = 9;
 /// The most terms written out in one sum.
 const TERMS_MAX: usize = 6;
+/// The highest power worked as repeated products.
+const POW_MAX: u64 = 8;
 
 type Mat = Vec<Vec<f64>>;
 
@@ -79,10 +89,35 @@ fn matrix(m: &Mat) -> Math {
 fn row(v: Vec<Math>) -> Math {
     Math::Row(v)
 }
-/// `m` with a superscript, in parentheses when it is more than one symbol (`(XᵀX)⁻¹`).
+/// `m` with a superscript, in parentheses when it is more than one symbol or already raised
+/// (`(XᵀX)⁻¹`, `(A⁻¹)²`).
 fn sup(m: Math, s: &str) -> Math {
-    let base = if matches!(m, Math::Row(_)) { row(vec![op("("), m, op(")")]) } else { m };
+    let base = if matches!(m, Math::Row(_) | Math::Sup(..)) { row(vec![op("("), m, op(")")]) } else { m };
     Math::Sup(Box::new(base), Box::new(op(s)))
+}
+fn root(m: Math) -> Math {
+    Math::Root(2, Box::new(m))
+}
+/// `f(x)`: a function's name, upright, and its argument in parentheses.
+fn call(f: &str, x: Math) -> Math {
+    row(vec![op(f), op("("), x, op(")")])
+}
+/// `step` with `{}` in its caption filled by `detail`.
+fn told(caption: &str, detail: String, math: Math) -> Step {
+    Step { caption: caption.into(), detail, math }
+}
+/// How an operand is named in the steps: a written-out array constant reads as `A`, so formulas
+/// about it stay short.
+fn symbol(shown: Math) -> Math {
+    if matches!(shown, Math::Matrix(_)) { var("A") } else { shown }
+}
+/// A number after an operator: in parentheses when it is negative (`− (−8)`).
+fn signed(x: f64) -> Math {
+    if x < 0.0 { row(vec![op("("), Math::Num(x), op(")")]) } else { Math::Num(x) }
+}
+/// The largest magnitude in `m`, never 0 (a scale for tolerances).
+fn magnitude(m: &Mat) -> f64 {
+    m.iter().flatten().fold(0.0f64, |acc, x| acc.max(x.abs())).max(1e-300)
 }
 
 /// The steps for a cell's formula (with or without `=`) on sheet `si`; `Err(why)` when it isn't an
@@ -101,9 +136,21 @@ pub fn derive(formula: &str, wb: &Workbook, si: usize) -> Result<Vec<Step>, Stri
         Expr::Call(name, args) if name == "MX.INV" => inverse_steps(&ctx, args.first().ok_or("MX.INV needs a matrix.")?),
         Expr::Binary(BinOp::Solve, a, b) => solve_steps(&ctx, a, b),
         Expr::Call(name, args) if name == "MX.SOLVE" && args.len() == 2 => solve_steps(&ctx, &args[0], &args[1]),
-        _ => Err("By hand: a transpose (X'), a product (A@B), a system (A\\b), MX.DET or MX.INV.".into()),
+        Expr::Call(name, args) if name == "MX.TRACE" => trace_steps(&ctx, args.first().ok_or("MX.TRACE needs a matrix.")?),
+        Expr::Call(name, args) if name == "MX.POW" && args.len() == 2 => pow_steps(&ctx, &args[0], &args[1]),
+        Expr::Call(name, args) if name == "MX.RANK" && args.len() == 1 => factor::rank_steps(&ctx, &args[0]),
+        Expr::Call(name, _) if name == "MX.RANK" => Err("By hand works MX.RANK without a tolerance.".into()),
+        Expr::Call(name, args) if name == "MX.LU" && !args.is_empty() => factor::lu_steps(&ctx, &args[0], args.get(1)),
+        Expr::Call(name, args) if name == "MX.CHOL" => factor::chol_steps(&ctx, args.first().ok_or("MX.CHOL needs a matrix.")?),
+        Expr::Call(name, args) if name == "MX.EIG" => eigen::eig_steps(&ctx, args.first().ok_or("MX.EIG needs a matrix.")?),
+        Expr::Call(name, args) if name == "MX.EIGVEC" => eigen::eigvec_steps(&ctx, args.first().ok_or("MX.EIGVEC needs a matrix.")?),
+        _ => Err(UNSUPPORTED.into()),
     }
 }
+
+/// What the panel works, said when a formula is something else.
+pub const UNSUPPORTED: &str =
+    "By hand: a transpose (X'), a product (A@B), a system (A\\b), MX.DET, MX.INV, MX.TRACE, MX.POW, MX.RANK, MX.LU, MX.CHOL, MX.EIG or MX.EIGVEC.";
 
 fn unparen(e: &Expr) -> &Expr {
     match e {
@@ -466,6 +513,88 @@ fn inverse_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
     Ok(steps)
 }
 
+fn trace_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
+    let (m, shown) = ctx.value(a, 0)?;
+    let shown = symbol(shown);
+    let n = square(&m, "A trace")?;
+    let diagonal: Vec<f64> = (0..n).map(|i| m[i][i]).collect();
+    let mut terms = vec![call("tr", shown.clone()), op("=")];
+    for i in 0..n {
+        if i > 0 {
+            terms.push(op("+"));
+        }
+        terms.push(idx("a", i + 1, i + 1));
+    }
+    terms.push(op("="));
+    for (i, x) in diagonal.iter().enumerate() {
+        if i > 0 {
+            terms.push(op("+"));
+        }
+        terms.push(Math::Num(*x));
+    }
+    terms.push(op("="));
+    terms.push(Math::Num(diagonal.iter().sum()));
+    Ok(vec![Step::new("The matrix", row(vec![shown, op("="), matrix(&m)])), Step::new("The sum of the main diagonal", row(terms))])
+}
+
+/// A whole number written in a formula: `3`, `-2`, `(4)`.
+fn whole(e: &Expr) -> Option<i64> {
+    let v = match unparen(e) {
+        Expr::Number(v) => *v,
+        Expr::Unary(UnOp::Neg, x) => -whole(x)? as f64,
+        _ => return None,
+    };
+    (v.fract() == 0.0 && v.abs() <= 1e9).then_some(v as i64)
+}
+
+/// `MX.POW(A, k)`: repeated products, `Aᵏ = Aᵏ⁻¹·A`; a negative power multiplies the inverse,
+/// worked first by Gauss–Jordan.
+fn pow_steps(ctx: &Ctx, a: &Expr, k: &Expr) -> Result<Vec<Step>, String> {
+    let k = whole(k).ok_or("By hand works MX.POW with a whole number for k.")?;
+    if k.unsigned_abs() > POW_MAX {
+        return Err(format!("By hand stops at the power {POW_MAX}."));
+    }
+    let (m, shown) = ctx.value(a, 0)?;
+    let shown = symbol(shown);
+    let n = square(&m, "A power")?;
+    let mut steps = vec![Step::new("The matrix", row(vec![shown.clone(), op("="), matrix(&m)]))];
+    if k == 0 {
+        steps.push(Step::new(
+            "Any matrix to the power 0 is the identity",
+            row(vec![sup(shown, "0"), op("="), var("I"), op("="), matrix(&identity(n))]),
+        ));
+        return Ok(steps);
+    }
+    let (base, base_s) = if k < 0 {
+        let mut aug = beside(&m, &identity(n));
+        steps.push(Step::new(
+            "A negative power multiplies the inverse: first [A | I]",
+            row(vec![op("["), shown.clone(), op("|"), var("I"), op("]"), op("="), matrix(&aug)]),
+        ));
+        eliminate(&mut aug, n, &mut steps).map_err(|()| "The matrix is singular: it has no inverse (a pivot is 0).".to_string())?;
+        let inv = right_of(&aug, n);
+        let inv_s = sup(shown, "−1");
+        steps.push(Step::new("The right half is the inverse", row(vec![inv_s.clone(), op("="), matrix(&inv)])));
+        (inv, inv_s)
+    } else {
+        (m, shown)
+    };
+    let power = k.unsigned_abs();
+    if power > 1 {
+        steps.push(Step::new("Each power is the one before times the matrix", row(vec![])));
+    }
+    let mut acc = base.clone();
+    for p in 2..=power {
+        acc = mul(&acc, &base)?;
+        let before = if p == 2 { base_s.clone() } else { sup(base_s.clone(), &(p - 1).to_string()) };
+        steps.push(Step::new("", row(vec![sup(base_s.clone(), &p.to_string()), op("="), before, base_s.clone(), op("="), matrix(&acc)])));
+    }
+    if power == 1 {
+        steps.push(Step::new("The power", row(vec![base_s, op("="), matrix(&acc)])));
+    }
+    Ok(steps)
+}
+
 /// `A\b`: Gauss–Jordan on `[A | b]` when A is square; with more equations than unknowns, least
 /// squares through the normal equations `AᵀA x = Aᵀb` (a regression's coefficients).
 fn solve_steps(ctx: &Ctx, a: &Expr, b: &Expr) -> Result<Vec<Step>, String> {
@@ -525,6 +654,11 @@ pub fn latex(steps: &[Step]) -> String {
                 .replace('}', "\\}")
                 .replace('←', "$\\leftarrow$")
                 .replace('↔', "$\\leftrightarrow$")
+                .replace('λ', "$\\lambda$")
+                .replace('·', "$\\cdot$")
+                .replace('ᵀ', "$^T$")
+                .replace('≤', "$\\le$")
+                .replace('×', "$\\times$")
                 .replace('−', "-");
             out.push_str(&format!("&\\text{{{text}}}\\\\\n"));
         }
@@ -542,19 +676,23 @@ pub fn latex(steps: &[Step]) -> String {
 
 fn tex(m: &Math) -> String {
     match m {
-        Math::Var(v) => v.clone(),
+        Math::Var(v) => v.replace('λ', "\\lambda ").replace('φ', "\\varphi "),
         Math::Num(x) => number(*x).replace('−', "-"),
         Math::Op(s) => match s.as_str() {
             "·" => "\\cdot ".into(),
             "−" => "-".into(),
+            "±" => "\\pm ".into(),
+            "π" => "\\pi ".into(),
             "Σ" => "\\sum".into(),
+            "tr" => "\\operatorname{tr}".into(),
+            "cos" | "arccos" => format!("\\{s}"),
             "→" => "\\;\\Rightarrow\\;".into(),
             "+ …" => "+ \\cdots".into(),
             "det" => "\\det".into(),
             "det =" => "\\det =".into(),
             "|" => "\\,|\\,".into(),
             other if other.chars().all(|c| c.is_ascii_alphabetic()) && other.len() > 1 => format!("\\text{{{other}}}"),
-            other => other.replace('←', "\\leftarrow ").replace('↔', "\\leftrightarrow ").replace('−', "-"),
+            other => other.replace('π', "\\pi ").replace('←', "\\leftarrow ").replace('↔', "\\leftrightarrow ").replace('−', "-"),
         },
         Math::Sub(b, i) => format!("{{{}}}_{{{}}}", tex(b), tex(i)),
         Math::Sup(b, s) => format!("{{{}}}^{{{}}}", tex(b), tex(s)),
@@ -563,6 +701,9 @@ fn tex(m: &Math) -> String {
             format!("\\begin{{bmatrix}} {} \\end{{bmatrix}}", body.join(" \\\\ "))
         }
         Math::Row(items) => items.iter().map(tex).collect::<Vec<_>>().join(" "),
+        Math::Root(2, x) => format!("\\sqrt{{{}}}", tex(x)),
+        Math::Root(i, x) => format!("\\sqrt[{i}]{{{}}}", tex(x)),
+        Math::Boxed(x) => format!("\\boxed{{{}}}", tex(x)),
     }
 }
 
@@ -644,6 +785,149 @@ mod tests {
         let col = inv.iter().find(|s| s.caption.starts_with("Column")).unwrap();
         assert!(col.text(|c| c.replace("Column", "Coluna")).starts_with("Coluna 1"));
         assert!(latex(&inv).contains("\\leftarrow"));
+    }
+
+    /// What the engine puts in the cells for `formula` (a `rows`×`cols` spill from H10), on the
+    /// test book.
+    fn engine(formula: &str, rows: u32, cols: u32) -> Mat {
+        let mut s = mkmatrix_engine::Session::new();
+        s.new_workbook();
+        s.execute("range.setValues", serde_json::json!({"range": "A1", "values": [[2, 1], [1, 3]]})).unwrap();
+        s.execute("range.setValues", serde_json::json!({"range": "D1", "values": [[1, 2, 3], [0, 1, 4], [5, 6, 0]]})).unwrap();
+        s.execute("formulas.defineName", serde_json::json!({"name": "A", "refersTo": "=Sheet1!$A$1:$B$2"})).unwrap();
+        s.execute("cell.set", serde_json::json!({"cell": "H10", "input": formula})).unwrap();
+        let wb = &s.doc().unwrap().wb;
+        let sh = wb.sheet(0).unwrap();
+        (9..9 + rows)
+            .map(|r| {
+                (7..7 + cols)
+                    .map(|c| match sh.value(mkmatrix_engine::core::CellRef::new(r, c)) {
+                        Value::Number(n) => n,
+                        other => panic!("{formula}: {other:?}"),
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// The numbers of the matrix that ends the last step.
+    fn result(steps: &[Step]) -> Mat {
+        let rows = match last(steps) {
+            Math::Matrix(rows) => rows,
+            Math::Row(v) => match v.last() {
+                Some(Math::Matrix(rows)) => rows,
+                other => panic!("{other:?}"),
+            },
+            other => panic!("{other:?}"),
+        };
+        rows.iter().map(|r| r.iter().map(|x| if let Math::Num(n) = x { *n } else { panic!("{x:?}") }).collect()).collect()
+    }
+
+    fn close(got: &Mat, want: &Mat) -> bool {
+        got.len() == want.len()
+            && got.iter().zip(want).all(|(a, b)| a.len() == b.len() && a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-9 * y.abs().max(1.0)))
+    }
+
+    fn same_as_engine(formula: &str, rows: u32, cols: u32) -> Vec<Step> {
+        let steps = derive(formula, &book(), 0).unwrap_or_else(|e| panic!("{formula}: {e}"));
+        let (got, want) = (result(&steps), engine(formula, rows, cols));
+        assert!(close(&got, &want), "{formula}: by hand {got:?}, the cell {want:?}");
+        steps
+    }
+
+    #[test]
+    fn traces_and_powers() {
+        let wb = book();
+        let tr = derive("=MX.TRACE(D1:F3)", &wb, 0).unwrap();
+        assert!(matches!(last(&tr), Math::Row(v) if v.last() == Some(&Math::Num(2.0))));
+        let p3 = same_as_engine("=MX.POW(A,3)", 2, 2);
+        assert_eq!(result(&p3), vec![vec![15.0, 20.0], vec![20.0, 35.0]]);
+        same_as_engine("=MX.POW(A,0)", 2, 2);
+        same_as_engine("=MX.POW(A,1)", 2, 2);
+        same_as_engine("=MX.POW(D1:F3,-2)", 3, 3);
+        assert!(derive("=MX.POW(A,9)", &wb, 0).is_err());
+        assert!(derive("=MX.POW(A,1.5)", &wb, 0).is_err());
+        assert!(derive("=MX.POW({1,2;2,4},-1)", &wb, 0).unwrap_err().contains("singular"));
+    }
+
+    #[test]
+    fn ranks_by_row_echelon_form() {
+        let wb = book();
+        let rank = |f: &str| match last(&derive(f, &wb, 0).unwrap()) {
+            Math::Row(v) => v.last().cloned(),
+            _ => None,
+        };
+        assert_eq!(rank("=MX.RANK({1,2,3;2,4,6;1,0,1})"), Some(Math::Num(2.0)));
+        assert_eq!(rank("=MX.RANK(D1:F3)"), Some(Math::Num(3.0)));
+        assert_eq!(rank("=MX.RANK({0,0;0,0})"), Some(Math::Num(0.0)));
+        assert_eq!(rank("=MX.RANK({1,2,3,4;2,4,6,8})"), Some(Math::Num(1.0)));
+        // The second column has no pivot; the third does.
+        let steps = derive("=MX.RANK({1,2,0;2,4,1;3,6,1})", &wb, 0).unwrap();
+        assert!(steps.iter().any(|s| s.caption == "Column {}: no pivot" && s.detail == "2"));
+        assert!(latex(&steps).contains("\\boxed{"));
+        assert!(derive("=MX.RANK(A,0.1)", &wb, 0).unwrap_err().contains("tolerance"));
+    }
+
+    #[test]
+    fn lu_factors_match_the_cell() {
+        for part in ["L", "U", "P"] {
+            same_as_engine(&format!("=MX.LU(D1:F3,\"{part}\")"), 3, 3);
+            same_as_engine(&format!("=MX.LU({{1,2;3,4}},\"{part}\")"), 2, 2);
+            same_as_engine(&format!("=MX.LU({{2,1,1;4,3,3;8,7,9}},\"{part}\")"), 3, 3);
+        }
+        same_as_engine("=MX.LU(A)", 2, 2);
+        // A zero column: no pivot, U keeps the zero.
+        same_as_engine("=MX.LU({0,1;0,2},\"U\")", 2, 2);
+        assert!(derive("=MX.LU(A,\"Q\")", &book(), 0).is_err());
+    }
+
+    #[test]
+    fn cholesky_element_by_element() {
+        let steps = same_as_engine("=MX.CHOL({4,12,-16;12,37,-43;-16,-43,98})", 3, 3);
+        assert_eq!(result(&steps), vec![vec![2.0, 0.0, 0.0], vec![6.0, 1.0, 0.0], vec![-8.0, 5.0, 3.0]]);
+        same_as_engine("=MX.CHOL(A)", 2, 2);
+        assert!(latex(&steps).contains("\\sqrt{"));
+        let wb = book();
+        assert!(derive("=MX.CHOL({1,2;2,1})", &wb, 0).unwrap_err().contains("positive definite"));
+        assert!(derive("=MX.CHOL(D1:F3)", &wb, 0).unwrap_err().contains("symmetric"));
+    }
+
+    #[test]
+    fn eigenvalues_from_the_characteristic_polynomial() {
+        // λ² − 5λ + 5 = 0: (5 ± √5)/2.
+        let two = same_as_engine("=MX.EIG(A)", 2, 1);
+        assert!(two.iter().any(|s| s.caption == "The quadratic formula"));
+        // A whole-number root (1, 2 or 11) divided out.
+        let whole = same_as_engine("=MX.EIG({2,0,0;0,3,4;0,4,9})", 3, 1);
+        assert_eq!(result(&whole), vec![vec![11.0], vec![2.0], vec![1.0]]);
+        assert!(whole.iter().any(|s| s.caption.starts_with("A whole-number root")));
+        // No whole-number root, three real ones: the trigonometric formula.
+        let trig = same_as_engine("=MX.EIG({2,1,0;1,3,1;0,1,5})", 3, 1);
+        assert!(trig.iter().any(|s| s.caption.starts_with("Three real roots")));
+        same_as_engine("=MX.EIG(D1:F3)", 3, 1);
+        // Complex pairs: the cell shows real and imaginary parts.
+        let rot = same_as_engine("=MX.EIG({0,-1;1,0})", 2, 2);
+        assert_eq!(result(&rot), vec![vec![0.0, 1.0], vec![0.0, -1.0]]);
+        // λ³ = 2: one real root by Cardano, then a complex pair.
+        let cardano = same_as_engine("=MX.EIG({0,0,2;1,0,0;0,1,0})", 3, 2);
+        assert!(cardano.iter().any(|s| s.caption.starts_with("One real root")));
+        same_as_engine("=MX.EIG({0,0,1;1,0,0;0,1,0})", 3, 2);
+        same_as_engine("=MX.EIG({7})", 1, 1);
+        let tex = latex(&two);
+        assert!(tex.contains("\\lambda") && !tex.contains('λ'), "{tex}");
+        assert!(derive("=MX.EIG({1,0,0,0;0,1,0,0;0,0,1,0;0,0,0,1})", &book(), 0).unwrap_err().contains("3×3"));
+    }
+
+    #[test]
+    fn eigenvectors_as_null_spaces() {
+        same_as_engine("=MX.EIGVEC(A)", 2, 2);
+        same_as_engine("=MX.EIGVEC({2,0,0;0,3,4;0,4,9})", 3, 3);
+        same_as_engine("=MX.EIGVEC({2,1,0;1,3,1;0,1,5})", 3, 3);
+        same_as_engine("=MX.EIGVEC({4,1;1,4})", 2, 2);
+        // A repeated eigenvalue: any orthonormal basis.
+        let repeated = derive("=MX.EIGVEC({2,0;0,2})", &book(), 0).unwrap();
+        assert!(repeated.iter().any(|s| s.caption.starts_with("A repeated eigenvalue")));
+        assert!(derive("=MX.EIGVEC(D1:F3)", &book(), 0).unwrap_err().contains("symmetric"));
     }
 
     #[test]
