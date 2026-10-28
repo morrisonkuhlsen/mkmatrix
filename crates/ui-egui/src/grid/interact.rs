@@ -221,7 +221,10 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
             return;
         }
         // The + on a column heading's edge inserts a column there (a drag from it still resizes).
+        // It isn't drawn while a cell is being edited, so it doesn't answer then either: a click
+        // there points at the column, and an insert would leave the edit on a cell that moved.
         if primary_clicked
+            && app.editor.is_none()
             && let Some(col) = on_insert_col_button(geo, sh, p)
             && let Some(next) = col.checked_add(1).filter(|&n| n < mkmatrix_engine::core::MAX_COLS)
         {
@@ -229,6 +232,7 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
             return;
         }
         if primary_clicked
+            && app.editor.is_none()
             && let Some(row) = on_insert_row_button(geo, sh, p)
             && let Some(next) = row.checked_add(1).filter(|&n| n < mkmatrix_engine::core::MAX_ROWS)
         {
@@ -841,9 +845,12 @@ pub(super) fn paint_freeze_handles(p: &Painter, geo: &Geo, sh: &Sheet, drag: &Dr
 
 /// Radius of the insert-column button on a column heading's edge.
 pub(super) const INSERT_PLUS_R: f32 = 4.5;
+/// The gap between the button and the headings' outer edge, so its ring (and stroke) is drawn
+/// whole instead of cut by the bar above (or the window's edge, for rows).
+const INSERT_PLUS_INSET: f32 = 1.5;
 /// The band at the top of the column headings the button sits in and answers in: the edge below
 /// it keeps its resize drag and autofit double-click, a Table heading its filter button.
-const INSERT_PLUS_BAND: f32 = 8.0;
+const INSERT_PLUS_BAND: f32 = INSERT_PLUS_INSET + INSERT_PLUS_R + 3.5;
 
 /// The insert-column button the pointer at `p` (sheet coordinates) brings up: on the column
 /// headings within reach of an edge, the column a new one goes after and the button's centre.
@@ -857,7 +864,7 @@ pub(super) fn insert_col_button(geo: &Geo, sh: &Sheet, p: Pos2) -> Option<(u32, 
         Some(before) if (p.x - geo.x(sh, c)).abs() < (right - p.x).abs() => (before, geo.x(sh, c)),
         _ => (c, right),
     };
-    ((p.x - edge).abs() <= 10.0 && sh.col_width(col) > 0.0).then(|| (col, pos2(edge, geo.head_top() + INSERT_PLUS_R + 0.5)))
+    ((p.x - edge).abs() <= 10.0 && sh.col_width(col) > 0.0).then(|| (col, pos2(edge, geo.head_top() + INSERT_PLUS_INSET + INSERT_PLUS_R)))
 }
 
 /// Whether `p` is on the insert-column button itself (not just near the edge that shows it).
@@ -879,7 +886,7 @@ pub(super) fn insert_row_button(geo: &Geo, sh: &Sheet, p: Pos2) -> Option<(u32, 
         Some(before) if (p.y - geo.y(sh, r)).abs() < (bottom - p.y).abs() => (before, geo.y(sh, r)),
         _ => (r, bottom),
     };
-    ((p.y - edge).abs() <= 8.0 && sh.row_height(row) > 0.0).then(|| (row, pos2(geo.head_left() + INSERT_PLUS_R + 0.5, edge)))
+    ((p.y - edge).abs() <= 8.0 && sh.row_height(row) > 0.0).then(|| (row, pos2(geo.head_left() + INSERT_PLUS_INSET + INSERT_PLUS_R, edge)))
 }
 
 /// Whether `p` is on the insert-row button itself.

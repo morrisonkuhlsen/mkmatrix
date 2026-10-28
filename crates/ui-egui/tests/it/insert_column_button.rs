@@ -71,6 +71,20 @@ fn a_click_on_the_edge_below_the_plus_inserts_nothing() {
 }
 
 #[test]
+fn the_plus_does_nothing_while_a_cell_is_being_edited() {
+    // #20: the + isn't drawn while editing, but a click there still inserted a column and left
+    // the edit on a cell that had moved.
+    let mut h = harness();
+    let at = edge(&h, 0);
+    h.state_mut().begin_edit(Some("=SUM(".into()), false);
+    h.run_steps(2);
+    click(&mut h, at);
+    let sheet = h.state().session.active().unwrap().wb.active().unwrap().clone();
+    let row: Vec<String> = (0..3).map(|c| sheet.value(CellRef::new(0, c)).display()).collect();
+    assert_eq!(row, ["A", "B", "C"], "no column inserted");
+}
+
+#[test]
 fn the_plus_on_a_row_heading_edge_inserts_a_row_there() {
     let mut session = Session::new();
     session.new_workbook();
