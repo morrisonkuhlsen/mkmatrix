@@ -244,7 +244,11 @@ fn roots_by_hand(m: &Mat, shown: &Math, steps: &mut Vec<Step>) -> Vec<Complex> {
         _ => cubic(&coef, scale, steps),
     };
     roots.iter_mut().for_each(|z| *z = tidy_root(*z, scale));
-    roots.sort_by(|x, y| y.0.total_cmp(&x.0).then(y.1.total_cmp(&x.1)));
+    // Real parts equal but for rounding noise (a real root beside a complex pair with the same
+    // real part) are ordered by their imaginary parts, as the cell orders them.
+    let q = 1e-9 * scale.max(f64::MIN_POSITIVE);
+    let real = |x: f64| (x / q).round();
+    roots.sort_by(|x, y| real(y.0).total_cmp(&real(x.0)).then(y.1.total_cmp(&x.1)));
     roots
 }
 
@@ -269,8 +273,11 @@ fn cubic(coef: &[f64], scale: f64, steps: &mut Vec<Step>) -> Vec<Complex> {
         steps.push(Step::new("No whole-number root. With λ = t − b/3, the λ² term goes", row(depressed)));
         let disc = (q / 2.0).powi(2) + (p / 3.0).powi(3);
         let noise = 1e-12 * scale.max(1.0).powi(6);
-        if disc <= noise {
-            let ts: Vec<f64> = if p.abs() < 1e-14 * scale.max(1.0).powi(2) {
+        let triple = p.abs() < 1e-14 * scale.max(1.0).powi(2);
+        // The trigonometric formula needs p < 0: with p > 0 the roots are one real and a complex
+        // pair whatever the discriminant's size, and √(−p/3) would be NaN.
+        if disc <= noise && (p < 0.0 || triple) {
+            let ts: Vec<f64> = if triple {
                 vec![0.0; 3]
             } else {
                 let r = 2.0 * (-p / 3.0).sqrt();

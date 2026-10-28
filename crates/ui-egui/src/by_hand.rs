@@ -913,6 +913,11 @@ mod tests {
         assert!(cardano.iter().any(|s| s.caption.starts_with("One real root")));
         same_as_engine("=MX.EIG({0,0,1;1,0,0;0,1,0})", 3, 2);
         same_as_engine("=MX.EIG({7})", 1, 1);
+        // #11: p > 0 with a discriminant under the noise floor is still a complex pair, not NaN.
+        for m in ["{50.5,-0.5,0;0.5,50.5,0;0,0,50.5}", "{10.5,-0.1,0;0.1,10.5,0;0,0,10.5}", "{0.5,-0.001,0;0.001,0.5,0;0,0,0.5}"] {
+            let steps = same_as_engine(&format!("=MX.EIG({m})"), 3, 2);
+            assert!(!steps.iter().any(|s| s.caption.starts_with("Three real roots")), "{m}");
+        }
         let tex = latex(&two);
         assert!(tex.contains("\\lambda") && !tex.contains('λ'), "{tex}");
         assert!(derive("=MX.EIG({1,0,0,0;0,1,0,0;0,0,1,0;0,0,0,1})", &book(), 0).unwrap_err().contains("3×3"));
