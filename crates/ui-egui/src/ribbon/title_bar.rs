@@ -1,5 +1,6 @@
 use super::controls::{act, control_keytip};
 use super::*;
+use crate::widgets::{icon_button_mono, small_button_mono};
 
 /// macOS draws the window into the title bar (`with_fullsize_content_view`) and AppKit paints the
 /// traffic lights itself, centred in its standard 28 pt title-bar band. Moving them would take
@@ -62,12 +63,12 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                 app.toggle_autosave();
             }
             ui.add_space(6.0);
-            let __k = icon_button(ui, Icon::Home, t.text_dim, "Home", vec2(26.0, ch));
+            let __k = icon_button_mono(ui, Icon::Home, t.text_dim, "Home", vec2(26.0, ch));
             control_keytip(app, ui, &__k, "start");
             if __k.clicked() {
                 app.open_dialog("start", json!({}));
             }
-            if icon_button(ui, Icon::Save, t.text_dim, "Save", vec2(26.0, ch)).clicked()
+            if icon_button_mono(ui, Icon::Save, t.text_dim, "Save", vec2(26.0, ch)).clicked()
                 // File operations must include the cell the user is still editing (as the File > Save menu item already does).
                 && app.commit_edit(0, 0, false, false)
             {
@@ -78,12 +79,12 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
             let can_undo = mkmatrix_engine::cmd::can_undo(&app.session).is_ok();
             let can_redo = mkmatrix_engine::cmd::can_redo(&app.session).is_ok();
             // Named and marked enabled or not for assistive technology (and the UI tests).
-            let undo = icon_button(ui, Icon::Undo, if can_undo { t.text_dim } else { t.text_disabled }, "Undo", vec2(26.0, ch));
+            let undo = icon_button_mono(ui, Icon::Undo, if can_undo { t.text_dim } else { t.text_disabled }, "Undo", vec2(26.0, ch));
             undo.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, can_undo, "Undo"));
             if undo.clicked() && can_undo {
                 app.run_or_alert("edit.undo", json!({}));
             }
-            let undo_list = icon_button(ui, Icon::Chevron, t.text_dim, "Undo list", vec2(14.0, ch));
+            let undo_list = icon_button_mono(ui, Icon::Chevron, t.text_dim, "Undo list", vec2(14.0, ch));
             egui::Popup::menu(&undo_list).show(|ui| {
                 let labels: Vec<String> = if can_undo {
                     app.session.active().map(|d| d.undo.iter().rev().take(20).map(|e| e.label.clone()).collect()).unwrap_or_default()
@@ -99,12 +100,12 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                     }
                 }
             });
-            let redo = icon_button(ui, Icon::Redo, if can_redo { t.text_dim } else { t.text_disabled }, "Redo", vec2(26.0, ch));
+            let redo = icon_button_mono(ui, Icon::Redo, if can_redo { t.text_dim } else { t.text_disabled }, "Redo", vec2(26.0, ch));
             redo.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, can_redo, "Redo"));
             if redo.clicked() && can_redo {
                 app.run_or_alert("edit.redo", json!({}));
             }
-            let more = icon_button(ui, Icon::More, t.text_dim, "More commands", vec2(26.0, ch));
+            let more = icon_button_mono(ui, Icon::More, t.text_dim, "More commands", vec2(26.0, ch));
             egui::Popup::menu(&more).show(|ui| {
                 for (label, id) in [
                     ("New Workbook", "file.new"),
@@ -124,12 +125,12 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
             let left_end = ui.min_rect().right();
             let right = ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(8.0);
-                let __k = icon_button(ui, Icon::Search, t.text_dim, "Search commands", vec2(28.0, ch));
+                let __k = icon_button_mono(ui, Icon::Search, t.text_dim, "Search commands", vec2(28.0, ch));
                 control_keytip(app, ui, &__k, "commandSearch");
                 if __k.clicked() {
                     app.open_dialog("commandSearch", json!({}));
                 }
-                let share = small_button(ui, Icon::Share, "Share", "Share: export or save a copy", true);
+                let share = small_button_mono(ui, Icon::Share, "Share", "Share: export or save a copy", true);
                 egui::Popup::menu(&share).show(|ui| {
                     if ui.button("Export as PDF…").clicked() {
                         app.run_or_alert("file.exportPdf", json!({}));
@@ -142,7 +143,7 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                         }
                     }
                 });
-                let __k = icon_button(ui, Icon::Comment, t.text_dim, "Comments", vec2(28.0, ch));
+                let __k = icon_button_mono(ui, Icon::Comment, t.text_dim, "Comments", vec2(28.0, ch));
                 control_keytip(app, ui, &__k, "comments");
                 if __k.clicked() {
                     app.open_dialog("comments", json!({}));
@@ -150,7 +151,7 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                 // Quick light/dark switch (#194); right-click offers System as well. The same
                 // choice lives in File › Display theme and the View tab.
                 let lang = app.ui.language;
-                let theme = icon_button(ui, Icon::Appearance, t.text_dim, "Dark Mode", vec2(28.0, 26.0));
+                let theme = icon_button_mono(ui, Icon::Appearance, t.text_dim, "Dark Mode", vec2(28.0, 26.0));
                 let dark = ui.ctx().theme() == egui::Theme::Dark;
                 theme.widget_info(|| egui::WidgetInfo::selected(egui::Role::CheckBox, true, dark, lang.tr("Dark Mode")));
                 if theme.clicked() {

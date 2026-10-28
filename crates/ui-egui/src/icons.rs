@@ -367,11 +367,13 @@ impl G<'_> {
 struct Palette {
     accent: Color32,
     paper: Color32,
+    /// The action part in the main colour too: one colour throughout.
+    mono: bool,
 }
 
 impl Palette {
     fn of(t: &Tokens) -> Palette {
-        Palette { accent: t.accent, paper: t.paper }
+        Palette { accent: t.accent, paper: t.paper, mono: false }
     }
 }
 
@@ -391,6 +393,11 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, c: Color32) {
     paint_with(p, rect, icon, c, &Palette::of(&Tokens::get(p.ctx())));
 }
 
+/// Draws `icon` in colour `c` alone, its action part included (the title bar's icons).
+pub fn paint_mono(p: &Painter, rect: Rect, icon: Icon, c: Color32) {
+    paint_with(p, rect, icon, c, &Palette { mono: true, ..Palette::of(&Tokens::get(p.ctx())) });
+}
+
 /// Draws `icon` on the sheet, which stays white in both themes, so with the light palette.
 pub fn paint_on_sheet(p: &Painter, rect: Rect, icon: Icon, c: Color32) {
     paint_with(p, rect, icon, c, &Palette::of(&Tokens::light()));
@@ -408,7 +415,7 @@ fn paint_with(p: &Painter, rect: Rect, icon: Icon, c: Color32, pal: &Palette) {
     let r = Rect::from_center_size(rect.center(), vec2(side, side));
     let g = G { p, r, s: side / 16.0 };
     let muted = c.gamma_multiply(0.45);
-    let a = pal.accent;
+    let a = if pal.mono { c } else { pal.accent };
     let wash = a.gamma_multiply(0.35);
     let (down, up, left, right) = (FRAC_PI_2, -FRAC_PI_2, PI, 0.0);
     // A page with a folded corner, the shape documents share.
@@ -1005,4 +1012,38 @@ pub const LIBRARY: &[(&str, Icon)] = &[
 
 pub fn from_name(name: &str) -> Option<Icon> {
     LIBRARY.iter().find(|(n, _)| n.eq_ignore_ascii_case(name)).map(|(_, i)| *i)
+}
+
+#[cfg(test)]
+mod mono_tests {
+    use super::*;
+
+    /// Every shape `draw` paints, as its debug text (colours included), and the theme's accent.
+    fn painted(draw: impl Fn(&Painter)) -> (String, String) {
+        let mut fonts_ready = false;
+        let mut h = egui_kittest::Harness::new_ui(move |ui| {
+            if !fonts_ready {
+                ui.ctx().set_fonts(crate::theme::font_definitions());
+                fonts_ready = true;
+                return;
+            }
+            draw(ui.painter());
+        });
+        h.run_steps(2);
+        (format!("{:?}", h.output().shapes), format!("{:?}", Tokens::get(&h.ctx).accent))
+    }
+
+    #[test]
+    /// The title bar's icons are one colour: `paint_mono` never draws the accent, where `paint`
+    /// does for an icon whose action part is accented.
+    fn paint_mono_draws_in_one_colour() {
+        let ink = Color32::from_rgb(0x55, 0x55, 0x55);
+        let rect = Rect::from_min_size(egui::pos2(0.0, 0.0), vec2(16.0, 16.0));
+        let (shapes, accent) = painted(|p| paint(p, rect, Icon::Save, ink));
+        assert!(shapes.contains(&accent));
+        for &icon in Icon::ALL {
+            let (shapes, accent) = painted(|p| paint_mono(p, rect, icon, ink));
+            assert!(!shapes.contains(&accent), "{icon:?}");
+        }
+    }
 }
