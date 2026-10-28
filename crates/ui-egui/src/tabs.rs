@@ -140,6 +140,8 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                     .filter(|(_, s)| s.visibility == Visibility::Visible)
                     .map(|(i, s)| (i, s.name.clone(), s.tab_color.and_then(|c| c.resolve(&d.wb.theme)), i == d.wb.active_sheet()))
                     .collect();
+            // The sheets selected together (Ctrl/Shift+click), if more than one.
+            let group = d.sheet_group.clone();
             // Keep worksheet tabs in their own horizontally scrollable viewport. As in Excel, the
             // tabs get up to 60% of the bar and the grid's horizontal scrollbar the rest; a strip
             // that needs less shrinks to its tabs, so New sheet (+) sits right after the last one.
@@ -194,8 +196,12 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                                 // The active tab is the sheet's own colour from the bar's top edge down, so
                                 // it runs on from the grid with no line between; its teal name sits at the
                                 // bar's middle. No outline, no underline.
+                                // A sheet selected with the active one is lit too, in the accent's soft tint.
+                                let grouped = group.contains(&i);
                                 if active {
                                     ui.painter().rect_filled(r.expand2(vec2(0.0, 1.0)), 0.0, t.grid_bg);
+                                } else if grouped {
+                                    ui.painter().rect_filled(r, 0.0, t.accent_soft);
                                 } else if resp.hovered() {
                                     ui.painter().rect_filled(r, 0.0, t.hover);
                                 }
@@ -220,11 +226,20 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                                         app.grid.renaming_tab = None;
                                     }
                                 } else {
-                                    ui.painter().text(r.center(), Align2::CENTER_CENTER, &name, font, if active { t.accent } else { t.text });
+                                    let ink = if active || grouped { t.accent } else { t.text };
+                                    ui.painter().text(r.center(), Align2::CENTER_CENTER, &name, font, ink);
                                 }
                                 // A right-click activates the tab too, as in Excel, so the menu's sheet commands (Protect
                                 // Sheet, Select All Sheets) act on the sheet that was clicked rather than the one that was active.
-                                if resp.clicked() || (resp.secondary_clicked() && !active) {
+                                // Ctrl (Cmd on macOS) adds the sheet to the ones selected or takes it out;
+                                // Shift selects every sheet from the active one to it.
+                                let m = ui.input(|inp| inp.modifiers);
+                                if resp.clicked() && (m.command || m.shift) {
+                                    if app.editor.is_none() || app.commit_edit(0, 0, false, false) {
+                                        let how = if m.shift { "extend" } else { "add" };
+                                        app.run_or_alert("sheet.select", json!({"sheet": i, how: true}));
+                                    }
+                                } else if resp.clicked() || (resp.secondary_clicked() && !active && !grouped) {
                                     activate_sheet(app, i);
                                 }
                                 if resp.double_clicked() {
@@ -250,8 +265,10 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                                     if ui.button(app.ui.language.tr("Insert Sheet")).clicked() {
                                         app.run_or_alert("home.insertSheet", json!({"before": i}));
                                     }
+                                    // On a sheet of a group, Delete, Tab Color and Hide act on the whole group.
+                                    let target = if grouped { json!({}) } else { json!({"sheet": i}) };
                                     if ui.button(app.ui.language.tr("Delete")).clicked() {
-                                        app.run_or_alert("home.deleteSheet", json!({"sheet": i}));
+                                        app.run_or_alert("home.deleteSheet", target.clone());
                                     }
                                     if ui.button(app.ui.language.tr("Rename")).clicked() {
                                         app.grid.renaming_tab = Some(i);
@@ -266,13 +283,15 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                                     ui.menu_button(app.ui.language.tr("Tab Color"), |ui| {
                                         let colors = app.session.active().map(|d| d.wb.theme.colors).unwrap_or_default();
                                         if let Some(c) = crate::widgets::color_palette_fixed(ui, &colors, app.ui.language.tr("No Color")) {
-                                            app.run_or_alert("sheet.tabColor", json!({"sheet": i, "color": c}));
+                                            let mut p = target.clone();
+                                            p["color"] = json!(c);
+                                            app.run_or_alert("sheet.tabColor", p);
                                             ui.close();
                                         }
                                     });
                                     ui.separator();
                                     if ui.button(app.ui.language.tr("Hide")).clicked() {
-                                        app.run_or_alert("sheet.hide", json!({"sheet": i}));
+                                        app.run_or_alert("sheet.hide", target.clone());
                                     }
                                     if ui.button(app.ui.language.tr("Unhide…")).clicked() {
                                         app.run_or_alert("sheet.unhide", json!({}));
@@ -290,6 +309,11 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                                         app.open_dialog("protectSheet", json!({}));
                                     }
                                     if ui.button(app.ui.language.tr("Select All Sheets")).clicked() {
+                                        app.run_or_alert("sheet.selectAll", json!({}));
+                                        ui.close();
+                                    }
+                                    if !group.is_empty() && ui.button(app.ui.language.tr("Ungroup Sheets")).clicked() {
+                                        app.run_or_alert("sheet.ungroup", json!({}));
                                         ui.close();
                                     }
                                 });

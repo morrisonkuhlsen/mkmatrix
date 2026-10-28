@@ -741,6 +741,8 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Find" => "Localizar",
         "Replace" => "Substituir",
         "Find what:" => "Localizar:",
+        "Ungroup Sheets" => "Desagrupar Planilhas",
+        "[Group]" => "[Grupo]",
         "Replace with:" => "Substituir por:",
         "Match case" => "Diferenciar maiúsculas e minúsculas",
         "Match entire cell contents" => "Coincidir conteúdo da célula inteira",
