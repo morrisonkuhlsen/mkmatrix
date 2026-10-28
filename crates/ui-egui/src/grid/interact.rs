@@ -849,8 +849,9 @@ pub(super) const INSERT_PLUS_R: f32 = 4.5;
 /// whole instead of cut by the bar above (or the window's edge, for rows).
 const INSERT_PLUS_INSET: f32 = 1.5;
 /// The band at the top of the column headings the button sits in and answers in: the edge below
-/// it keeps its resize drag and autofit double-click, a Table heading its filter button.
-const INSERT_PLUS_BAND: f32 = INSERT_PLUS_INSET + INSERT_PLUS_R + 3.5;
+/// it keeps its resize drag and autofit double-click, a Table heading its filter button. It stays
+/// 8 points deep though the ring moved down: a deeper band takes the edge's mid-heading grip.
+const INSERT_PLUS_BAND: f32 = INSERT_PLUS_INSET + INSERT_PLUS_R + 2.0;
 
 /// The insert-column button the pointer at `p` (sheet coordinates) brings up: on the column
 /// headings within reach of an edge, the column a new one goes after and the button's centre.
