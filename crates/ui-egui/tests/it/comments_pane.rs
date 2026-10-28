@@ -80,9 +80,11 @@ fn the_pane_does_not_grow_on_its_own_and_keeps_a_manual_resize() {
 fn buttons_with_tip(h: &mut Harness, tip: &str) -> usize {
     h.ctx.all_styles_mut(|s| s.interaction.tooltip_delay = 0.0);
     let (mut count, mut inside) = (0, false);
+    // Along the toolbar's row of buttons.
+    let y = h.get_by_role_and_label(egui::accesskit::Role::Tab, "Home").rect().bottom() + 2.0 + 15.0;
     let mut x = 2.0;
     while x < WIDTH {
-        h.input_mut().events.push(Event::PointerMoved(pos2(x, 120.0)));
+        h.input_mut().events.push(Event::PointerMoved(pos2(x, y)));
         h.run_steps(6);
         let shown = h.query_all_by_value(tip).next().is_some();
         if shown && !inside {

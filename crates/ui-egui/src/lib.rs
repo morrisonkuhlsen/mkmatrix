@@ -116,9 +116,6 @@ pub struct UiState {
     pub density: Density,
     /// Square brackets around each named matrix on the sheet (View › Matrix Brackets).
     pub matrix_brackets: bool,
-    /// The classic ribbon of tabs and named groups instead of the menu bar and single-row toolbar
-    /// (View › Classic Ribbon).
-    pub classic_ribbon: bool,
     /// The Calculation by Hand panel beside the sheet (View › Calculation by Hand).
     pub by_hand: bool,
 }
@@ -205,7 +202,6 @@ impl Default for UiState {
             numbered_columns: true,
             density: Density::Normal,
             matrix_brackets: true,
-            classic_ribbon: false,
             by_hand: false,
         }
     }

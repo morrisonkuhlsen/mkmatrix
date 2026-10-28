@@ -1018,7 +1018,6 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Matrix Brackets" => "Colchetes de Matriz",
         "Draw square brackets around each named matrix" => "Desenhar colchetes em volta de cada matriz nomeada",
         "Help" => "Ajuda",
-        "Classic Ribbon" => "Fita Clássica",
         "New Workbook" => "Nova Pasta de Trabalho",
         "New from Sample…" => "Novo a partir de Exemplo…",
         "Export as PDF…" => "Exportar como PDF…",

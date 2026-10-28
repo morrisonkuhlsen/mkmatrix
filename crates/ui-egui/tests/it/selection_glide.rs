@@ -20,7 +20,7 @@ fn app() -> SheetApp {
 }
 
 fn harness() -> Harness {
-    let mut h = crate::common::builder().with_size(egui::vec2(1200.0, 800.0)).with_step_dt(DT).build_ui_state(
+    let mut h = crate::common::builder().with_size(egui::vec2(1800.0, 800.0)).with_step_dt(DT).build_ui_state(
         |ui, app: &mut SheetApp| {
             let ctx = ui.ctx().clone();
             app.logic(&ctx);

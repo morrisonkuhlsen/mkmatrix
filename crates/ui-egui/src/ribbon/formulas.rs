@@ -71,7 +71,7 @@ pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
     if __k.clicked() {
         app.open_dialog("nameManager", json!({}));
     }
-    ui.vertical(|ui| {
+    controls::stack(ui, |ui| {
         let __k = small_button(ui, Icon::Name, "Define Name", "Define Name", false);
         control_keytip(app, ui, &__k, "dialog:defineName");
         if __k.clicked() {
@@ -117,7 +117,7 @@ pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
         }
     });
     sep(ui, "Defined Names");
-    ui.vertical(|ui| {
+    controls::stack(ui, |ui| {
         if small_button(ui, Icon::Trace, "Trace Precedents", "Trace Precedents", false).clicked()
             && let Ok(r) = app.run("formulas.tracePrecedents", json!({}))
         {
@@ -132,7 +132,7 @@ pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
             app.grid.trace = None;
         }
     });
-    ui.vertical(|ui| {
+    controls::stack(ui, |ui| {
         let __k = small_button(ui, Icon::Fx, "Show Formulas", "Show Formulas", false);
         control_keytip(app, ui, &__k, "formulas.showFormulas");
         if __k.clicked() {
@@ -187,7 +187,7 @@ pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
             ],
         );
     });
-    ui.vertical(|ui| {
+    controls::stack(ui, |ui| {
         let __k = small_button(ui, Icon::Calc, "Calculate Now", "Calculate Now (F9)", false);
         control_keytip(app, ui, &__k, "formulas.calculateNow");
         if __k.clicked() {
