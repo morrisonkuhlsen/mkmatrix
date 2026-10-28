@@ -457,6 +457,7 @@ pub(super) fn ok_cancel(ui: &mut egui::Ui, confirm: &mut bool, open: &mut bool) 
 
 fn form(ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool, open: &mut bool) {
     form_fields(ui, d);
+    super::kit::rule(ui);
     ok_cancel(ui, confirm, open);
 }
 
@@ -501,102 +502,112 @@ fn track_pick(pick: &mut RefPick, r: &egui::Response, typed: bool) {
     }
 }
 
-/// Draws a dialog's `fields`, editing its values.
+/// Draws a dialog's `fields`, editing its values, in Format Cells' style: each field under its
+/// label (muted, so a long label never pushes the fields out of line), choices as round marks,
+/// notes as hints.
 pub(super) fn form_fields(ui: &mut egui::Ui, d: &mut Dialog) {
+    use super::kit::option_row;
     // Field labels, choices and notes are English source strings, translated as they are drawn.
     let lang = crate::i18n::current(ui.ctx());
-    egui::Grid::new("form").num_columns(1).spacing(vec2(8.0, 6.0)).show(ui, |ui| {
-        for f in d.fields.clone() {
-            match f {
-                Field::Text { key, label } => {
-                    ui.vertical(|ui| {
-                        let label = ui.label(lang.tr(label));
-                        let mut s = d
-                            .values
-                            .get(key)
-                            .map(|v| v.as_str().map(str::to_string).unwrap_or_else(|| if v.is_null() { String::new() } else { v.to_string() }))
-                            .unwrap_or_default();
-                        let multiline = key == "text";
-                        let r = if multiline {
-                            ui.add(egui::TextEdit::multiline(&mut s).desired_rows(4).desired_width(320.0)).labelled_by(label.id)
-                        } else {
-                            ui.add(egui::TextEdit::singleline(&mut s).desired_width(320.0)).labelled_by(label.id)
-                        };
-                        take_first_focus(d, &r);
-                        if r.changed() {
-                            d.values.insert(key.into(), json!(s));
-                        }
-                        if let Some(pick) = d.pick.as_mut().filter(|pick| pick.key == key) {
-                            track_pick(pick, &r, r.changed());
-                        }
-                    });
+    let dim = crate::theme::Tokens::get(ui.ctx()).text_dim;
+    let label = |ui: &mut egui::Ui, text: &str| -> egui::Id {
+        ui.add(egui::Label::new(egui::RichText::new(text).font(crate::theme::ui_font(12.5)).color(dim)).wrap()).id
+    };
+    let field_w = ui.available_width().max(300.0);
+    ui.spacing_mut().item_spacing.y = 4.0;
+    let mut after_check = None;
+    for f in d.fields.clone() {
+        // Checkboxes in a run sit close, as one list; anything else gets room above it.
+        let check = matches!(f, Field::Check { .. });
+        match after_check {
+            Some(true) if check => {}
+            Some(_) => ui.add_space(8.0),
+            None => {}
+        }
+        after_check = Some(check);
+        match f {
+            Field::Text { key, label: text } => {
+                let id = label(ui, lang.tr(text));
+                let mut s = d
+                    .values
+                    .get(key)
+                    .map(|v| v.as_str().map(str::to_string).unwrap_or_else(|| if v.is_null() { String::new() } else { v.to_string() }))
+                    .unwrap_or_default();
+                let multiline = key == "text";
+                let r = if multiline {
+                    ui.add(egui::TextEdit::multiline(&mut s).desired_rows(4).desired_width(field_w)).labelled_by(id)
+                } else {
+                    ui.add(egui::TextEdit::singleline(&mut s).desired_width(field_w)).labelled_by(id)
+                };
+                take_first_focus(d, &r);
+                if r.changed() {
+                    d.values.insert(key.into(), json!(s));
                 }
-                Field::Password { key, label } => {
-                    // Masked as typed (Excel shows dots); "Show password" reveals it on purpose.
-                    ui.vertical(|ui| {
-                        let label = ui.label(lang.tr(label));
-                        let mut s = d.values.get(key).and_then(Json::as_str).unwrap_or_default().to_string();
-                        if ui.add(egui::TextEdit::singleline(&mut s).password(!d.show_password).desired_width(320.0)).labelled_by(label.id).changed()
-                        {
-                            d.values.insert(key.into(), json!(s));
-                        }
-                        ui.checkbox(&mut d.show_password, lang.tr("Show password"));
-                    });
+                if let Some(pick) = d.pick.as_mut().filter(|pick| pick.key == key) {
+                    track_pick(pick, &r, r.changed());
                 }
-                Field::Number { key, label } => {
-                    ui.horizontal(|ui| {
-                        let label = ui.label(lang.tr(label));
-                        let mut n = d.values.get(key).and_then(Json::as_f64).unwrap_or(0.0);
-                        // Typed values count straight away: otherwise Enter or OK in the same frame
-                        // confirms the old value, because a number field only commits when it loses focus.
-                        let r = ui.add(egui::DragValue::new(&mut n).speed(0.5).update_while_editing(true)).labelled_by(label.id);
-                        take_first_focus(d, &r);
-                        if r.changed() {
-                            d.values.insert(key.into(), json!(n));
-                        }
-                    });
+            }
+            Field::Password { key, label: text } => {
+                // Masked as typed (Excel shows dots); "Show password" reveals it on purpose.
+                let id = label(ui, lang.tr(text));
+                let mut s = d.values.get(key).and_then(Json::as_str).unwrap_or_default().to_string();
+                if ui.add(egui::TextEdit::singleline(&mut s).password(!d.show_password).desired_width(field_w)).labelled_by(id).changed() {
+                    d.values.insert(key.into(), json!(s));
                 }
-                Field::Choice { key, label, options } => {
-                    ui.vertical(|ui| {
-                        let field_label = ui.label(egui::RichText::new(lang.tr(label)).strong());
-                        let cur = d.values.get(key).and_then(Json::as_str).unwrap_or("").to_string();
-                        if d.name == "dataValidation" {
-                            let selected = options.iter().find(|(val, _)| *val == cur).map(|(_, text)| lang.tr(text)).unwrap_or("");
-                            craft_ui::ComboBox::from_id_salt(("dataValidation", key))
-                                .selected_text(selected)
-                                .width(300.0)
-                                .show_ui(ui, |ui| {
-                                    for (val, text) in options {
-                                        if ui.selectable_label(cur == val, lang.tr(text)).clicked() {
-                                            d.set_value(key, json!(val));
-                                        }
-                                    }
-                                })
-                                .response
-                                .labelled_by(field_label.id);
-                        } else {
+                ui.checkbox(&mut d.show_password, lang.tr("Show password"));
+            }
+            Field::Number { key, label: text } => {
+                ui.horizontal(|ui| {
+                    let id = label(ui, lang.tr(text));
+                    let mut n = d.values.get(key).and_then(Json::as_f64).unwrap_or(0.0);
+                    // Typed values count straight away: otherwise Enter or OK in the same frame
+                    // confirms the old value, because a number field only commits when it loses focus.
+                    let r = ui.add_sized(vec2(96.0, 24.0), egui::DragValue::new(&mut n).speed(0.5).update_while_editing(true)).labelled_by(id);
+                    take_first_focus(d, &r);
+                    if r.changed() {
+                        d.values.insert(key.into(), json!(n));
+                    }
+                });
+            }
+            Field::Choice { key, label: text, options } => {
+                let id = label(ui, lang.tr(text));
+                let cur = d.values.get(key).and_then(Json::as_str).unwrap_or("").to_string();
+                if d.name == "dataValidation" {
+                    let selected = options.iter().find(|(val, _)| *val == cur).map(|(_, text)| lang.tr(text)).unwrap_or("");
+                    craft_ui::ComboBox::from_id_salt(("dataValidation", key))
+                        .selected_text(selected)
+                        .width(field_w)
+                        .show_ui(ui, |ui| {
                             for (val, text) in options {
-                                if ui.radio(cur == val, lang.tr(text)).clicked() {
+                                if ui.selectable_label(cur == val, lang.tr(text)).clicked() {
                                     d.set_value(key, json!(val));
                                 }
                             }
+                        })
+                        .response
+                        .labelled_by(id);
+                } else {
+                    ui.spacing_mut().item_spacing.y = 2.0;
+                    for (val, text) in options {
+                        if option_row(ui, lang.tr(text), cur == val, field_w).clicked() {
+                            d.set_value(key, json!(val));
                         }
-                    });
-                }
-                Field::Check { key, label } => {
-                    let mut b = d.values.get(key).and_then(Json::as_bool).unwrap_or(false);
-                    if ui.checkbox(&mut b, lang.tr(label)).changed() {
-                        d.values.insert(key.into(), json!(b));
                     }
-                }
-                Field::Note(t) => {
-                    // A note can carry user data (a URL, a file or sheet name); `tr` reads a `|` as a
-                    // context separator, so such a note is shown as it is.
-                    let text = if t.contains('|') { t.as_str() } else { lang.tr(&t) };
-                    ui.label(egui::RichText::new(text).small());
+                    ui.spacing_mut().item_spacing.y = 4.0;
                 }
             }
-            ui.end_row();
+            Field::Check { key, label: text } => {
+                let mut b = d.values.get(key).and_then(Json::as_bool).unwrap_or(false);
+                if ui.checkbox(&mut b, lang.tr(text)).changed() {
+                    d.values.insert(key.into(), json!(b));
+                }
+            }
+            Field::Note(t) => {
+                // A note can carry user data (a URL, a file or sheet name); `tr` reads a `|` as a
+                // context separator, so such a note is shown as it is.
+                let text = if t.contains('|') { t.as_str() } else { lang.tr(&t) };
+                label(ui, text);
+            }
         }
-    });
+    }
 }
