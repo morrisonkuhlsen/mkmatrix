@@ -744,6 +744,8 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Search" => "Pesquisar",
         "No functions match your search." => "Nenhuma função corresponde à pesquisa.",
         "{count} functions" => "{count} funções",
+        "{count} commands" => "{count} comandos",
+        "No commands match your search." => "Nenhum comando corresponde à pesquisa.",
         "Within:" => "Em:",
         "Sheet" => "Planilha",
         "Look in:" => "Examinar:",
