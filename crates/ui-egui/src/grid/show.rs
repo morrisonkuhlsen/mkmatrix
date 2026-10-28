@@ -599,7 +599,7 @@ pub(crate) fn paint_headers(
     // than the headings' numbers, never taller than the corner.
     // Set on whole pixels, so its strokes stay sharp on a 1x screen instead of straddling two.
     let size = (font.size * 1.35).min(corner.height() * 0.8).max(font.size).round();
-    let galley = p.layout_no_wrap("Ω".into(), theme::ui_bold(size), t.header_text);
+    let galley = p.layout_no_wrap("Ω".into(), theme::ui_font(size), t.header_text);
     let at = egui::emath::GuiRounding::round_to_pixels(corner.center() - galley.size() / 2.0, p.pixels_per_point());
     p.galley(at, galley, t.header_text);
     p.line_segment([pos2(r.left(), geo.cells.top() - 0.5), pos2(r.right(), geo.cells.top() - 0.5)], Stroke::new(1.0, t.header_line));
