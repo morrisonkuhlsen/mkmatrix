@@ -4,7 +4,7 @@ use super::charts::{recommended_charts, select_data};
 use super::command_search::command_search;
 use super::cond_format_rules::manage_rules;
 use super::data::{advanced_filter_form, data_validation_form, sort};
-use super::find::{find, go_to};
+use super::find::{find, go_to, go_to_special};
 use super::format_cells::format_cells;
 use super::insert_function::insert_function;
 use super::macros::macros;
@@ -116,7 +116,11 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
     let width = match d.name.as_str() {
         "formatCells" => 660.0,
         "about" => 660.0,
-        "insertFunction" | "commandSearch" | "nameManager" | "manageRules" | "journal" | "agents" | "macros" => 520.0,
+        "insertFunction" => 780.0,
+        "find" => 620.0,
+        "goTo" => 440.0,
+        "goToSpecial" => 480.0,
+        "commandSearch" | "nameManager" | "manageRules" | "journal" | "agents" | "macros" => 520.0,
         "recommendedCharts" => 600.0,
         "analysisToolPak" => 420.0,
         "solver" => 460.0,
@@ -145,8 +149,9 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                 "dataValidation" => data_validation_form(ui, &mut d, &mut confirm, &mut open),
                 "advancedFilter" => advanced_filter_form(ui, &mut d, &mut confirm, &mut open),
                 "insertFunction" => insert_function(app, ui, &mut d, &mut confirm),
-                "find" => find(app, ui, &mut d),
+                "find" => find(app, ui, &mut d, &mut open),
                 "goTo" => go_to(app, ui, &mut d, &mut confirm),
+                "goToSpecial" => go_to_special(app, ui, &mut d, &mut confirm, &mut open),
                 "zoom" => zoom(ui, &mut d, &mut confirm, &mut open),
                 "sort" => sort(app, ui, &mut d, &mut confirm),
                 "nameManager" => name_manager(app, ui, &mut d, &mut open),
