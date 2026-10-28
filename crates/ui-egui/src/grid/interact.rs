@@ -10,7 +10,7 @@ use super::*;
 
 /// How close (in points) a press must be to one of a selected object's sizing handles to resize
 /// it instead of moving it.
-pub(super) const OBJECT_RESIZE_RADIUS: f32 = 7.0;
+pub(super) const OBJECT_RESIZE_RADIUS: f32 = 10.0;
 
 /// The eight sizing handles of an object drawn at `r`: each one's point and the sides it moves.
 fn sizing_handles(r: egui::Rect) -> [(Pos2, (i8, i8)); 8] {
