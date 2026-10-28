@@ -1,5 +1,5 @@
-//! MK Matrix's actions on a selected matrix: a small floating bar beside a selected block of
-//! numbers. Naming it, transposing, inverting, its eigenvalues and SVD write the formula one column
+//! MK Matrix's actions on a selected matrix: a narrow floating column just past a selected block
+//! of numbers, in the gap before where its results go, so it never covers the labels above it. Naming it, transposing, inverting, its eigenvalues and SVD write the formula one column
 //! past the block (the result spills there); multiplying and solving start the formula, `=X@` or
 //! `=X\`, for the second matrix to be pointed at.
 
@@ -39,8 +39,9 @@ const ACTIONS: [Action; 8] = [
     Action { glyph: "Σ", tip: "Calculation by hand", square: false, kind: Kind::ByHand },
 ];
 
-/// Draws the bar above the selection's top-right corner (below it when there is no room above),
-/// when the selection is one block of numbers and nothing else is going on.
+/// Draws the column of actions just right of the selection, level with its top (left of it when
+/// there is no room on the right), when the selection is one block of numbers and nothing else is
+/// going on.
 pub(crate) fn show(app: &mut SheetApp, ctx: &egui::Context, selection: Rect, cells: Rect) {
     // Not while editing or dragging, nor while a fill's Auto Fill Options tag sits by the block.
     if app.editor.is_some()
@@ -64,16 +65,18 @@ pub(crate) fn show(app: &mut SheetApp, ctx: &egui::Context, selection: Rect, cel
     let reference = crate::matrices::on_sheet(&d.wb, d.wb.active_sheet()).into_iter().find(|(_, m)| *m == r).map_or_else(|| r.a1(), |(n, _)| n);
     let t = Tokens::get(ctx);
     let lang = app.ui.language;
-    let (bw, bh) = (30.0, 24.0);
-    let width = bw * ACTIONS.len() as f32 + 8.0;
-    let above = selection.top() - bh - 14.0;
-    let y = if above >= cells.top() { above } else { (selection.bottom() + 6.0).min(cells.bottom() - bh - 8.0) };
-    let x = (selection.right() - width).clamp(cells.left() + 4.0, (cells.right() - width - 4.0).max(cells.left()));
+    let (bw, bh) = (24.0, 22.0);
+    let (width, height) = (bw + 4.0, bh * ACTIONS.len() as f32 + 4.0);
+    // Clear of the matrix's bracket, which sits 3 points outside the block.
+    const GAP: f32 = 8.0;
+    let right = selection.right() + GAP;
+    let x = if right + width <= cells.right() - 4.0 { right } else { (selection.left() - GAP - width).max(cells.left() + 4.0) };
+    let y = selection.top().clamp(cells.top() + 4.0, (cells.bottom() - height - 4.0).max(cells.top()));
     let mut picked = None;
     egui::Area::new(egui::Id::unique("mkmatrix.matrix_actions")).order(egui::Order::Foreground).fixed_pos(pos2(x, y)).show(ctx, |ui| {
-        egui::Frame::NONE.fill(t.menu_bg).stroke(egui::Stroke::new(1.0, t.ribbon_border)).inner_margin(4.0).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 0.0;
+        egui::Frame::NONE.fill(t.menu_bg).stroke(egui::Stroke::new(1.0, t.ribbon_border)).inner_margin(2.0).show(ui, |ui| {
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 0.0;
                 for (i, a) in ACTIONS.iter().enumerate() {
                     let enabled = square || !a.square;
                     let (rect, resp) = ui.allocate_exact_size(vec2(bw, bh), if enabled { Sense::click() } else { Sense::hover() });
@@ -84,9 +87,9 @@ pub(crate) fn show(app: &mut SheetApp, ctx: &egui::Context, selection: Rect, cel
                     }
                     let ink = if enabled { t.text } else { t.text_disabled };
                     if matches!(a.kind, Kind::Name) {
-                        crate::icons::paint(ui.painter(), Rect::from_center_size(rect.center(), vec2(16.0, 16.0)), crate::icons::Icon::Name, ink);
+                        crate::icons::paint(ui.painter(), Rect::from_center_size(rect.center(), vec2(14.0, 14.0)), crate::icons::Icon::Name, ink);
                     } else {
-                        ui.painter().text(rect.center(), Align2::CENTER_CENTER, a.glyph, theme::ui_font(14.0), if enabled { t.accent } else { ink });
+                        ui.painter().text(rect.center(), Align2::CENTER_CENTER, a.glyph, theme::ui_font(13.0), if enabled { t.accent } else { ink });
                     }
                     let resp = resp.on_hover_text(tip);
                     if enabled && resp.clicked() {

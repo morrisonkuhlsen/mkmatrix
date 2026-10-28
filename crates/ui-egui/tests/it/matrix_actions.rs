@@ -38,6 +38,20 @@ fn multiply_starts_a_formula_to_point_the_second_matrix() {
 }
 
 #[test]
+fn the_actions_sit_beside_the_block_not_over_the_rows_above() {
+    let h = harness(block(), 4);
+    let app = h.state();
+    let sheet = app.session.active().unwrap().wb.active().unwrap();
+    let sel = mkmatrix_ui_egui::grid::Geo::new(sheet, app.grid.rect.unwrap(), app.view().scroll)
+        .range_rect(sheet, mkmatrix_engine::core::RangeRef::parse("B2:C3").unwrap());
+    for label in ["Transpose", "Calculation by hand"] {
+        let bar = h.get_by_label(label).rect();
+        assert!(bar.left() >= sel.right(), "{label} is right of the block: {bar:?} vs {sel:?}");
+        assert!(bar.top() >= sel.top() - 1.0, "{label} doesn't rise over the row above: {bar:?} vs {sel:?}");
+    }
+}
+
+#[test]
 fn no_actions_for_a_block_that_isnt_numbers() {
     let mut s = block();
     s.execute("cell.set", json!({"cell": "B2", "input": "x"})).unwrap();
