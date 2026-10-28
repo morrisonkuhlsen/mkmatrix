@@ -58,6 +58,21 @@ fn out(m: &DMatrix<f64>, scale: f64) -> R<Value> {
     to_value_array(m.nrows(), m.ncols(), data)
 }
 
+/// A solution as a spilled array, each column's rounding noise measured against that column's own
+/// largest element: the system's scale says nothing about how large the answer is.
+fn out_solution(x: &DMatrix<f64>) -> R<Value> {
+    let mut x = x.clone();
+    for mut col in x.column_iter_mut() {
+        let noise = f64::EPSILON * 64.0 * col.iter().fold(0.0f64, |acc, v| acc.max(v.abs()));
+        for v in col.iter_mut() {
+            if v.abs() < noise {
+                *v = 0.0;
+            }
+        }
+    }
+    out(&x, f64::MIN_POSITIVE)
+}
+
 /// A column of numbers as a spilled array.
 fn column(v: &[f64], scale: f64) -> R<Value> {
     out(&DMatrix::from_column_slice(v.len(), 1, v), scale)
@@ -74,7 +89,8 @@ fn opt_part(a: &[Arg], i: usize, default: &str) -> R<String> {
 
 /// Whether a square matrix is symmetric, to rounding.
 fn is_symmetric(m: &DMatrix<f64>) -> bool {
-    let tol = 1e-12 * scale(m).max(1.0);
+    // Relative to the matrix's own scale: an absolute floor would call any tiny matrix symmetric.
+    let tol = 1e-12 * scale(m);
     (0..m.nrows()).all(|r| (r + 1..m.ncols()).all(|c| m.get((r, c)).zip(m.get((c, r))).is_some_and(|(x, y)| (x - y).abs() <= tol)))
 }
 
@@ -127,7 +143,6 @@ pub(super) fn msolve(a: &[Arg], _c: &mut dyn Ctx) -> R<Value> {
     if m.nrows() != b.nrows() {
         return Err(CellError::Value);
     }
-    let sc = scale(&m).max(scale(&b));
     if m.is_square() {
         let lu = m.clone().lu();
         let u = lu.u();
@@ -138,13 +153,12 @@ pub(super) fn msolve(a: &[Arg], _c: &mut dyn Ctx) -> R<Value> {
             return Err(CellError::Num);
         }
         let x = lu.solve(&b).ok_or(CellError::Num)?;
-        return out(&x, sc / largest.max(f64::MIN_POSITIVE) * sc.max(1.0));
+        return out_solution(&x);
     }
-    let largest = scale(&m);
     let svd = SVD::try_new(m.clone(), true, true, f64::EPSILON, MAX_ITERATIONS).ok_or(CellError::Num)?;
     let tol = rank_tolerance(m.nrows(), m.ncols(), svd.singular_values.max());
     let x = svd.solve(&b, tol).map_err(|_| CellError::Num)?;
-    out(&x, sc / largest.max(f64::MIN_POSITIVE) * sc.max(1.0))
+    out_solution(&x)
 }
 
 /// MPINV(A): the Moore–Penrose pseudo-inverse.
