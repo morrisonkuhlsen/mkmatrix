@@ -1053,6 +1053,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Eigenvalues" => "Autovalores",
         "Singular values" => "Valores singulares",
         "Calculation by hand" => "Cálculo à mão",
+        "There are no empty cells next to the matrix for the result." => "Não há células vazias ao lado da matriz para o resultado.",
         "Calculation by Hand" => "Cálculo à Mão",
         "Copy LaTeX" => "Copiar LaTeX",
         "LaTeX copied" => "LaTeX copiado",
