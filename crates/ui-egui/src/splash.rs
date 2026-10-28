@@ -1,9 +1,10 @@
 //! The splash screen: a small window of its own, without decorations, before the main one, as
 //! MK Sigma and MK Perth have. In two halves: on Morrison Kühlsen's ink, MK Matrix's mark, name,
 //! motto and version, a bar that fills while it shows with the program's parts named in turn,
-//! and the house's wordmark; beside them, artwork drawn in code in MK Matrix's teal: a bracketed
-//! matrix, a row of it meeting a column in the cell their product fills. It closes by itself
-//! after a moment; a click or Esc closes it sooner.
+//! and the house's wordmark; beside them, a picture of linear algebra's identities on a dark
+//! field (`assets/splash/`), melting into the ink at its edge. Without the picture, artwork drawn
+//! in code takes its place: a bracketed matrix, a row of it meeting a column in the cell their
+//! product fills. It closes by itself after a moment; a click or Esc closes it sooner.
 
 use egui::epaint::{Mesh, Vertex};
 use egui::{Align2, Color32, CornerRadius, FontId, Rect, Sense, Stroke, StrokeKind, TextureHandle, TextureOptions, pos2, vec2};
@@ -18,6 +19,10 @@ const LAYOUT_HEIGHT: f32 = 400.0;
 const HOLD: f64 = 5.0;
 /// The Morrison Kühlsen wordmark, white on clear (a brand asset: `docs/brand/`).
 const MORRISON_KUHLSEN: &[u8] = include_bytes!("../../../docs/brand/morrison-kuhlsen.png");
+/// The picture beside the words (original artwork, CC0: see ATTRIBUTION.md).
+const ART: &[u8] = include_bytes!("../../../assets/splash/splash.jpg");
+/// The part of the picture shown, across: its left side, where the matrix and `Ax = λx` are.
+const ART_LEFT: f32 = 0.03;
 /// The largest image side decoded, against a corrupt header.
 const MAX_SIDE: u32 = 4096;
 /// Morrison Kühlsen's ink, and the text on it.
@@ -95,7 +100,10 @@ fn paint(painter: &egui::Painter, ctx: &egui::Context, rect: Rect, progress: f32
     let words = Rect::from_min_max(rect.min, pos2(half, rect.bottom()));
     let art = Rect::from_min_max(pos2(half, rect.top()), rect.max);
     painter.rect_filled(rect, 0.0, INK);
-    artwork(&painter.with_clip_rect(art), art, k);
+    match art_texture(ctx) {
+        Some(texture) => picture(&painter.with_clip_rect(art), art, &texture),
+        None => artwork(&painter.with_clip_rect(art), art, k),
+    }
 
     let left = words.left() + 36.0 * k;
     let width = words.width() - 72.0 * k;
@@ -259,6 +267,38 @@ fn lerp(a: Color32, b: Color32, t: f32) -> Color32 {
     Color32::from_rgb(mix(a.r(), b.r()), mix(a.g(), b.g()), mix(a.b(), b.b()))
 }
 
+/// The picture filling `art` (cropped, never stretched), its left edge fading into the ink.
+fn picture(painter: &egui::Painter, art: Rect, texture: &TextureHandle) {
+    let [w, h] = texture.size_vec2().into();
+    // The share of the picture's width that fills `art` at the picture's full height.
+    let across = ((art.width() / art.height()) / (w / h.max(1.0))).clamp(0.05, 1.0);
+    let left = ART_LEFT.min(1.0 - across);
+    let uv = Rect::from_min_max(pos2(left, 0.0), pos2(left + across, 1.0));
+    painter.image(texture.id(), art, uv, Color32::WHITE);
+    // The seam: the ink, fading out over the picture's first fifth.
+    let seam = Rect::from_min_size(art.min, vec2(art.width() * 0.2, art.height()));
+    let clear = Color32::from_rgba_premultiplied(0, 0, 0, 0);
+    let mut mesh = Mesh::default();
+    for (pos, color) in [(seam.left_top(), INK), (seam.right_top(), clear), (seam.right_bottom(), clear), (seam.left_bottom(), INK)] {
+        mesh.vertices.push(Vertex { pos, uv: egui::epaint::WHITE_UV, color });
+    }
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    painter.add(mesh);
+}
+
+/// The splash picture as a texture, loaded once per context.
+fn art_texture(ctx: &egui::Context) -> Option<TextureHandle> {
+    let id = egui::Id::unique("splash-art");
+    if let Some(texture) = ctx.data(|d| d.get_temp::<TextureHandle>(id)) {
+        return Some(texture);
+    }
+    let image = decode(ART, image::ImageFormat::Jpeg).ok()?;
+    let texture = ctx.load_texture("splash-art", image, TextureOptions::LINEAR);
+    ctx.data_mut(|d| d.insert_temp(id, texture.clone()));
+    Some(texture)
+}
+
 /// The Morrison Kühlsen wordmark, white on clear, as a texture, loaded once per context.
 pub(crate) fn wordmark(ctx: &egui::Context) -> Option<TextureHandle> {
     let id = egui::Id::unique("splash-morrison-kuhlsen");
@@ -273,12 +313,17 @@ pub(crate) fn wordmark(ctx: &egui::Context) -> Option<TextureHandle> {
 
 /// A PNG as an egui image (RGBA), refusing absurd sizes.
 fn decode_png(bytes: &[u8]) -> Result<egui::ColorImage, String> {
-    let reader = image::ImageReader::with_format(std::io::Cursor::new(bytes), image::ImageFormat::Png);
+    decode(bytes, image::ImageFormat::Png)
+}
+
+/// An image in `format` as an egui image (RGBA), refusing absurd sizes.
+fn decode(bytes: &[u8], format: image::ImageFormat) -> Result<egui::ColorImage, String> {
+    let reader = image::ImageReader::with_format(std::io::Cursor::new(bytes), format);
     let (w, h) = reader.into_dimensions().map_err(|e| e.to_string())?;
     if w > MAX_SIDE || h > MAX_SIDE {
         return Err(format!("{w}×{h} is too large"));
     }
-    let rgba = image::load_from_memory_with_format(bytes, image::ImageFormat::Png).map_err(|e| e.to_string())?.to_rgba8();
+    let rgba = image::load_from_memory_with_format(bytes, format).map_err(|e| e.to_string())?.to_rgba8();
     let size = [usize::try_from(rgba.width()).map_err(|e| e.to_string())?, usize::try_from(rgba.height()).map_err(|e| e.to_string())?];
     Ok(egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw()))
 }
@@ -294,7 +339,15 @@ mod tests {
     }
 
     #[test]
+    fn the_picture_decodes() {
+        let art = decode(ART, image::ImageFormat::Jpeg).unwrap();
+        assert!(art.size[0] > art.size[1], "a wide picture");
+    }
+
+    #[test]
     fn hostile_images_never_panic() {
+        // A truncated JPEG may decode in part or fail; either way, no panic.
+        let _ = decode(ART.get(..ART.len() / 3).unwrap(), image::ImageFormat::Jpeg);
         assert!(decode_png(&[]).is_err());
         for cut in [2, 60, MORRISON_KUHLSEN.len() / 2] {
             let _ = decode_png(MORRISON_KUHLSEN.get(..cut).unwrap());
