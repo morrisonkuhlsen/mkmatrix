@@ -196,15 +196,6 @@ fn paint_big_label(ui: &Ui, rect: Rect, lines: &[std::sync::Arc<egui::Galley>], 
 
 /// Small ribbon button: 16px icon with optional label to the right.
 pub fn small_button(ui: &mut Ui, icon: Icon, label: &str, tip: &str, dropdown: bool) -> Response {
-    small_button_with(ui, icon, label, tip, dropdown, icons::paint)
-}
-
-/// A [`small_button`] whose icon is drawn in the text colour alone, its action part included.
-pub fn small_button_mono(ui: &mut Ui, icon: Icon, label: &str, tip: &str, dropdown: bool) -> Response {
-    small_button_with(ui, icon, label, tip, dropdown, icons::paint_mono)
-}
-
-fn small_button_with(ui: &mut Ui, icon: Icon, label: &str, tip: &str, dropdown: bool, paint: fn(&egui::Painter, Rect, Icon, Color32)) -> Response {
     let t = Tokens::get(ui.ctx());
     let font = theme::ui_font(12.5);
     let label = tr(ui, label);
@@ -216,7 +207,7 @@ fn small_button_with(ui: &mut Ui, icon: Icon, label: &str, tip: &str, dropdown: 
     } else if resp.hovered() {
         ui.painter().rect_filled(rect, 0.0, t.hover);
     }
-    paint(ui.painter(), Rect::from_center_size(pos2(rect.left() + 12.0, rect.center().y), vec2(16.0, 16.0)), icon, t.text);
+    icons::paint(ui.painter(), Rect::from_center_size(pos2(rect.left() + 12.0, rect.center().y), vec2(16.0, 16.0)), icon, t.text);
     if !label.is_empty() {
         ui.painter().text(pos2(rect.left() + 24.0, rect.center().y), Align2::LEFT_CENTER, label, font, t.text);
     }
