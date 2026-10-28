@@ -8,7 +8,7 @@ use crate::theme::Tokens;
 /// The sections, as `d.tab` names them, with their icon.
 const SECTIONS: [(&str, Icon); 3] = [("About", Icon::Info), ("Contributors", Icon::Name), ("Models", Icon::Script)];
 /// The body's height: every section the same size, so the window never jumps.
-pub(crate) const BODY_H: f32 = 400.0;
+const BODY_H: f32 = 400.0;
 /// The navigation rail's width.
 const NAV_W: f32 = 168.0;
 
@@ -31,8 +31,8 @@ pub(super) fn about(ui: &mut egui::Ui, d: &mut Dialog, open: &mut bool) {
             ui.set_width(ui.available_width());
             ui.spacing_mut().item_spacing.y = 8.0;
             match d.tab.as_str() {
-                "Contributors" => crate::credits::contributors_ui(ui),
-                "Models" => crate::credits::models_ui(ui),
+                "Contributors" => crate::credits::contributors_ui(ui, BODY_H),
+                "Models" => crate::credits::models_ui(ui, BODY_H),
                 _ => about_page(ui, &t),
             }
         });
