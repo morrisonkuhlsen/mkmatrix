@@ -66,6 +66,10 @@ pub struct Tokens {
     pub sel_border: Color32,
     pub input_bg: Color32,
     pub input_border: Color32,
+    /// The formula bar's Name Box and formula field under the pointer, and while typing in them:
+    /// a shade darker than the bar, and darker again when active.
+    pub field_hover: Color32,
+    pub field_active: Color32,
     pub tab_bar: Color32,
     pub tab_active: Color32,
     pub status_bar: Color32,
@@ -192,6 +196,8 @@ impl Tokens {
             sel_border: pick(dark, Color32::from_rgb(0x0B, 0x7A, 0x63), Color32::from_rgb(0x2E, 0xC4, 0xA0)),
             input_bg: pick(dark, Color32::WHITE, Color32::from_rgb(0x10, 0x12, 0x17)),
             input_border: pick(dark, Color32::from_rgb(0xD1, 0xD1, 0xD1), Color32::from_rgb(0x2E, 0x33, 0x3D)),
+            field_hover: pick(dark, Color32::from_rgb(0xE8, 0xE8, 0xE8), Color32::from_rgb(0x0F, 0x11, 0x15)),
+            field_active: pick(dark, Color32::from_rgb(0xDE, 0xDE, 0xDE), Color32::from_rgb(0x0A, 0x0B, 0x0E)),
             tab_bar: pick(dark, Color32::from_rgb(0xF3, 0xF3, 0xF3), Color32::from_rgb(0x14, 0x16, 0x1C)),
             tab_active: pick(dark, Color32::WHITE, Color32::from_rgb(0x1F, 0x23, 0x2B)),
             status_bar: pick(dark, Color32::from_rgb(0xF3, 0xF3, 0xF3), Color32::from_rgb(0x14, 0x16, 0x1C)),

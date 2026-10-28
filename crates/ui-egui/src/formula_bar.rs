@@ -88,7 +88,9 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
             // Centred: as the bar grows (eased), the Name Box and buttons glide to its middle.
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
-                layout.name_box = name_box(app, ui, &t);
+                // The Name Box is as tall as the formula field at one line.
+                let box_h = one_line(row_h) - squeeze - 2.0 * f32::from(pad);
+                layout.name_box = name_box(app, ui, &t, box_h);
                 ui.add_space(4.0);
                 // No Cancel / Enter buttons: Esc and Enter do that.
                 // Insert Function: the fx drawn large, the bar's one label-like button.
@@ -107,7 +109,16 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
                 // The formula field fills the rest, as tall as the bar.
                 let avail = ui.available_width() - 24.0;
                 let field = Rect::from_min_size(ui.cursor().min, vec2(avail, ui.available_height()));
-                ui.painter().rect_filled(field, 0.0, t.window);
+                // Darker under the pointer, and darker again while typing in it.
+                let typing_here = app.editor.as_ref().is_some_and(|e| e.from_formula_bar);
+                let fill = if typing_here {
+                    t.field_active
+                } else if ui.rect_contains_pointer(field) {
+                    t.field_hover
+                } else {
+                    t.window
+                };
+                ui.painter().rect_filled(field, 0.0, fill);
                 // The shape the formula will have, or why its matrices don't fit, at the field's end.
                 let verdict = app.editing_shape();
                 let mut inner = field.shrink2(vec2(6.0, 3.0));
@@ -204,15 +215,24 @@ fn active_input(app: &SheetApp) -> String {
 }
 
 /// Draws the Name Box and its name dropdown; Enter jumps to a reference or known name (or defines a new name) and is consumed so the grid does not move down.
-fn name_box(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens) -> Rect {
+fn name_box(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens, height: f32) -> Rect {
     let id = egui::Id::unique("mkmatrix.name_box");
     let shown = app.name_box_text();
     let mut text = app.name_box.clone().unwrap_or(shown.clone());
     // Centred in the bar's height, as the row's buttons are.
-    let top = ui.cursor().min.y + ((ui.available_height() - 24.0) / 2.0).max(0.0);
-    let rect = Rect::from_min_size(pos2(ui.cursor().min.x, top), vec2(118.0, 24.0));
-    ui.painter().rect_filled(rect, 0.0, t.window);
-    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(rect.min + vec2(6.0, 3.0), vec2(96.0, 18.0))));
+    let top = ui.cursor().min.y + ((ui.available_height() - height) / 2.0).max(0.0);
+    let rect = Rect::from_min_size(pos2(ui.cursor().min.x, top), vec2(118.0, height));
+    // Darker under the pointer, and darker again while typing in it, as the formula field is.
+    let fill = if ui.memory(|m| m.has_focus(id)) {
+        t.field_active
+    } else if ui.rect_contains_pointer(rect) {
+        t.field_hover
+    } else {
+        t.window
+    };
+    ui.painter().rect_filled(rect, 0.0, fill);
+    let text_top = rect.top() + ((height - 18.0) / 2.0).max(0.0);
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(pos2(rect.left() + 6.0, text_top), vec2(96.0, 18.0))));
     // The box has no visible label of its own: screen readers and the strict accessibility check
     // need a name (egui 0.37 makes unnamed text inputs a test failure).
     let accessible_name = app.ui.language.tr("Name Box").to_string();
@@ -251,11 +271,11 @@ fn name_box(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens) -> Rect {
         }
         app.name_box = None;
     }
-    ui.allocate_space(vec2(118.0, 24.0));
+    ui.allocate_space(vec2(118.0, height));
     // Dropdown of names.
     let names: Vec<String> =
         app.session.active().map(|d| d.wb.names.iter().filter(|n| !n.hidden).map(|n| n.name.clone()).collect()).unwrap_or_default();
-    let mb = Rect::from_min_size(pos2(rect.right() - 16.0, rect.top() + 4.0), vec2(14.0, 16.0));
+    let mb = Rect::from_min_size(pos2(rect.right() - 16.0, rect.center().y - 8.0), vec2(14.0, 16.0));
     icons::paint(ui.painter(), mb, Icon::Chevron, t.text_dim);
     let r = ui.interact(mb, id.with("drop"), Sense::click());
     egui::Popup::menu(&r).show(|ui| {
@@ -836,6 +856,56 @@ mod spill_tests {
             h.run_steps(3);
             h.check_accessibility();
             assert!(h.state().editor.as_ref().is_some_and(|e| e.from_formula_bar));
+        }
+    }
+
+    #[test]
+    /// The Name Box and the formula field are equally tall at one line, and each turns darker under
+    /// the pointer and darker again while being typed in.
+    fn name_box_and_field_share_height_and_darken_on_hover_and_typing() {
+        let has_fill = |h: &egui_kittest::Harness<'_, SheetApp>, rect: Rect, fill: egui::Color32| {
+            h.output().shapes.iter().any(|s| matches!(&s.shape, egui::Shape::Rect(r) if r.rect == rect && r.fill == fill))
+        };
+        for dark in [false, true] {
+            let mut app = app();
+            set(&mut app, "A1", "=1+2");
+            select(&mut app, "A1");
+            let mut fonts_ready = false;
+            let mut h = egui_kittest::Harness::builder().with_size(vec2(900.0, 100.0)).build_ui_state(
+                move |ui, app: &mut SheetApp| {
+                    if !fonts_ready {
+                        ui.ctx().set_fonts(theme::font_definitions());
+                        fonts_ready = true;
+                        return;
+                    }
+                    ui.ctx().set_visuals(if dark { egui::Visuals::dark() } else { egui::Visuals::light() });
+                    show(app, ui);
+                },
+                app,
+            );
+            h.run_steps(3);
+            let t = Tokens::get(&h.ctx);
+            let bar = BarLayout::get(&h.ctx);
+            assert_eq!(bar.name_box.height(), bar.field.height(), "dark={dark}");
+            assert!(has_fill(&h, bar.name_box, t.window) && has_fill(&h, bar.field, t.window));
+            assert!(t.field_hover != t.window && t.field_active != t.field_hover);
+
+            h.hover_at(bar.field.center());
+            h.run_steps(2);
+            assert!(has_fill(&h, bar.field, t.field_hover), "dark={dark}: field hover");
+            h.hover_at(bar.name_box.center());
+            h.run_steps(2);
+            assert!(has_fill(&h, bar.name_box, t.field_hover), "dark={dark}: name box hover");
+
+            h.state_mut().begin_edit(None, true);
+            h.hover_at(egui::pos2(450.0, 95.0));
+            h.run_steps(3);
+            assert!(has_fill(&h, bar.field, t.field_active), "dark={dark}: typing in the field");
+
+            h.state_mut().editor = None;
+            h.ctx.memory_mut(|m| m.request_focus(egui::Id::unique("mkmatrix.name_box")));
+            h.run_steps(3);
+            assert!(has_fill(&h, bar.name_box, t.field_active), "dark={dark}: typing in the name box");
         }
     }
 }
