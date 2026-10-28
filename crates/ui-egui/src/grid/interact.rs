@@ -344,6 +344,18 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
         if app.editor.is_some() && !app.commit_edit(0, 0, false, false) {
             return;
         }
+        // A named matrix's bracket: a click selects the whole matrix, a drag moves it (its name
+        // follows, see the drop below).
+        if app.ui.matrix_brackets
+            && !on_handle(p)
+            && let Some((_, m)) = crate::matrices::bracket_at(geo, sh, &crate::matrices::on_sheet(wb, wb.active_sheet()), p)
+        {
+            let _ = app.session.run("selection.set", json!({"range": m.a1()}));
+            if resp.drag_started() {
+                app.grid.drag = Drag::Move { grab: c, to: None };
+            }
+            return;
+        }
         if on_handle(p) {
             app.grid.drag = Drag::Fill { target: None, menu: resp.drag_started_by(egui::PointerButton::Secondary) };
             return;
@@ -580,8 +592,20 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
             Drag::Move { to: Some(to), .. } => {
                 let src = sel.current();
                 if to != src.start {
+                    let named = crate::matrices::on_sheet(wb, wb.active_sheet()).into_iter().find(|(_, m)| *m == src).map(|(n, _)| n);
                     let _ = app.session.run("edit.cut", json!({"range": src.a1()}));
                     let _ = app.run("edit.paste", json!({"at": to.a1()}));
+                    // A moved named matrix takes its name along, when the move didn't already.
+                    let moved = RangeRef::new(to, to.offset_clamped(i64::from(src.height()) - 1, i64::from(src.width()) - 1));
+                    if let Some(name) = named
+                        && let Some(d) = app.session.active()
+                        && !crate::matrices::on_sheet(&d.wb, d.wb.active_sheet()).iter().any(|(n, m)| *n == name && *m == moved)
+                        && let Some(sheet) = d.wb.active().map(|s| s.name.clone())
+                    {
+                        let abs = |c: CellRef| format!("${}${}", mkmatrix_engine::core::col_to_letters(c.col), c.row + 1);
+                        let refers = format!("={}!{}:{}", mkmatrix_engine::formula::quote_sheet(&sheet), abs(moved.start), abs(moved.end));
+                        app.run_or_alert("formulas.defineName", json!({"name": name, "oldName": name, "refersTo": refers}));
+                    }
                 }
             }
             Drag::MoveCols { source, before: Some(before) } => {

@@ -71,6 +71,19 @@ pub fn resolve(wb: &Workbook, si: usize, text: &str) -> Option<CellRef> {
     Some(CellRef::new(range.start.row + row - 1, range.start.col + col - 1))
 }
 
+/// The named matrix whose bracket is at `p` (sheet coordinates): within a few points of either
+/// bracket's upright, along the matrix's height.
+pub fn bracket_at(geo: &Geo, sh: &Sheet, matrices: &[(String, RangeRef)], p: egui::Pos2) -> Option<(String, RangeRef)> {
+    matrices
+        .iter()
+        .find(|(_, range)| {
+            let r = geo.range_rect(sh, *range);
+            let on_upright = (p.x - (r.left() - 3.0)).abs() <= 4.0 || (p.x - (r.right() + 3.0)).abs() <= 4.0;
+            on_upright && p.y >= r.top() - 3.0 && p.y <= r.bottom() + 3.0
+        })
+        .cloned()
+}
+
 /// Draws each matrix's square brackets just outside its range, as a matrix is written.
 pub fn paint_brackets(p: &Painter, geo: &Geo, sh: &Sheet, matrices: &[(String, RangeRef)], color: Color32) {
     let stroke = Stroke::new(2.0, color);

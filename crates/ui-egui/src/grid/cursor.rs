@@ -69,6 +69,14 @@ fn hover_cursor(app: &SheetApp, ctx: &egui::Context, resp: &egui::Response, poin
     let in_row_header = p.x < geo.cells.left() && p.x >= geo.head_left() && p.y >= geo.cells.top();
     let near_col_edge = in_col_header && col_edge(geo, sh, p.x).is_some();
     if app.grid.drag == Drag::None
+        && app.ui.matrix_brackets
+        && let Some(d) = app.session.active()
+        && crate::matrices::bracket_at(geo, sh, &crate::matrices::on_sheet(&d.wb, d.wb.active_sheet()), p).is_some()
+    {
+        ctx.set_cursor_icon(egui::CursorIcon::Grab);
+        return;
+    }
+    if app.grid.drag == Drag::None
         && (super::interact::on_insert_col_button(geo, sh, p).is_some() || super::interact::on_insert_row_button(geo, sh, p).is_some())
     {
         ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
