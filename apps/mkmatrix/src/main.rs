@@ -55,6 +55,8 @@ impl eframe::App for App {
             }
             apple_events::poll(&self.3, &mut self.0, ctx);
         }
+        // A 1x screen draws the grid at full size, a high-density one at desktop density.
+        mkmatrix_ui_egui::grid::set_display_scale(mkmatrix_ui_egui::grid::display_scale_for(ctx.native_pixels_per_point().unwrap_or(1.0)));
         self.0.logic(ctx);
         self.1.logic(&mut self.0, ctx);
         if ctx.input(|input| input.viewport().close_requested()) && self.0.printing.busy() {

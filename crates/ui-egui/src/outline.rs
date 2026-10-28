@@ -15,7 +15,7 @@ use mkmatrix_engine::outline::{self, OutlineGroup};
 use serde_json::{Value as Json, json};
 use std::collections::BTreeMap;
 
-use crate::grid::{DISPLAY_SCALE, Geo};
+use crate::grid::{Geo, display_scale};
 use crate::theme::{self, Tokens};
 
 /// Width of one level's lane at 100% zoom (points).
@@ -196,7 +196,7 @@ fn group_bracket(out: &mut Layout, dir: &Dir, grp: &OutlineGroup, button: Option
 
 pub fn layout(geo: &Geo, sh: &Sheet) -> Layout {
     let mut out = Layout::default();
-    let zoom = (geo.z / DISPLAY_SCALE).max(0.1);
+    let zoom = (geo.z / display_scale()).max(0.1);
     let step = lane(zoom);
     let side = (step - 4.0).max(7.0);
     let corner_h = if geo.header_h > 0.0 { geo.header_h } else { geo.band_h };
@@ -291,7 +291,7 @@ pub fn paint(p: &Painter, geo: &Geo, sh: &Sheet, t: &Tokens) {
         }
     }
     // The outline levels grow with the zoom like the headings beside them.
-    let font = theme::ui_font((10.0 * (geo.z / DISPLAY_SCALE)).max(7.5));
+    let font = theme::ui_font((10.0 * (geo.z / display_scale())).max(7.5));
     for b in &l.buttons {
         let clip = match b.action {
             Action::Toggle { rows: true, .. } => row_clip,

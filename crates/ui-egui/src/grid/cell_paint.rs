@@ -145,7 +145,8 @@ pub(crate) fn wrapped_cell_text_y(valign: VAlign, rect: Rect, gh: f32, z: f32) -
 pub(crate) fn cell_text_y(valign: VAlign, rect: Rect, gh: f32, z: f32) -> f32 {
     let top_inset = 1.0 * z;
     let y_top = rect.top() - top_inset;
-    let y_bottom = (rect.bottom() - gh - 0.5 * z).max(y_top);
+    // Room under the text as desktop spreadsheets leave it, so it doesn't sit on the gridline.
+    let y_bottom = (rect.bottom() - gh - 1.5 * z).max(y_top);
     match valign {
         VAlign::Top => y_top,
         VAlign::Center | VAlign::Justify | VAlign::Distributed => (y_top + y_bottom) / 2.0,

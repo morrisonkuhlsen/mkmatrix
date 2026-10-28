@@ -304,3 +304,15 @@ fn upward_text_with_middle_align_is_centred_in_a_merged_block() {
     assert!((bb.center().y - rect.center().y).abs() < 0.01, "{bb:?} not centred in {rect:?}");
     assert!((bb.center().x - rect.center().x).abs() < 0.01, "{bb:?} not centred in {rect:?}");
 }
+
+#[test]
+/// A 1x screen draws the grid at full size (a default row 20 pixels tall, as desktop spreadsheets
+/// draw it); a high-density one keeps the desktop density. Nothing sets the scale in tests, so it
+/// is the default.
+fn display_scale_follows_the_screen_density() {
+    use super::{DISPLAY_SCALE, display_scale, display_scale_for};
+    assert_eq!(display_scale_for(1.0), 1.0);
+    assert_eq!(display_scale_for(1.25), 1.0);
+    assert_eq!(display_scale_for(2.0), DISPLAY_SCALE);
+    assert_eq!(display_scale(), DISPLAY_SCALE);
+}
