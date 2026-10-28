@@ -170,6 +170,8 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
     egui::Panel::left("backstage_nav")
         .exact_size(NAV_W)
         .resizable(false)
+        // No line between the column and the page.
+        .show_separator_line(false)
         .frame(egui::Frame::NONE.fill(nav_bg).inner_margin(egui::Margin { left: 0, right: 0, top: 10, bottom: 10 }))
         .show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
@@ -182,7 +184,8 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                     out.page = Some(page);
                 }
             }
-            nav_separator(ui, nav_text);
+            // The gap the separator line used to take.
+            ui.add_space(17.0);
             if nav_item(ui, Page::Info.icon(), lang.tr("Info"), bs.page == Page::Info, nav_text, nav_sel).clicked() {
                 out.page = Some(Page::Info);
             }
@@ -277,7 +280,7 @@ fn nav_item(ui: &mut Ui, icon: Icon, label: &str, selected: bool, text: Color32,
     } else if resp.hovered() {
         p.rect_filled(rect, 0.0, sel.gamma_multiply(0.55));
     }
-    icons::paint(p, Rect::from_center_size(pos2(rect.left() + 30.0, rect.center().y), vec2(17.0, 17.0)), icon, text);
+    icons::paint_mono(p, Rect::from_center_size(pos2(rect.left() + 30.0, rect.center().y), vec2(17.0, 17.0)), icon, text);
     p.text(pos2(rect.left() + 50.0, rect.center().y), Align2::LEFT_CENTER, label, theme::ui_font(14.0), text);
     resp
 }
@@ -302,12 +305,6 @@ fn house(ui: &mut Ui) {
     resp.on_hover_text("Morrison Kühlsen");
 }
 
-fn nav_separator(ui: &mut Ui, text: Color32) {
-    let (rect, _) = ui.allocate_exact_size(vec2(NAV_W, 17.0), Sense::hover());
-    let y = rect.center().y;
-    ui.painter().line_segment([pos2(rect.left() + 20.0, y), pos2(rect.right() - 20.0, y)], Stroke::new(1.0, text.gamma_multiply(0.35)));
-}
-
 // ---------------------------------------------------------------- shared pieces
 
 fn section(ui: &mut Ui, lang: Language, title: &str) {
@@ -329,8 +326,11 @@ fn tile(ui: &mut Ui, label: &str, sample: Option<usize>) -> egui::Response {
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
     let p = ui.painter();
     let thumb = Rect::from_min_size(rect.min, vec2(rect.width(), 104.0));
+    // No border: under the pointer the tile sits on a soft fill instead.
+    if resp.hovered() {
+        p.rect_filled(rect.expand(5.0), 6.0, t.hover);
+    }
     p.rect_filled(thumb, 4.0, t.grid_bg);
-    let edge = if resp.hovered() { Stroke::new(2.0, t.accent) } else { Stroke::new(1.0, t.ribbon_border) };
     let inner = thumb.shrink(10.0);
     let (rows, cols) = (7, 4);
     let (rh, cw) = (inner.height() / rows as f32, inner.width() / cols as f32);
@@ -354,7 +354,6 @@ fn tile(ui: &mut Ui, label: &str, sample: Option<usize>) -> egui::Response {
         let x = inner.left() + c as f32 * cw;
         p.line_segment([pos2(x, inner.top()), pos2(x, inner.bottom())], Stroke::new(1.0, t.gridline));
     }
-    p.rect_stroke(thumb, 4.0, edge, StrokeKind::Inside);
     let galley = p.layout(label.to_string(), theme::ui_font(12.5), t.text, rect.width());
     p.galley(pos2(rect.left(), thumb.bottom() + 6.0), galley, t.text);
     resp
@@ -422,7 +421,7 @@ fn recent_list(app: &mut SheetApp, ui: &mut Ui, bs: &mut Backstage, out: &mut Ou
         if resp.hovered() {
             p.rect_filled(rect, 4.0, t.hover);
         }
-        icons::paint(p, Rect::from_center_size(pos2(rect.left() + 20.0, rect.center().y), vec2(20.0, 20.0)), Icon::Book, t.text);
+        icons::paint_mono(p, Rect::from_center_size(pos2(rect.left() + 20.0, rect.center().y), vec2(20.0, 20.0)), Icon::Book, t.text);
         // A long name or folder stops short of the column instead of running under it.
         let room = if modified_w > 0.0 { rect.right() - modified_w - 14.0 } else { rect.right() };
         let text = p.with_clip_rect(Rect::from_min_max(rect.min, pos2(room, rect.bottom())).intersect(p.clip_rect()));
@@ -548,7 +547,7 @@ fn action_row(ui: &mut Ui, icon: Icon, title: &str, detail: &str) -> egui::Respo
     if resp.hovered() {
         p.rect_filled(rect, 4.0, t.hover);
     }
-    icons::paint(p, Rect::from_center_size(pos2(rect.left() + 24.0, rect.center().y), vec2(24.0, 24.0)), icon, t.text);
+    icons::paint_mono(p, Rect::from_center_size(pos2(rect.left() + 24.0, rect.center().y), vec2(24.0, 24.0)), icon, t.text);
     p.text(pos2(rect.left() + 52.0, rect.center().y - 9.0), Align2::LEFT_CENTER, title, theme::ui_bold(13.5), t.text);
     p.text(pos2(rect.left() + 52.0, rect.center().y + 10.0), Align2::LEFT_CENTER, detail, theme::ui_font(12.0), t.text_dim);
     resp
@@ -561,8 +560,7 @@ fn square_button(ui: &mut Ui, icon: Icon, label: &str) -> egui::Response {
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
     let p = ui.painter();
     p.rect_filled(rect, 6.0, if resp.hovered() { t.hover } else { t.ribbon });
-    p.rect_stroke(rect, 6.0, Stroke::new(1.0, if resp.hovered() { t.accent } else { t.ribbon_border }), StrokeKind::Inside);
-    icons::paint(p, Rect::from_center_size(pos2(rect.center().x, rect.top() + 32.0), vec2(30.0, 30.0)), icon, t.text);
+    icons::paint_mono(p, Rect::from_center_size(pos2(rect.center().x, rect.top() + 32.0), vec2(30.0, 30.0)), icon, t.text);
     let galley = p.layout(label.to_string(), theme::ui_font(12.0), t.text, rect.width() - 8.0);
     p.galley(pos2(rect.center().x - galley.size().x / 2.0, rect.top() + 56.0), galley, t.text);
     resp
@@ -641,7 +639,7 @@ fn info(app: &mut SheetApp, ui: &mut Ui, bs: &mut Backstage) {
         vec![pr.title.clone(), pr.subject.clone(), pr.author.clone(), pr.company.clone(), pr.keywords.clone(), pr.description.clone()]
     };
     ui.horizontal(|ui| {
-        icons::paint(ui.painter(), Rect::from_min_size(ui.cursor().min, vec2(28.0, 28.0)), Icon::Book, t.text);
+        icons::paint_mono(ui.painter(), Rect::from_min_size(ui.cursor().min, vec2(28.0, 28.0)), Icon::Book, t.text);
         ui.add_space(38.0);
         ui.vertical(|ui| {
             ui.label(RichText::new(&title).font(theme::ui_bold(16.0)).color(t.text));
