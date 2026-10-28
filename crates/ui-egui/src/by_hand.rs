@@ -1,0 +1,506 @@
+//! "Calculation by hand": the steps that take a matrix formula's operands to its result, as a
+//! textbook writes them: transposes, products element by element (cᵢⱼ = Σₖ aᵢₖ bₖⱼ), determinants
+//! by cofactors, inverses by Gauss–Jordan. Each step is mathematical notation ([`Math`]) that the
+//! side panel draws and [`latex`] writes out for a paper.
+
+use mkmatrix_engine::core::Value;
+use mkmatrix_engine::formula::{BinOp, Expr, UnOp};
+use mkmatrix_engine::model::Workbook;
+
+/// Mathematical notation, enough for the steps.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Math {
+    /// A variable or matrix name, set in italics.
+    Var(String),
+    /// A number.
+    Num(f64),
+    /// Upright text: an operator, a word, punctuation.
+    Op(String),
+    /// A base with a subscript.
+    Sub(Box<Math>, Box<Math>),
+    /// A base with a superscript.
+    Sup(Box<Math>, Box<Math>),
+    /// A matrix in square brackets.
+    Matrix(Vec<Vec<Math>>),
+    /// Pieces side by side.
+    Row(Vec<Math>),
+}
+
+/// One step: what it says, and the notation.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Step {
+    pub caption: String,
+    pub math: Math,
+}
+
+/// The largest square matrix worked by hand; past it the steps would fill a book.
+pub const HAND_MAX: usize = 5;
+/// The most elements of a product expanded one by one.
+const EXPAND_MAX: usize = 9;
+/// The most terms written out in one sum.
+const TERMS_MAX: usize = 6;
+
+type Mat = Vec<Vec<f64>>;
+
+fn op(s: &str) -> Math {
+    Math::Op(s.into())
+}
+fn var(s: &str) -> Math {
+    Math::Var(s.into())
+}
+fn sub(base: Math, i: Math) -> Math {
+    Math::Sub(Box::new(base), Box::new(i))
+}
+fn idx(base: &str, i: usize, j: usize) -> Math {
+    sub(var(base), Math::Op(format!("{i}{j}")))
+}
+fn matrix(m: &Mat) -> Math {
+    Math::Matrix(m.iter().map(|r| r.iter().map(|x| Math::Num(*x)).collect()).collect())
+}
+fn row(v: Vec<Math>) -> Math {
+    Math::Row(v)
+}
+
+/// The steps for a cell's formula (with or without `=`) on sheet `si`; `Err(why)` when it isn't an
+/// operation worked by hand.
+pub fn derive(formula: &str, wb: &Workbook, si: usize) -> Result<Vec<Step>, String> {
+    let body = formula.trim().strip_prefix('=').unwrap_or(formula.trim());
+    let expr = mkmatrix_engine::formula::parse(body).map_err(|_| "This formula doesn't read.".to_string())?;
+    let expr = unparen(&expr);
+    let ctx = Ctx { wb, si };
+    match expr {
+        Expr::Unary(UnOp::Transpose, a) => transpose_steps(&ctx, a),
+        Expr::Call(name, args) if name == "MX.T" => transpose_steps(&ctx, args.first().ok_or("MX.T needs a matrix.")?),
+        Expr::Binary(BinOp::MatMul, a, b) => product_steps(&ctx, a, b),
+        Expr::Call(name, args) if name == "MX.MUL" && args.len() == 2 => product_steps(&ctx, &args[0], &args[1]),
+        Expr::Call(name, args) if name == "MX.DET" => det_steps(&ctx, args.first().ok_or("MX.DET needs a matrix.")?),
+        Expr::Call(name, args) if name == "MX.INV" => inverse_steps(&ctx, args.first().ok_or("MX.INV needs a matrix.")?),
+        _ => Err("By hand: a transpose (X'), a product (A@B), MX.DET or MX.INV.".into()),
+    }
+}
+
+fn unparen(e: &Expr) -> &Expr {
+    match e {
+        Expr::Paren(x) => unparen(x),
+        other => other,
+    }
+}
+
+struct Ctx<'a> {
+    wb: &'a Workbook,
+    si: usize,
+}
+
+impl Ctx<'_> {
+    /// An operand's numbers and how it is written: ranges, named matrices, array constants, and
+    /// transposes and products of those.
+    fn value(&self, e: &Expr, depth: usize) -> Result<(Mat, Math), String> {
+        if depth > 16 {
+            return Err("The formula nests too deeply to work by hand.".into());
+        }
+        match unparen(e) {
+            Expr::Ref(r) if r.sheet == mkmatrix_engine::formula::SheetSel::Current => {
+                let range = r.range();
+                Ok((self.read(range)?, Math::Op(range.a1())))
+            }
+            Expr::Name(n) => {
+                let (_, range) = crate::matrices::on_sheet(self.wb, self.si)
+                    .into_iter()
+                    .find(|(m, _)| mkmatrix_engine::formula::same_name(m, n))
+                    .ok_or_else(|| format!("{n} isn't a matrix on this sheet."))?;
+                Ok((self.read(range)?, var(n)))
+            }
+            Expr::Array(rows) => {
+                let m: Option<Mat> = rows.iter().map(|r| r.iter().map(|x| if let Expr::Number(v) = x { Some(*v) } else { None }).collect()).collect();
+                let m = m.ok_or("Only numbers in an array constant.")?;
+                // Every row as long as the first, so the steps can index them.
+                let width = m.first().map_or(0, Vec::len);
+                if width == 0 || m.iter().any(|r| r.len() != width) {
+                    return Err("An array constant's rows must be the same length.".into());
+                }
+                let shown = matrix(&m);
+                Ok((m, shown))
+            }
+            Expr::Number(v) => Ok((vec![vec![*v]], Math::Num(*v))),
+            Expr::Unary(UnOp::Transpose, a) => {
+                let (m, shown) = self.value(a, depth + 1)?;
+                Ok((transpose(&m), Math::Sup(Box::new(shown), Box::new(op("T")))))
+            }
+            Expr::Binary(BinOp::MatMul, a, b) => {
+                let (x, xs) = self.value(a, depth + 1)?;
+                let (y, ys) = self.value(b, depth + 1)?;
+                Ok((mul(&x, &y)?, row(vec![xs, ys])))
+            }
+            _ => Err("By hand works on ranges, named matrices, array constants, their transposes and products.".into()),
+        }
+    }
+
+    fn read(&self, range: mkmatrix_engine::core::RangeRef) -> Result<Mat, String> {
+        let sh = self.wb.sheet(self.si).ok_or("No sheet.")?;
+        if range.height() as usize > 64 || range.width() as usize > 64 {
+            return Err("The matrix is too large to work by hand.".into());
+        }
+        let mut m = Vec::new();
+        for r in range.start.row..=range.end.row {
+            let mut line = Vec::new();
+            for c in range.start.col..=range.end.col {
+                match sh.value(mkmatrix_engine::core::CellRef::new(r, c)) {
+                    Value::Number(n) => line.push(n),
+                    Value::Empty => line.push(0.0),
+                    _ => return Err(format!("{} isn't a number.", mkmatrix_engine::core::CellRef::new(r, c).a1())),
+                }
+            }
+            m.push(line);
+        }
+        Ok(m)
+    }
+}
+
+fn transpose(m: &Mat) -> Mat {
+    let cols = m.first().map_or(0, Vec::len);
+    (0..cols).map(|j| m.iter().map(|r| r.get(j).copied().unwrap_or(0.0)).collect()).collect()
+}
+
+fn mul(a: &Mat, b: &Mat) -> Result<Mat, String> {
+    let (n, k) = (a.len(), a.first().map_or(0, Vec::len));
+    let p = b.first().map_or(0, Vec::len);
+    if k != b.len() {
+        return Err(format!("{n}×{k} @ {}×{p}: {k} vs {}.", b.len(), b.len()));
+    }
+    Ok((0..n).map(|i| (0..p).map(|j| (0..k).map(|t| a[i][t] * b[t][j]).sum()).collect()).collect())
+}
+
+fn transpose_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
+    let (m, shown) = ctx.value(a, 0)?;
+    let t = transpose(&m);
+    let a_t = Math::Sup(Box::new(shown.clone()), Box::new(op("T")));
+    Ok(vec![
+        Step { caption: "The matrix".into(), math: row(vec![shown.clone(), op("="), matrix(&m)]) },
+        Step {
+            caption: "Rows become columns".into(),
+            math: row(vec![sub(Math::Row(vec![Math::Op("(".into()), a_t.clone(), Math::Op(")".into())]), op("ij")), op("="), sub(shown, op("ji"))]),
+        },
+        Step { caption: "The transpose".into(), math: row(vec![a_t, op("="), matrix(&t)]) },
+    ])
+}
+
+fn product_steps(ctx: &Ctx, a: &Expr, b: &Expr) -> Result<Vec<Step>, String> {
+    let (x, xs) = ctx.value(a, 0)?;
+    let (y, ys) = ctx.value(b, 0)?;
+    let c = mul(&x, &y)?;
+    let k = y.len();
+    let mut steps = vec![
+        Step { caption: "The factors".into(), math: row(vec![xs.clone(), op("="), matrix(&x), op(","), ys.clone(), op("="), matrix(&y)]) },
+        Step {
+            caption: "Each element is a row times a column".into(),
+            math: row(vec![idx("c", 0, 0).relabel("ij"), op("="), sub(op("Σ"), var("k")), sub(var("a"), op("ik")), sub(var("b"), op("kj"))]),
+        },
+    ];
+    let mut shown = 0;
+    'cells: for (i, line) in c.iter().enumerate() {
+        for (j, value) in line.iter().enumerate() {
+            if shown >= EXPAND_MAX {
+                steps.push(Step { caption: format!("…and so on for the other {} elements", c.len() * line.len() - shown), math: row(vec![]) });
+                break 'cells;
+            }
+            let mut terms = vec![idx("c", i + 1, j + 1), op("=")];
+            for t in 0..k.min(TERMS_MAX) {
+                if t > 0 {
+                    terms.push(op("+"));
+                }
+                terms.push(Math::Num(x[i][t]));
+                terms.push(op("·"));
+                terms.push(Math::Num(y[t][j]));
+            }
+            if k > TERMS_MAX {
+                terms.push(op("+ …"));
+            }
+            terms.push(op("="));
+            terms.push(Math::Num(*value));
+            steps.push(Step { caption: String::new(), math: row(terms) });
+            shown += 1;
+        }
+    }
+    steps.push(Step { caption: "The product".into(), math: row(vec![xs, ys, op("="), matrix(&c)]) });
+    Ok(steps)
+}
+
+impl Math {
+    /// A subscripted name with its subscript replaced (`c₁₁` → `cᵢⱼ`).
+    fn relabel(self, s: &str) -> Math {
+        match self {
+            Math::Sub(b, _) => Math::Sub(b, Box::new(op(s))),
+            other => other,
+        }
+    }
+}
+
+fn det(m: &Mat) -> f64 {
+    let n = m.len();
+    match n {
+        0 => 1.0,
+        1 => m[0][0],
+        2 => m[0][0] * m[1][1] - m[0][1] * m[1][0],
+        _ => (0..n).map(|j| sign(j) * m[0][j] * det(&minor(m, 0, j))).sum(),
+    }
+}
+
+fn sign(j: usize) -> f64 {
+    if j.is_multiple_of(2) { 1.0 } else { -1.0 }
+}
+
+fn minor(m: &Mat, r: usize, c: usize) -> Mat {
+    m.iter()
+        .enumerate()
+        .filter(|(i, _)| *i != r)
+        .map(|(_, line)| line.iter().enumerate().filter(|(j, _)| *j != c).map(|(_, x)| *x).collect())
+        .collect()
+}
+
+fn square(m: &Mat, what: &str) -> Result<usize, String> {
+    let n = m.len();
+    if n == 0 || m.iter().any(|r| r.len() != n) {
+        return Err(format!("{what} needs a square matrix."));
+    }
+    if n > HAND_MAX {
+        return Err(format!("By hand stops at {HAND_MAX}×{HAND_MAX}; this one is {n}×{n}."));
+    }
+    Ok(n)
+}
+
+fn det_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
+    let (m, shown) = ctx.value(a, 0)?;
+    let n = square(&m, "A determinant")?;
+    let d = det(&m);
+    let det_of = |x: Math| row(vec![op("det"), op("("), x, op(")")]);
+    let mut steps = vec![Step { caption: "The matrix".into(), math: row(vec![shown.clone(), op("="), matrix(&m)]) }];
+    if n == 2 {
+        steps.push(Step {
+            caption: "Main diagonal minus the other".into(),
+            math: row(vec![
+                det_of(shown),
+                op("="),
+                Math::Num(m[0][0]),
+                op("·"),
+                Math::Num(m[1][1]),
+                op("−"),
+                Math::Num(m[0][1]),
+                op("·"),
+                Math::Num(m[1][0]),
+                op("="),
+                Math::Num(d),
+            ]),
+        });
+        return Ok(steps);
+    }
+    steps.push(Step {
+        caption: "Expansion along the first row".into(),
+        math: row(vec![
+            det_of(shown.clone()),
+            op("="),
+            sub(op("Σ"), var("j")),
+            Math::Sup(Box::new(op("(−1)")), Box::new(op("1+j"))),
+            sub(var("a"), op("1j")),
+            det_of(sub(var("M"), op("1j"))),
+        ]),
+    });
+    let mut terms = vec![det_of(shown), op("=")];
+    for j in 0..n {
+        let minor_m = minor(&m, 0, j);
+        let md = det(&minor_m);
+        steps.push(Step {
+            caption: format!("Minor of a1{}", j + 1),
+            math: row(vec![sub(var("M"), op(&format!("1{}", j + 1))), op("="), matrix(&minor_m), op("→"), op("det ="), Math::Num(md)]),
+        });
+        if j > 0 {
+            terms.push(op(if sign(j) > 0.0 { "+" } else { "−" }));
+        }
+        terms.push(Math::Num(m[0][j]));
+        terms.push(op("·"));
+        terms.push(Math::Num(md));
+    }
+    terms.push(op("="));
+    terms.push(Math::Num(d));
+    steps.push(Step { caption: "Together".into(), math: row(terms) });
+    Ok(steps)
+}
+
+fn inverse_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
+    let (m, shown) = ctx.value(a, 0)?;
+    let n = square(&m, "An inverse")?;
+    let mut aug: Mat = m.iter().enumerate().map(|(i, r)| r.iter().copied().chain((0..n).map(|j| if i == j { 1.0 } else { 0.0 })).collect()).collect();
+    let show = |aug: &Mat| matrix(aug);
+    let mut steps = vec![Step {
+        caption: "Next to the identity: [A | I]".into(),
+        math: row(vec![op("["), shown.clone(), op("|"), var("I"), op("]"), op("="), show(&aug)]),
+    }];
+    let scale = m.iter().flatten().fold(0.0f64, |acc, x| acc.max(x.abs())).max(1e-300);
+    for col in 0..n {
+        // The pivot: the largest in the column, at or below the diagonal.
+        let piv = (col..n).max_by(|&p, &q| aug[p][col].abs().total_cmp(&aug[q][col].abs())).unwrap_or(col);
+        if aug[piv][col].abs() <= scale * 1e-12 {
+            return Err("The matrix is singular: it has no inverse (a pivot is 0).".into());
+        }
+        let mut ops = Vec::new();
+        if piv != col {
+            aug.swap(piv, col);
+            ops.push(format!("R{} ↔ R{}", col + 1, piv + 1));
+        }
+        let p = aug[col][col];
+        if (p - 1.0).abs() > 1e-15 {
+            for x in &mut aug[col] {
+                *x /= p;
+            }
+            ops.push(format!("R{} ← R{} / {}", col + 1, col + 1, crate::by_hand::number(p)));
+        }
+        for r in 0..n {
+            if r == col {
+                continue;
+            }
+            let f = aug[r][col];
+            if f.abs() <= 1e-15 {
+                continue;
+            }
+            let pivot_row = aug[col].clone();
+            for (x, y) in aug[r].iter_mut().zip(&pivot_row) {
+                *x -= f * y;
+            }
+            ops.push(format!("R{} ← R{} − ({})·R{}", r + 1, r + 1, crate::by_hand::number(f), col + 1));
+        }
+        // Rounding noise reads as the number a hand would write: 0, or the integer it is beside.
+        for row_vals in &mut aug {
+            for x in row_vals.iter_mut() {
+                if x.abs() < 1e-12 * scale.max(1.0) {
+                    *x = 0.0;
+                } else if (*x - x.round()).abs() < 1e-9 * x.abs().max(1.0) {
+                    *x = x.round();
+                }
+            }
+        }
+        steps.push(Step {
+            caption: format!("Column {}: {}", col + 1, if ops.is_empty() { "already in place".to_string() } else { ops.join(",  ") }),
+            math: show(&aug),
+        });
+    }
+    let inv: Mat = aug.iter().map(|r| r[n..].to_vec()).collect();
+    steps.push(Step {
+        caption: "The right half is the inverse".into(),
+        math: row(vec![Math::Sup(Box::new(shown), Box::new(op("−1"))), op("="), matrix(&inv)]),
+    });
+    Ok(steps)
+}
+
+/// A number as the steps write it: integers whole, others to four significant digits.
+pub fn number(x: f64) -> String {
+    if x == x.round() && x.abs() < 1e15 {
+        return format!("{}", x as i64);
+    }
+    if x.abs() >= 1e6 || x.abs() < 1e-4 {
+        return format!("{x:.3e}");
+    }
+    let digits = (3 - x.abs().log10().floor() as i32).clamp(0, 8) as usize;
+    let s = format!("{x:.digits$}");
+    if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s }
+}
+
+/// The steps as LaTeX (an `align*` of one line per step, each caption a `\text{}` comment).
+pub fn latex(steps: &[Step]) -> String {
+    let mut out = String::from("\\begin{align*}\n");
+    for (i, s) in steps.iter().enumerate() {
+        if !s.caption.is_empty() {
+            out.push_str(&format!("&\\text{{{}}}\\\\\n", s.caption.replace('{', "\\{").replace('}', "\\}")));
+        }
+        if s.math != Math::Row(vec![]) {
+            out.push_str(&format!("&{}", tex(&s.math)));
+            if i + 1 < steps.len() {
+                out.push_str("\\\\");
+            }
+            out.push('\n');
+        }
+    }
+    out.push_str("\\end{align*}\n");
+    out
+}
+
+fn tex(m: &Math) -> String {
+    match m {
+        Math::Var(v) => v.clone(),
+        Math::Num(x) => number(*x).replace('−', "-"),
+        Math::Op(s) => match s.as_str() {
+            "·" => "\\cdot ".into(),
+            "−" => "-".into(),
+            "Σ" => "\\sum".into(),
+            "→" => "\\;\\Rightarrow\\;".into(),
+            "+ …" => "+ \\cdots".into(),
+            "det" => "\\det".into(),
+            "det =" => "\\det =".into(),
+            "|" => "\\,|\\,".into(),
+            other if other.chars().all(|c| c.is_ascii_alphabetic()) && other.len() > 1 => format!("\\text{{{other}}}"),
+            other => other.replace('←', "\\leftarrow ").replace('↔', "\\leftrightarrow ").replace('−', "-"),
+        },
+        Math::Sub(b, i) => format!("{{{}}}_{{{}}}", tex(b), tex(i)),
+        Math::Sup(b, s) => format!("{{{}}}^{{{}}}", tex(b), tex(s)),
+        Math::Matrix(rows) => {
+            let body: Vec<String> = rows.iter().map(|r| r.iter().map(tex).collect::<Vec<_>>().join(" & ")).collect();
+            format!("\\begin{{bmatrix}} {} \\end{{bmatrix}}", body.join(" \\\\ "))
+        }
+        Math::Row(items) => items.iter().map(tex).collect::<Vec<_>>().join(" "),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn book() -> Workbook {
+        let mut s = mkmatrix_engine::Session::new();
+        s.new_workbook();
+        s.execute("range.setValues", serde_json::json!({"range": "A1", "values": [[2, 1], [1, 3]]})).unwrap();
+        s.execute("range.setValues", serde_json::json!({"range": "D1", "values": [[1, 2, 3], [0, 1, 4], [5, 6, 0]]})).unwrap();
+        s.execute("formulas.defineName", serde_json::json!({"name": "A", "refersTo": "=Sheet1!$A$1:$B$2"})).unwrap();
+        (*s.doc().unwrap().wb).clone()
+    }
+
+    fn last(steps: &[Step]) -> &Math {
+        &steps.last().unwrap().math
+    }
+
+    #[test]
+    fn a_product_expands_each_element() {
+        let steps = derive("=A@A", &book(), 0).unwrap();
+        // c11 = 2·2 + 1·1 = 5
+        let first = steps.iter().find(|s| matches!(&s.math, Math::Row(v) if v.first() == Some(&idx("c", 1, 1)))).unwrap();
+        assert!(matches!(&first.math, Math::Row(v) if v.last() == Some(&Math::Num(5.0))));
+        assert!(matches!(last(&steps), Math::Row(v) if v.last() == Some(&matrix(&vec![vec![5.0, 5.0], vec![5.0, 10.0]]))));
+    }
+
+    #[test]
+    fn determinants_and_inverses_by_hand() {
+        let wb = book();
+        let d2 = derive("=MX.DET(A)", &wb, 0).unwrap();
+        assert!(matches!(last(&d2), Math::Row(v) if v.last() == Some(&Math::Num(5.0))));
+        let d3 = derive("=MX.DET(D1:F3)", &wb, 0).unwrap();
+        assert!(matches!(last(&d3), Math::Row(v) if v.last() == Some(&Math::Num(1.0))), "det of D1:F3 is 1");
+        let inv = derive("=MX.INV(D1:F3)", &wb, 0).unwrap();
+        let want = vec![vec![-24.0, 18.0, 5.0], vec![20.0, -15.0, -4.0], vec![-5.0, 4.0, 1.0]];
+        assert!(matches!(last(&inv), Math::Row(v) if v.last() == Some(&matrix(&want))), "{:?}", last(&inv));
+        assert!(derive("=MX.INV({1,2;2,4})", &wb, 0).unwrap_err().contains("singular"));
+    }
+
+    #[test]
+    fn transposes_and_unsupported_formulas() {
+        let wb = book();
+        let t = derive("=D1:F3'", &wb, 0).unwrap();
+        assert!(matches!(last(&t), Math::Row(v) if v.last() == Some(&matrix(&vec![vec![1.0, 0.0, 5.0], vec![2.0, 1.0, 6.0], vec![3.0, 4.0, 0.0]]))));
+        assert!(derive("=SUM(A1:B2)", &wb, 0).is_err());
+        assert!(derive("=A@D1:F3", &wb, 0).unwrap_err().contains("vs"));
+    }
+
+    #[test]
+    fn steps_write_out_as_latex() {
+        let tex = latex(&derive("=A@A", &book(), 0).unwrap());
+        assert!(tex.starts_with("\\begin{align*}") && tex.trim_end().ends_with("\\end{align*}"));
+        assert!(tex.contains("\\begin{bmatrix} 5 & 5 \\\\ 5 & 10 \\end{bmatrix}"));
+        assert!(tex.contains("\\sum"));
+    }
+}

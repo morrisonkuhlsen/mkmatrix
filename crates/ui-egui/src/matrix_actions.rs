@@ -24,9 +24,11 @@ enum Kind {
     Write(&'static str),
     /// A formula started for a second operand to be pointed at.
     Start(&'static str),
+    /// Opens the Calculation by Hand panel.
+    ByHand,
 }
 
-const ACTIONS: [Action; 7] = [
+const ACTIONS: [Action; 8] = [
     Action { glyph: "A", tip: "Name as a matrix", square: false, kind: Kind::Name },
     Action { glyph: "X'", tip: "Transpose", square: false, kind: Kind::Write("={}'") },
     Action { glyph: "inv", tip: "Inverse", square: true, kind: Kind::Write("=MX.INV({})") },
@@ -34,6 +36,7 @@ const ACTIONS: [Action; 7] = [
     Action { glyph: "\\", tip: "Solve… (point at the right-hand side)", square: false, kind: Kind::Start("={}\\") },
     Action { glyph: "λ", tip: "Eigenvalues", square: true, kind: Kind::Write("=MX.EIG({})") },
     Action { glyph: "σ", tip: "Singular values", square: false, kind: Kind::Write("=MX.SVD({})") },
+    Action { glyph: "Σ", tip: "Calculation by hand", square: false, kind: Kind::ByHand },
 ];
 
 /// Draws the bar above the selection's top-right corner (below it when there is no room above),
@@ -98,6 +101,7 @@ pub(crate) fn show(app: &mut SheetApp, ctx: &egui::Context, selection: Rect, cel
     let target = CellRef::new(r.start.row, r.end.col.saturating_add(2).min(mkmatrix_engine::core::MAX_COLS - 1));
     match action.kind {
         Kind::Name => app.open_dialog("defineName", json!({})),
+        Kind::ByHand => app.ui.by_hand = true,
         Kind::Write(f) => {
             app.run_or_alert("cell.set", json!({"cell": target.a1(), "input": f.replace("{}", &reference)}));
             app.run_or_alert("selection.set", json!({"range": RangeRef::cell(target).a1()}));

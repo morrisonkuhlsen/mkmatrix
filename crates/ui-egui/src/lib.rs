@@ -8,6 +8,8 @@
 
 pub mod backstage;
 mod border_preview;
+pub mod by_hand;
+mod by_hand_ui;
 mod cell_pictures;
 pub mod chartview;
 pub mod code_editor;
@@ -117,6 +119,8 @@ pub struct UiState {
     /// The classic ribbon of tabs and named groups instead of the menu bar and single-row toolbar
     /// (View › Classic Ribbon).
     pub classic_ribbon: bool,
+    /// The Calculation by Hand panel beside the sheet (View › Calculation by Hand).
+    pub by_hand: bool,
 }
 
 /// How much room the bars above and below the sheet take; the sheet itself is never scaled.
@@ -202,6 +206,7 @@ impl Default for UiState {
             density: Density::Normal,
             matrix_brackets: true,
             classic_ribbon: false,
+            by_hand: false,
         }
     }
 }

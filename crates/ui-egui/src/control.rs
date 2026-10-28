@@ -196,6 +196,7 @@ pub fn handle(app: &mut SheetApp, ctx: &egui::Context, method: &str, p: &Json) -
                 ("view.theme", "Display Theme", ""),
                 ("view.animations", "Animations", "{on?: bool} (toggles without it) → {on}"),
                 ("view.numberedColumns", "Numbered Columns", "{on?: bool} (toggles without it) → {on}"),
+                ("view.byHand", "Calculation by Hand", "{on?: bool} (toggles without it) → {on}"),
                 ("view.classicRibbon", "Classic Ribbon", "{on?: bool} (toggles without it) → {on}"),
                 ("view.matrixBrackets", "Matrix Brackets", "{on?: bool} (toggles without it) → {on}"),
                 ("view.density", "Interface Density", "{mode: \"normal\" | \"compact\" | \"minimal\"} → {mode}"),

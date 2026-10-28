@@ -1052,6 +1052,25 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Solve… (point at the right-hand side)" => "Resolver… (aponte o lado direito)",
         "Eigenvalues" => "Autovalores",
         "Singular values" => "Valores singulares",
+        "Calculation by hand" => "Cálculo à mão",
+        "Calculation by Hand" => "Cálculo à Mão",
+        "Copy LaTeX" => "Copiar LaTeX",
+        "LaTeX copied" => "LaTeX copiado",
+        "Select a cell with a matrix formula: a transpose (X'), a product (A@B), MX.DET or MX.INV." => {
+            "Selecione uma célula com uma fórmula de matriz: uma transposta (X'), um produto (A@B), MX.DET ou MX.INV."
+        }
+        "By hand: a transpose (X'), a product (A@B), MX.DET or MX.INV." => "À mão: uma transposta (X'), um produto (A@B), MX.DET ou MX.INV.",
+        "The matrix" => "A matriz",
+        "Rows become columns" => "As linhas viram colunas",
+        "The transpose" => "A transposta",
+        "The factors" => "Os fatores",
+        "Each element is a row times a column" => "Cada elemento é uma linha vezes uma coluna",
+        "The product" => "O produto",
+        "Main diagonal minus the other" => "Diagonal principal menos a secundária",
+        "Expansion along the first row" => "Expansão pela primeira linha",
+        "Together" => "Juntando",
+        "Next to the identity: [A | I]" => "Ao lado da identidade: [A | I]",
+        "The right half is the inverse" => "A metade direita é a inversa",
         "Welcome to MK Matrix" => "Bem-vindo ao MK Matrix",
         "Numbered Columns" => "Colunas Numeradas",
         "Head the columns 1, 2, 3… as a matrix's a(i,j), rather than A, B, C" => {

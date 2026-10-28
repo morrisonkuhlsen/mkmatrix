@@ -173,6 +173,10 @@ impl SheetApp {
                 self.ui.density = d;
                 Ok(json!({"mode": d.code()}))
             }
+            "view.byHand" => {
+                self.ui.by_hand = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.by_hand);
+                Ok(json!({"on": self.ui.by_hand}))
+            }
             "view.classicRibbon" => {
                 self.ui.classic_ribbon = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.classic_ribbon);
                 Ok(json!({"on": self.ui.classic_ribbon}))
