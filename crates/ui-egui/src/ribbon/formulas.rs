@@ -20,8 +20,8 @@ fn circular_references(app: &SheetApp) -> Vec<(usize, String, String)> {
 }
 
 /// A function-category button and its menu of functions (`cat` is a `formulas.functions` category).
-fn function_menu(app: &mut SheetApp, ui: &mut Ui, label: &str, cat: &str, cid: &'static str) {
-    let r = big_button(ui, Icon::Book, label, label, true);
+fn function_menu(app: &mut SheetApp, ui: &mut Ui, icon: Icon, label: &str, cat: &str, cid: &'static str) {
+    let r = big_button(ui, icon, label, label, true);
     control_keytip(app, ui, &r, cid);
     let forced_c = invoke(app, cid);
     egui::Popup::menu(&r).open_memory(popup_command(forced_c, r.clicked())).show(|ui| {
@@ -50,7 +50,7 @@ fn function_menu(app: &mut SheetApp, ui: &mut Ui, label: &str, cat: &str, cid: &
 /// language, descriptions in the interface language), defined names, auditing and calculation.
 pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
     // MK Matrix's own category leads: the matrix functions.
-    function_menu(app, ui, "Linear\nAlgebra", "LinearAlgebra", "formulas.linearAlgebra");
+    function_menu(app, ui, Icon::Lambda, "Linear\nAlgebra", "LinearAlgebra", "formulas.linearAlgebra");
     let __k = big_button(ui, Icon::Function, "Insert\nFunction", "Insert Function (⇧F3)", false);
     control_keytip(app, ui, &__k, "dialog:insertFunction");
     if __k.clicked() {
@@ -62,16 +62,17 @@ pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
         act(app, "formulas.autoSum", json!({}));
     }
     egui::Popup::menu(&sa).show(|ui| autosum_menu(app, ui));
-    for (label, cat, cid) in [
-        ("Financial", "Financial", "formulas.financial"),
-        ("Logical", "Logical", "formulas.logical"),
-        ("Text", "Text", "formulas.text"),
-        ("Date &\nTime", "DateTime", "formulas.dateTime"),
-        ("Lookup &\nReference", "Lookup", "formulas.lookup"),
-        ("Math &\nTrig", "MathTrig", "formulas.mathTrig"),
-        ("More\nFunctions", "Statistical", "formulas.moreFunctions"),
+    // Each category its own icon, so the single row shows them as icons alone.
+    for (icon, label, cat, cid) in [
+        (Icon::Currency, "Financial", "Financial", "formulas.financial"),
+        (Icon::Check, "Logical", "Logical", "formulas.logical"),
+        (Icon::TextBox, "Text", "Text", "formulas.text"),
+        (Icon::Calendar, "Date &\nTime", "DateTime", "formulas.dateTime"),
+        (Icon::Find, "Lookup &\nReference", "Lookup", "formulas.lookup"),
+        (Icon::Pi, "Math &\nTrig", "MathTrig", "formulas.mathTrig"),
+        (Icon::More, "More\nFunctions", "Statistical", "formulas.moreFunctions"),
     ] {
-        function_menu(app, ui, label, cat, cid);
+        function_menu(app, ui, icon, label, cat, cid);
     }
     sep(ui, "Function Library");
     let __k = big_button(ui, Icon::Name, "Name\nManager", "Name Manager", false);
@@ -85,7 +86,7 @@ pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
         if __k.clicked() {
             app.open_dialog("defineName", json!({}));
         }
-        let use_in = small_button(ui, Icon::Function, "Use in Formula", "Use in Formula", true);
+        let use_in = small_button(ui, Icon::Insert, "Use in Formula", "Use in Formula", true);
         anchor_keytip(app, ui, &use_in, &["dialog:pasteName"]);
         egui::Popup::menu(&use_in).show(|ui| {
             // The menu lists the names Paste Names lists; clicking one runs `formulas.useInFormula`, which puts it at the caret.
