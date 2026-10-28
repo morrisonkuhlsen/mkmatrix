@@ -65,7 +65,7 @@ pub struct EditorInfo {
     pub caret: Option<Rect>,
 }
 
-/// Draws the formula bar: line-count-driven height, Name Box, cancel/enter/Fx buttons, the editable field, muted read-only spill text and the expansion chevron.
+/// Draws the formula bar: line-count-driven height, Name Box, the Insert Function button, the editable field, muted read-only spill text and the expansion chevron.
 pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let font = theme::ui_font(13.0);
@@ -90,15 +90,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
                 ui.spacing_mut().item_spacing.x = 4.0;
                 layout.name_box = name_box(app, ui, &t);
                 ui.add_space(4.0);
-                let editing = app.editor.is_some();
-                let c = if editing { t.text } else { t.text_disabled };
-                let cancel = crate::widgets::icon_button(ui, Icon::Close, c, "Cancel", vec2(22.0, 24.0));
-                if cancel.clicked() && editing {
-                    app.cancel_edit();
-                }
-                if crate::widgets::icon_button(ui, Icon::Check, c, "Enter", vec2(22.0, 24.0)).clicked() && editing {
-                    app.commit_edit(0, 0, false, false);
-                }
+                // No Cancel / Enter buttons: Esc and Enter do that.
                 // Insert Function: the fx drawn large, the bar's one label-like button.
                 let (fx_rect, fx) = ui.allocate_exact_size(vec2(34.0, 24.0), egui::Sense::click());
                 if fx.hovered() {
@@ -110,7 +102,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
                 if fx.clicked() {
                     app.open_dialog("insertFunction", json!({}));
                 }
-                layout.buttons = cancel.rect.union(fx.rect);
+                layout.buttons = fx.rect;
                 ui.add_space(4.0);
                 // The formula field fills the rest, as tall as the bar.
                 let avail = ui.available_width() - 24.0;

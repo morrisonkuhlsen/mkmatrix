@@ -49,9 +49,11 @@ pub(super) fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, s
     };
     // Grows to the left on a right-to-left sheet.
     let erect = geo.mirror_rect(Rect::from_min_size(rect.min, vec2(w, h)));
+    // The sheet's own colour (graphite in dark mode) under the typed text, or the cell's fill.
+    let paper = Tokens::get(ui.ctx()).grid_bg;
     let fill = match st.fill.pattern {
-        PatternType::Solid => st.fill.fg.resolve(&wb.theme).map(theme::color32).unwrap_or(Color32::WHITE),
-        _ => Color32::WHITE,
+        PatternType::Solid => st.fill.fg.resolve(&wb.theme).map(theme::color32).unwrap_or(paper),
+        _ => paper,
     };
     let split = pos2(geo.cells.left() + geo.frozen_w, geo.cells.top() + geo.frozen_h);
     let quadrant = Rect::from_min_max(
