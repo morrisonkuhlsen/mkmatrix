@@ -123,6 +123,22 @@ fn tip_text(ui: &Ui, tip: &str) -> String {
 
 /// A flat square icon button with hover highlight and tooltip.
 pub fn icon_button(ui: &mut Ui, icon: Icon, color: Color32, tip: &str, size: egui::Vec2) -> Response {
+    icon_button_with(ui, icon, color, tip, size, icons::paint)
+}
+
+/// An [`icon_button`] whose icon is drawn in `color` alone, its action part included.
+pub fn icon_button_mono(ui: &mut Ui, icon: Icon, color: Color32, tip: &str, size: egui::Vec2) -> Response {
+    icon_button_with(ui, icon, color, tip, size, icons::paint_mono)
+}
+
+fn icon_button_with(
+    ui: &mut Ui,
+    icon: Icon,
+    color: Color32,
+    tip: &str,
+    size: egui::Vec2,
+    paint: fn(&egui::Painter, Rect, Icon, Color32),
+) -> Response {
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
     let t = Tokens::get(ui.ctx());
     if resp.is_pointer_button_down_on() {
@@ -130,7 +146,7 @@ pub fn icon_button(ui: &mut Ui, icon: Icon, color: Color32, tip: &str, size: egu
     } else if resp.hovered() {
         ui.painter().rect_filled(rect, 0.0, t.hover);
     }
-    icons::paint(ui.painter(), Rect::from_center_size(rect.center(), vec2(16.0, 16.0)), icon, color);
+    paint(ui.painter(), Rect::from_center_size(rect.center(), vec2(16.0, 16.0)), icon, color);
     resp.on_hover_text(tip_text(ui, tip))
 }
 
@@ -252,6 +268,15 @@ fn paint_big_label(ui: &Ui, rect: Rect, lines: &[std::sync::Arc<egui::Galley>], 
 
 /// Small ribbon button: 16px icon with optional label to the right.
 pub fn small_button(ui: &mut Ui, icon: Icon, label: &str, tip: &str, dropdown: bool) -> Response {
+    small_button_with(ui, icon, label, tip, dropdown, icons::paint)
+}
+
+/// A [`small_button`] whose icon is drawn in the text colour alone, its action part included.
+pub fn small_button_mono(ui: &mut Ui, icon: Icon, label: &str, tip: &str, dropdown: bool) -> Response {
+    small_button_with(ui, icon, label, tip, dropdown, icons::paint_mono)
+}
+
+fn small_button_with(ui: &mut Ui, icon: Icon, label: &str, tip: &str, dropdown: bool, paint: fn(&egui::Painter, Rect, Icon, Color32)) -> Response {
     let t = Tokens::get(ui.ctx());
     let font = theme::ui_font(12.5);
     let label = if single_row(ui) { row_label(ui, icon, label, tip) } else { tr(ui, label).to_string() };
@@ -263,7 +288,7 @@ pub fn small_button(ui: &mut Ui, icon: Icon, label: &str, tip: &str, dropdown: b
     } else if resp.hovered() {
         ui.painter().rect_filled(rect, 0.0, t.hover);
     }
-    icons::paint(ui.painter(), Rect::from_center_size(pos2(rect.left() + 12.0, rect.center().y), vec2(16.0, 16.0)), icon, t.text);
+    paint(ui.painter(), Rect::from_center_size(pos2(rect.left() + 12.0, rect.center().y), vec2(16.0, 16.0)), icon, t.text);
     if !label.is_empty() {
         ui.painter().text(pos2(rect.left() + 24.0, rect.center().y), Align2::LEFT_CENTER, label, font, t.text);
     }
