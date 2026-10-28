@@ -2,7 +2,7 @@
 //! MK Sigma and MK Perth have. In two halves: on Morrison Kühlsen's ink, MK Matrix's mark, name,
 //! motto and version, a bar that fills while it shows with the program's parts named in turn,
 //! and the house's wordmark; beside them, a picture of linear algebra's identities on a dark
-//! field (`assets/splash/`), melting into the ink at its edge. Without the picture, artwork drawn
+//! field (`assets/splash/`). Without the picture, artwork drawn
 //! in code takes its place: a bracketed matrix, a row of it meeting a column in the cell their
 //! product fills. It closes by itself after a moment; a click or Esc closes it sooner.
 
@@ -267,7 +267,7 @@ fn lerp(a: Color32, b: Color32, t: f32) -> Color32 {
     Color32::from_rgb(mix(a.r(), b.r()), mix(a.g(), b.g()), mix(a.b(), b.b()))
 }
 
-/// The picture filling `art` (cropped, never stretched), its left edge fading into the ink.
+/// The picture filling `art` (cropped, never stretched).
 fn picture(painter: &egui::Painter, art: Rect, texture: &TextureHandle) {
     let [w, h] = texture.size_vec2().into();
     // The share of the picture's width that fills `art` at the picture's full height.
@@ -275,16 +275,6 @@ fn picture(painter: &egui::Painter, art: Rect, texture: &TextureHandle) {
     let left = ART_LEFT.min(1.0 - across);
     let uv = Rect::from_min_max(pos2(left, 0.0), pos2(left + across, 1.0));
     painter.image(texture.id(), art, uv, Color32::WHITE);
-    // The seam: the ink, fading out over the picture's first fifth.
-    let seam = Rect::from_min_size(art.min, vec2(art.width() * 0.2, art.height()));
-    let clear = Color32::from_rgba_premultiplied(0, 0, 0, 0);
-    let mut mesh = Mesh::default();
-    for (pos, color) in [(seam.left_top(), INK), (seam.right_top(), clear), (seam.right_bottom(), clear), (seam.left_bottom(), INK)] {
-        mesh.vertices.push(Vertex { pos, uv: egui::epaint::WHITE_UV, color });
-    }
-    mesh.add_triangle(0, 1, 2);
-    mesh.add_triangle(0, 2, 3);
-    painter.add(mesh);
 }
 
 /// The splash picture as a texture, loaded once per context.
