@@ -251,7 +251,9 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     // Headers.
     if sh.show_headings {
         let headings = table_headings(&geo, sh, sel.active);
-        paint_headers(&painter, &geo, sh, &sel, &t, &quads, &headings, app.ui.numbered_columns);
+        // Inside a named matrix, its rows and columns head with their places in it.
+        let local = crate::matrices::containing_range(&wb, si, sel.active);
+        paint_headers(&painter, &geo, sh, &sel, &t, &quads, &headings, app.ui.numbered_columns, local);
         paint_freeze_handles(&painter, &geo, sh, &app.grid.drag, &t);
         paint_insert_col_button(app, ui, &painter, &geo, sh, &t);
     }
@@ -405,6 +407,24 @@ fn vertical_scrollbar(app: &mut SheetApp, ui: &mut egui::Ui, sh: &Sheet, geo: &G
 
 /// The horizontal counterpart of `vertical_scrollbar`, drawn in the sheet tab bar as in Excel. The tab
 /// bar is laid out before the grid, so this reads the last frame's geometry and leaves clamping the
+/// A heading inside the named matrix the cursor is in: on a faint band of the accent, its place
+/// in the matrix (the matrix's a(i,j)) in the accent, the sheet's own number small beside it.
+fn local_heading(p: &Painter, cr: Rect, index: u32, sheet_label: &str, font: &egui::FontId, t: &Tokens, selected: bool) {
+    if !selected {
+        p.rect_filled(cr, 0.0, t.accent.gamma_multiply(0.12));
+    }
+    let small = egui::FontId::new(font.size * 0.62, font.family.clone());
+    let sheet = p.layout_no_wrap(sheet_label.to_string(), small, t.text_dim);
+    let main = p.layout_no_wrap(index.to_string(), egui::FontId::new(font.size, font.family.clone()), t.accent);
+    let gap = 3.0;
+    let width = main.size().x + gap + sheet.size().x;
+    let left = (cr.center().x - width / 2.0).max(cr.left() + 2.0);
+    let main_at = pos2(left, cr.center().y - main.size().y / 2.0);
+    let sheet_at = pos2(left + main.size().x + gap, cr.center().y + main.size().y / 2.0 - sheet.size().y - 1.0);
+    p.galley(main_at, main, t.accent);
+    p.galley(sheet_at, sheet, t.text_dim);
+}
+
 /// far end to the grid, which runs later in the same frame.
 pub(crate) fn horizontal_scrollbar(app: &mut SheetApp, ui: &mut egui::Ui, track: Rect, t: &Tokens) {
     app.grid.hscroll = Some(track);
@@ -469,6 +489,7 @@ pub(crate) fn paint_headers(
     quads: &[((u32, u32), (u32, u32), Rect)],
     headings: &[TableHeading],
     numbered: bool,
+    local: Option<RangeRef>,
 ) {
     let font = theme::ui_font(heading_font_size(geo.z));
     // The headers' own area: inside the outline bands.
@@ -526,7 +547,12 @@ pub(crate) fn paint_headers(
                     None => {
                         // MK Matrix numbers its columns as it does its rows, as a matrix's a(i,j).
                         let label = if numbered { (u64::from(c) + 1).to_string() } else { col_to_letters(c) };
-                        pc.text(cr.center(), Align2::CENTER_CENTER, label, font.clone(), color);
+                        match local.filter(|m| (m.start.col..=m.end.col).contains(&c)) {
+                            Some(m) => local_heading(&pc, cr, c - m.start.col + 1, &label, &font, t, col_sel(c)),
+                            None => {
+                                pc.text(cr.center(), Align2::CENTER_CENTER, label, font.clone(), color);
+                            }
+                        }
                     }
                 }
             }
@@ -555,7 +581,13 @@ pub(crate) fn paint_headers(
                     }
                 }
                 let color = if row_sel(rr) { t.header_sel_text } else { t.header_text };
-                pr.text(cr.center(), Align2::CENTER_CENTER, (rr as u64 + 1).to_string(), font.clone(), color);
+                let label = (rr as u64 + 1).to_string();
+                match local.filter(|m| (m.start.row..=m.end.row).contains(&rr)) {
+                    Some(m) => local_heading(&pr, cr, rr - m.start.row + 1, &label, &font, t, row_sel(rr)),
+                    None => {
+                        pr.text(cr.center(), Align2::CENTER_CENTER, label, font.clone(), color);
+                    }
+                }
             }
         }
     }

@@ -35,6 +35,11 @@ pub fn containing(wb: &Workbook, si: usize, cell: CellRef) -> Option<(String, u3
         .map(|(name, r)| (name, cell.row - r.start.row + 1, cell.col - r.start.col + 1))
 }
 
+/// The smallest named matrix on sheet `si` holding `cell`.
+pub fn containing_range(wb: &Workbook, si: usize, cell: CellRef) -> Option<RangeRef> {
+    on_sheet(wb, si).into_iter().map(|(_, r)| r).filter(|r| r.contains(cell)).min_by_key(|r| u64::from(r.height()) * u64::from(r.width()))
+}
+
 /// How the Name Box shows a cell's place in a matrix: `X(3,2)`, or `y(4)` in a single column or
 /// row.
 pub fn local_index(name: &str, row: u32, col: u32, range: Option<RangeRef>) -> String {
@@ -140,5 +145,14 @@ mod tests {
         for bad in ["X(9,1)", "X(0,1)", "X(1)", "y(9)", "Z(1,1)", "X(a,b)", "X", "X(1,2,3)", "rate(1)"] {
             assert_eq!(resolve(&wb, 0, bad), None, "{bad}");
         }
+    }
+
+    #[test]
+    fn the_headings_know_the_matrix_the_cursor_is_in() {
+        let wb = book();
+        let at = |a1: &str| CellRef::parse(a1).unwrap();
+        assert_eq!(containing_range(&wb, 0, at("C9")).map(|r| r.a1()).as_deref(), Some("B7:D14"));
+        assert_eq!(containing_range(&wb, 0, at("F7")).map(|r| r.a1()).as_deref(), Some("F7:F14"));
+        assert_eq!(containing_range(&wb, 0, at("A1")), None);
     }
 }
