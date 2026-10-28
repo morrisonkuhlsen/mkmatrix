@@ -274,7 +274,7 @@ pub(crate) fn paint_quadrant(
             h => painted_halign(h, geo.rtl),
         };
         let indent = st.align.indent as f32 * 9.0 * z;
-        let pad = 2.5 * z;
+        let pad = 3.0 * z;
         let rotated = st.align.rotation != 0 && st.align.rotation != 255;
         // Rotated text wraps along its own direction (below), not across the column width.
         if !rotated && (st.align.wrap || st.align.h == HAlign::Justify) {
