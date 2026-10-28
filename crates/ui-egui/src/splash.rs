@@ -24,11 +24,11 @@ const MAX_SIDE: u32 = 4096;
 pub(crate) const INK: Color32 = Color32::from_rgb(0x14, 0x16, 0x1C);
 pub(crate) const ON_INK: Color32 = Color32::from_rgb(0xFF, 0xFF, 0xFF);
 pub(crate) const ON_INK_SOFT: Color32 = Color32::from_rgba_premultiplied(184, 184, 184, 184);
-/// MK Matrix's colour: teal.
-pub const BRAND: Color32 = Color32::from_rgb(0x2E, 0xC4, 0xA0);
-/// The artwork's lighter and deeper teals.
-const TEAL_LIGHT: Color32 = Color32::from_rgb(0xB8, 0xF2, 0xE2);
-const TEAL_DEEP: Color32 = Color32::from_rgb(0x12, 0x5E, 0x52);
+/// MK Matrix's colour: terracotta.
+pub const BRAND: Color32 = Color32::from_rgb(0xE0, 0x8A, 0x5F);
+/// The artwork's lighter and deeper terracottas.
+const TERRA_LIGHT: Color32 = Color32::from_rgb(0xF6, 0xD9, 0xC6);
+const TERRA_DEEP: Color32 = Color32::from_rgb(0x6E, 0x34, 0x1A);
 pub const NAME: &str = "MK Matrix";
 /// "By number, weight and measure" (Wisdom 11:20).
 pub const MOTTO: &str = "Numero, pondere et mensura";
@@ -219,22 +219,22 @@ pub(crate) fn artwork(painter: &egui::Painter, art: Rect, k: f32) {
             // A correlation-like shade: 1 on the diagonal, fading with the distance from it.
             let distance = row.abs_diff(col) as f32;
             let strength = 0.88_f32.powf(distance * distance);
-            let fill = lerp(TEAL_DEEP, BRAND, strength).gamma_multiply(0.55 + 0.45 * strength);
+            let fill = lerp(TERRA_DEEP, BRAND, strength).gamma_multiply(0.55 + 0.45 * strength);
             painter.rect_filled(at(row, col), CornerRadius::same((4.0 * k) as u8), fill);
         }
     }
-    let outline = Stroke::new(1.6 * k, TEAL_LIGHT.gamma_multiply(0.8));
+    let outline = Stroke::new(1.6 * k, TERRA_LIGHT.gamma_multiply(0.8));
     let pad = 3.0 * k;
     let row_band = at(pick_row, 0).union(at(pick_row, N - 1)).expand(pad);
     let col_band = at(0, pick_col).union(at(N - 1, pick_col)).expand(pad);
     painter.rect_stroke(row_band, CornerRadius::same((6.0 * k) as u8), outline, StrokeKind::Outside);
     painter.rect_stroke(col_band, CornerRadius::same((6.0 * k) as u8), outline, StrokeKind::Outside);
     let product = at(pick_row, pick_col);
-    painter.rect_filled(product, CornerRadius::same((4.0 * k) as u8), TEAL_LIGHT);
-    painter.text(product.center(), Align2::CENTER_CENTER, "Σ", FontId::proportional(18.0 * k), TEAL_DEEP);
+    painter.rect_filled(product, CornerRadius::same((4.0 * k) as u8), TERRA_LIGHT);
+    painter.text(product.center(), Align2::CENTER_CENTER, "Σ", FontId::proportional(18.0 * k), TERRA_DEEP);
 
     // The brackets.
-    let stroke = Stroke::new(2.4 * k, TEAL_LIGHT.gamma_multiply(0.9));
+    let stroke = Stroke::new(2.4 * k, TERRA_LIGHT.gamma_multiply(0.9));
     let (top, bottom) = (origin.y - 12.0 * k, origin.y + side + 12.0 * k);
     let serif = 14.0 * k;
     for (x, dir) in [(origin.x - 16.0 * k, 1.0), (origin.x + side + 16.0 * k, -1.0)] {
@@ -248,7 +248,7 @@ pub(crate) fn artwork(painter: &egui::Painter, art: Rect, k: f32) {
         Align2::CENTER_CENTER,
         "c(3,5) = Σ a(3,k) · b(k,5)",
         FontId::proportional(15.0 * k),
-        TEAL_LIGHT.gamma_multiply(0.85),
+        TERRA_LIGHT.gamma_multiply(0.85),
     );
 }
 

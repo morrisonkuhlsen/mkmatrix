@@ -367,11 +367,49 @@ impl G<'_> {
 struct Palette {
     accent: Color32,
     paper: Color32,
+    dark: bool,
 }
 
 impl Palette {
     fn of(t: &Tokens) -> Palette {
-        Palette { accent: t.accent, paper: t.paper }
+        Palette { accent: t.accent, paper: t.paper, dark: t.dark }
+    }
+}
+
+/// The vintage inks the icons' action parts are drawn in, one per family of commands, as
+/// (light theme, dark theme).
+mod ink {
+    use egui::Color32;
+    pub(super) const TERRACOTTA: (Color32, Color32) = (Color32::from_rgb(0xA0, 0x52, 0x2D), Color32::from_rgb(0xE0, 0x8A, 0x5F));
+    pub(super) const SLATE: (Color32, Color32) = (Color32::from_rgb(0x3E, 0x5C, 0x76), Color32::from_rgb(0x8F, 0xB0, 0xCC));
+    pub(super) const MUSTARD: (Color32, Color32) = (Color32::from_rgb(0x9A, 0x6B, 0x12), Color32::from_rgb(0xE0, 0xB0, 0x4F));
+    pub(super) const OLIVE: (Color32, Color32) = (Color32::from_rgb(0x6B, 0x7A, 0x3A), Color32::from_rgb(0xAE, 0xBB, 0x7A));
+    pub(super) const OXBLOOD: (Color32, Color32) = (Color32::from_rgb(0x7B, 0x2D, 0x35), Color32::from_rgb(0xD9, 0x82, 0x8B));
+}
+
+impl Icon {
+    /// The vintage ink of this icon's family: clipboard and file in terracotta, type, alignment,
+    /// borders, view and page in slate blue, number, styles and data in mustard, insert and
+    /// review in olive, formulas and matrices in oxblood. `None` for interface chrome (arrows,
+    /// close, check, plus), which keeps the theme's accent.
+    fn ink(self, dark: bool) -> Option<Color32> {
+        use Icon::*;
+        let (light, night) = match self {
+            Paste | Cut | Copy | Brush | Undo | Redo | Save | Eraser | FillDown | Find | Search | NewFile | OpenFolder | Print | Share | Folder
+            | Book | Home | Info => ink::TERRACOTTA,
+            Bold | Italic | Underline | Strike | Borders | BorderAll | BorderNone | BorderOutside | BorderThick | Fill | FontColor | AlignTop
+            | AlignMiddle | AlignBottom | AlignLeft | AlignCenter | AlignRight | Orientation | IndentDec | IndentInc | Wrap | Merge | Freeze
+            | Zoom | Gridlines | Normal | PageLayout | PageBreak | Margins | Orient | SheetRtl | Paper | PrintArea | Header | Footer | Theme => {
+                ink::SLATE
+            }
+            Currency | Percent | Comma | DecInc | DecDec | CondFormat | FormatTable | CellStyles | Insert | Delete | Format | SortFilter | Filter
+            | SortAsc | SortDesc | Duplicates | TextColumns | Validation | Group | Ungroup | Subtotal => ink::MUSTARD,
+            Table | PivotTable | Chart | ChartBar | ChartLine | ChartPie | ChartScatter | Picture | Shapes | Link | Comment | Note | TextBox
+            | Symbol | Sparkline | Checkbox | Spell | Lock | Pen | Script | Calendar | Clock | PageNumber | PageCount | FileName => ink::OLIVE,
+            Sum | Fx | Function | Name | Trace | Calc => ink::OXBLOOD,
+            _ => return None,
+        };
+        Some(if dark { night } else { light })
     }
 }
 
@@ -408,7 +446,7 @@ fn paint_with(p: &Painter, rect: Rect, icon: Icon, c: Color32, pal: &Palette) {
     let r = Rect::from_center_size(rect.center(), vec2(side, side));
     let g = G { p, r, s: side / 16.0 };
     let muted = c.gamma_multiply(0.45);
-    let a = pal.accent;
+    let a = icon.ink(pal.dark).unwrap_or(pal.accent);
     let wash = a.gamma_multiply(0.35);
     let (down, up, left, right) = (FRAC_PI_2, -FRAC_PI_2, PI, 0.0);
     // A page with a folded corner, the shape documents share.
