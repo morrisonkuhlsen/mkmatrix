@@ -290,6 +290,15 @@ impl SheetApp {
     }
 }
 
+impl SheetApp {
+    /// What the shapes say of the formula being edited (see `shapes`).
+    pub fn editing_shape(&self) -> Option<crate::shapes::Verdict> {
+        let ed = self.editor.as_ref().filter(|e| e.is_formula())?;
+        let d = self.session.active()?;
+        crate::shapes::of_formula(&ed.text, &d.wb, d.wb.active_sheet())
+    }
+}
+
 /// A cell given as `(row, column)` or `row, column` (1-based, as the Name Box shows it with
 /// numbered columns) in A1 form; `None` for anything else or a cell off the sheet.
 pub(crate) fn row_col_to_a1(text: &str) -> Option<String> {

@@ -226,6 +226,19 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     }
     let objects = crate::chartview::paint_objects(app, &painter.with_clip_rect(geo.cells), &geo, &wb, si, sh);
     paint_overlays(app, ui, &painter.with_clip_rect(geo.cells), &geo, &wb, si, sh, &sel);
+    // While a formula with a matrix result is typed: where that result will spill.
+    if let Some(crate::shapes::Verdict::Fits((rows, cols))) = app.editing_shape()
+        && rows.saturating_mul(cols) > 1
+    {
+        let at = sel.active;
+        let end = mkmatrix_engine::core::CellRef::new(
+            at.row.saturating_add(rows - 1).min(mkmatrix_engine::core::MAX_ROWS - 1),
+            at.col.saturating_add(cols - 1).min(mkmatrix_engine::core::MAX_COLS - 1),
+        );
+        let r = geo.mirror_rect(geo.range_rect(sh, RangeRef::new(at, end)));
+        let pts = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
+        painter.with_clip_rect(geo.cells).extend(egui::Shape::dashed_line(&pts, Stroke::new(1.5, t.accent), 5.0, 3.0));
+    }
     if app.ui.matrix_brackets {
         crate::matrices::paint_brackets(&painter.with_clip_rect(geo.cells), &geo, sh, &crate::matrices::on_sheet(&wb, si), t.accent);
     }

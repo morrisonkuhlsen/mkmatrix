@@ -2,7 +2,7 @@
 //!
 //! `cargo run --release -p mkmatrix-ui-egui --example snapshot -- [--sample sales] [--in file.xlsx]
 //!  [--size 1440x900] [--scale 2] [--cmd 'id={json}']... [--tab Insert] [--dark] [--language en|es|zh|ja|ko|ru|pt|de|cs|fr|tr]
-//!  [--dialog 'name={json}'] [--hf-edit header|footer] [--splash] [--backstage] [--density normal|compact|minimal] [--ui 'id={json}']... [--pointer x,y] out.png`
+//!  [--dialog 'name={json}'] [--hf-edit header|footer] [--splash] [--backstage] [--density normal|compact|minimal] [--ui 'id={json}']... [--pointer x,y] [--edit '=formula'] out.png`
 //!
 //! `--splash` renders the splash screen alone, at its own size.
 
@@ -29,6 +29,7 @@ fn main() {
     let mut density: Option<String> = None;
     let mut ui_cmds: Vec<String> = vec![];
     let mut pointer: Option<egui::Pos2> = None;
+    let mut edit: Option<String> = None;
     let mut out = "snapshot.png".to_string();
     let mut i = 0;
     while i < args.len() {
@@ -84,6 +85,10 @@ fn main() {
             }
             "--splash" => splash = true,
             "--backstage" => backstage = true,
+            "--edit" => {
+                i += 1;
+                edit = args.get(i).cloned();
+            }
             "--pointer" => {
                 i += 1;
                 pointer = args.get(i).and_then(|s| s.split_once(',')).and_then(|(x, y)| Some(egui::pos2(x.parse().ok()?, y.parse().ok()?)));
@@ -162,6 +167,9 @@ fn main() {
                     if let Err(e) = app.run(&id, p) {
                         eprintln!("{id}: {e}");
                     }
+                }
+                if let Some(text) = &edit {
+                    app.begin_edit(Some(text.clone()), false);
                 }
                 if let Some(d) = &density {
                     let _ = app.run("view.density", json!({"mode": d}));

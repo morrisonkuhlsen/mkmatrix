@@ -108,7 +108,20 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
                 let avail = ui.available_width() - 24.0;
                 let field = Rect::from_min_size(ui.cursor().min, vec2(avail, ui.available_height()));
                 ui.painter().rect_filled(field, 0.0, t.window);
-                let inner = field.shrink2(vec2(6.0, 3.0));
+                // The shape the formula will have, or why its matrices don't fit, at the field's end.
+                let verdict = app.editing_shape();
+                let mut inner = field.shrink2(vec2(6.0, 3.0));
+                if let Some(v) = &verdict {
+                    let (text, color) = match v {
+                        crate::shapes::Verdict::Fits((r, c)) => (format!("→ {r}×{c}"), t.accent),
+                        crate::shapes::Verdict::Mismatch(why) => (why.clone(), t.danger),
+                    };
+                    let galley = ui.painter().layout_no_wrap(text, theme::ui_font(12.0), color);
+                    let w = galley.size().x.min(field.width() * 0.6);
+                    let at = egui::pos2(field.right() - 8.0 - w, field.top() + (one_line(row_h).min(field.height()) - galley.size().y) / 2.0);
+                    ui.painter().with_clip_rect(field).galley(at, galley, color);
+                    inner.max.x -= w + 12.0;
+                }
                 // The formula reads from the field's top, whatever the row's centring.
                 let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));
                 let id = egui::Id::unique("mkmatrix.formula_bar");
