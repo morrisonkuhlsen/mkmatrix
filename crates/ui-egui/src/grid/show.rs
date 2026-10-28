@@ -240,7 +240,8 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
         painter.with_clip_rect(geo.cells).extend(egui::Shape::dashed_line(&pts, Stroke::new(1.5, t.accent), 5.0, 3.0));
     }
     if app.ui.matrix_brackets {
-        crate::matrices::paint_brackets(&painter.with_clip_rect(geo.cells), &geo, sh, &crate::matrices::on_sheet(&wb, si), t.accent);
+        let hover = ui.input(|i| i.pointer.hover_pos()).filter(|h| geo.cells.contains(*h)).map(|h| geo.mirror_pos(h));
+        crate::matrices::paint_brackets(&painter.with_clip_rect(geo.cells), &geo, sh, &crate::matrices::on_sheet(&wb, si), t.accent, hover);
     }
     if sh.view == mkmatrix_engine::model::SheetViewMode::PageBreakPreview {
         paint_pages(app, &painter.with_clip_rect(geo.cells), &geo, sh);

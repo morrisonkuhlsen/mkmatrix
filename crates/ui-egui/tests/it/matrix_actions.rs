@@ -101,6 +101,17 @@ mod brackets {
     }
 
     #[test]
+    fn a_click_on_the_name_beside_the_bracket_selects_the_matrix() {
+        let mut h = crate::support::harness(named(), 4);
+        // The name sits left of the left bracket, centred on the matrix's height.
+        let at = left_bracket(&h) - vec2(14.0, 0.0);
+        press(&mut h, at, true);
+        press(&mut h, at, false);
+        h.run_steps(2);
+        assert_eq!(h.state().session.active().unwrap().selection.current().a1(), "C3:D4");
+    }
+
+    #[test]
     fn dragging_a_bracket_moves_the_matrix_and_its_name() {
         let mut h = crate::support::harness(named(), 4);
         let at = left_bracket(&h);

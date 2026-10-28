@@ -1,8 +1,9 @@
 //! MK Matrix's named matrices: defined names that refer to one range on a sheet (`X` for
 //! `Sheet1!$B$7:$D$14`). The Name Box shows a cell inside one by its place in the matrix,
-//! `X(3,2)`, and takes that form to go there; the grid draws the matrix's brackets.
+//! `X(3,2)`, and takes that form to go there; the grid draws the matrix's brackets with its name
+//! beside them, lit while the pointer is over either.
 
-use egui::{Color32, Painter, Stroke, pos2};
+use egui::{Align2, Color32, FontFamily, FontId, Painter, Rect, Stroke, pos2, vec2};
 use mkmatrix_engine::core::{CellRef, RangeRef};
 use mkmatrix_engine::model::{Sheet, Workbook};
 
@@ -76,34 +77,79 @@ pub fn resolve(wb: &Workbook, si: usize, text: &str) -> Option<CellRef> {
     Some(CellRef::new(range.start.row + row - 1, range.start.col + col - 1))
 }
 
-/// The named matrix whose bracket is at `p` (sheet coordinates): within a few points of either
-/// bracket's upright, along the matrix's height.
+/// The size of a matrix's name beside its bracket, at 100% zoom.
+const NAME_SIZE: f32 = 18.0;
+/// The gap between the name and the bracket.
+const NAME_GAP: f32 = 7.0;
+
+/// Where a matrix's name sits: left of the left bracket, centred on its height; above the
+/// bracket's top when the sheet's edge leaves no room on the left. The width is estimated, so
+/// hit-testing needs no fonts; the name is drawn right-aligned inside it.
+fn name_rect(geo: &Geo, r: Rect, name: &str) -> Rect {
+    let size = NAME_SIZE * geo.z;
+    let w = name.chars().count() as f32 * size * 0.62 + 2.0;
+    let right = r.left() - 3.0 - NAME_GAP * geo.z;
+    if right - w >= geo.cells.left() {
+        Rect::from_min_max(pos2(right - w, r.center().y - size * 0.7), pos2(right, r.center().y + size * 0.7))
+    } else {
+        let bottom = r.top() - 4.0;
+        Rect::from_min_max(pos2(r.left() - 3.0, bottom - size * 1.4), pos2(r.left() - 3.0 + w, bottom))
+    }
+}
+
+/// The named matrix whose bracket or name is at `p` (sheet coordinates): within a few points of
+/// either bracket's upright, along the matrix's height, or over its name.
 pub fn bracket_at(geo: &Geo, sh: &Sheet, matrices: &[(String, RangeRef)], p: egui::Pos2) -> Option<(String, RangeRef)> {
     matrices
         .iter()
-        .find(|(_, range)| {
+        .find(|(name, range)| {
             let r = geo.range_rect(sh, *range);
             let on_upright = (p.x - (r.left() - 3.0)).abs() <= 4.0 || (p.x - (r.right() + 3.0)).abs() <= 4.0;
-            on_upright && p.y >= r.top() - 3.0 && p.y <= r.bottom() + 3.0
+            (on_upright && p.y >= r.top() - 3.0 && p.y <= r.bottom() + 3.0) || name_rect(geo, r, name).expand(2.0).contains(p)
         })
         .cloned()
 }
 
-/// Draws each matrix's square brackets just outside its range, as a matrix is written.
-pub fn paint_brackets(p: &Painter, geo: &Geo, sh: &Sheet, matrices: &[(String, RangeRef)], color: Color32) {
-    let stroke = Stroke::new(2.0, color);
-    for (_, range) in matrices {
+/// Draws each matrix's square brackets just outside its range, as a matrix is written, and its
+/// name beside them in italics. The matrix under `hover` (sheet coordinates) glows.
+pub fn paint_brackets(p: &Painter, geo: &Geo, sh: &Sheet, matrices: &[(String, RangeRef)], color: Color32, hover: Option<egui::Pos2>) {
+    let lit = hover.and_then(|h| bracket_at(geo, sh, matrices, h)).map(|(n, _)| n);
+    let font = FontId::new(NAME_SIZE * geo.z, FontFamily::Name(crate::theme::CELL_ITALIC.into()));
+    for (name, range) in matrices {
         let r = geo.range_rect(sh, *range);
-        if !r.is_positive() || !r.intersects(p.clip_rect()) {
+        let label = name_rect(geo, r, name);
+        if !r.is_positive() || !(r.intersects(p.clip_rect()) || label.intersects(p.clip_rect())) {
             continue;
         }
+        let glow = lit.as_deref() == Some(name.as_str());
         let (top, bottom) = (r.top() - 2.0, r.bottom() + 2.0);
         let serif = (r.width() * 0.25).clamp(3.0, 6.0);
+        let mut lines = Vec::new();
         for (x, dir) in [(r.left() - 3.0, 1.0), (r.right() + 3.0, -1.0)] {
-            p.line_segment([pos2(x, top), pos2(x, bottom)], stroke);
-            p.line_segment([pos2(x, top), pos2(x + dir * serif, top)], stroke);
-            p.line_segment([pos2(x, bottom), pos2(x + dir * serif, bottom)], stroke);
+            lines.push([pos2(x, top), pos2(x, bottom)]);
+            lines.push([pos2(x, top), pos2(x + dir * serif, top)]);
+            lines.push([pos2(x, bottom), pos2(x + dir * serif, bottom)]);
         }
+        let text_at = pos2(label.right(), label.center().y);
+        if glow {
+            // A soft halo: wide, faint strokes under the brackets and copies of the name around it.
+            for (width, alpha) in [(12.0, 0.10), (8.0, 0.18), (5.0, 0.30)] {
+                let halo = Stroke::new(width, color.gamma_multiply(alpha));
+                for l in &lines {
+                    p.line_segment(*l, halo);
+                }
+            }
+            for (dx, dy) in [(-1.5, 0.0), (1.5, 0.0), (0.0, -1.5), (0.0, 1.5), (-1.0, -1.0), (1.0, 1.0), (-1.0, 1.0), (1.0, -1.0)] {
+                p.text(text_at + vec2(dx, dy) * 1.4, Align2::RIGHT_CENTER, name, font.clone(), color.gamma_multiply(0.18));
+                p.text(text_at + vec2(dx, dy) * 0.7, Align2::RIGHT_CENTER, name, font.clone(), color.gamma_multiply(0.30));
+            }
+        }
+        let ink = if glow { color.lerp_to_gamma(Color32::WHITE, 0.4) } else { color };
+        let stroke = Stroke::new(if glow { 2.4 } else { 2.0 }, ink);
+        for l in &lines {
+            p.line_segment(*l, stroke);
+        }
+        p.text(text_at, Align2::RIGHT_CENTER, name, font.clone(), ink);
     }
 }
 
