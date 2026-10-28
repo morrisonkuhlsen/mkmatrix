@@ -1056,10 +1056,27 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Calculation by Hand" => "Cálculo à Mão",
         "Copy LaTeX" => "Copiar LaTeX",
         "LaTeX copied" => "LaTeX copiado",
-        "Select a cell with a matrix formula: a transpose (X'), a product (A@B), MX.DET or MX.INV." => {
-            "Selecione uma célula com uma fórmula de matriz: uma transposta (X'), um produto (A@B), MX.DET ou MX.INV."
+        "Select a cell with a matrix formula: a transpose (X'), a product (A@B), a system (A\\b), MX.DET or MX.INV." => {
+            "Selecione uma célula com uma fórmula de matriz: uma transposta (X'), um produto (A@B), um sistema (A\\b), MX.DET ou MX.INV."
         }
-        "By hand: a transpose (X'), a product (A@B), MX.DET or MX.INV." => "À mão: uma transposta (X'), um produto (A@B), MX.DET ou MX.INV.",
+        "By hand: a transpose (X'), a product (A@B), a system (A\\b), MX.DET or MX.INV." => {
+            "À mão: uma transposta (X'), um produto (A@B), um sistema (A\\b), MX.DET ou MX.INV."
+        }
+        "Column {}" => "Coluna {}",
+        "Column {}: already in place" => "Coluna {}: já no lugar",
+        "Minor of a1{}" => "Menor de a1{}",
+        "…and so on for the other {} elements" => "…e assim por diante para os outros {} elementos",
+        "The system" => "O sistema",
+        "More equations than unknowns: least squares solves the normal equations" => {
+            "Mais equações que incógnitas: mínimos quadrados resolvem as equações normais"
+        }
+        "The normal matrix" => "A matriz normal",
+        "The right-hand side" => "O lado direito",
+        "The augmented matrix" => "A matriz aumentada",
+        "The right part is the solution" => "A parte direita é a solução",
+        "Fewer equations than unknowns: the system has no single solution." => "Menos equações que incógnitas: o sistema não tem solução única.",
+        "The system is singular: it has no single solution (a pivot is 0)." => "O sistema é singular: não tem solução única (um pivô é 0).",
+        "The matrix is singular: it has no inverse (a pivot is 0)." => "A matriz é singular: não tem inversa (um pivô é 0).",
         "The matrix" => "A matriz",
         "Rows become columns" => "As linhas viram colunas",
         "The transpose" => "A transposta",

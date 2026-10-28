@@ -26,11 +26,30 @@ pub enum Math {
     Row(Vec<Math>),
 }
 
-/// One step: what it says, and the notation.
-#[derive(Clone, Debug, PartialEq)]
+/// One step: what it says, and the notation. The caption is fixed text (translated); `{}` in it is
+/// replaced by `detail` (numbers and row operations, never translated).
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct Step {
     pub caption: String,
+    pub detail: String,
     pub math: Math,
+}
+
+impl Default for Math {
+    fn default() -> Self {
+        Math::Row(Vec::new())
+    }
+}
+
+impl Step {
+    fn new(caption: &str, math: Math) -> Step {
+        Step { caption: caption.into(), detail: String::new(), math }
+    }
+
+    /// The caption as read, translated by `tr`.
+    pub fn text(&self, tr: impl Fn(&str) -> String) -> String {
+        tr(&self.caption).replace("{}", &self.detail)
+    }
 }
 
 /// The largest square matrix worked by hand; past it the steps would fill a book.
@@ -60,6 +79,11 @@ fn matrix(m: &Mat) -> Math {
 fn row(v: Vec<Math>) -> Math {
     Math::Row(v)
 }
+/// `m` with a superscript, in parentheses when it is more than one symbol (`(XᵀX)⁻¹`).
+fn sup(m: Math, s: &str) -> Math {
+    let base = if matches!(m, Math::Row(_)) { row(vec![op("("), m, op(")")]) } else { m };
+    Math::Sup(Box::new(base), Box::new(op(s)))
+}
 
 /// The steps for a cell's formula (with or without `=`) on sheet `si`; `Err(why)` when it isn't an
 /// operation worked by hand.
@@ -75,7 +99,9 @@ pub fn derive(formula: &str, wb: &Workbook, si: usize) -> Result<Vec<Step>, Stri
         Expr::Call(name, args) if name == "MX.MUL" && args.len() == 2 => product_steps(&ctx, &args[0], &args[1]),
         Expr::Call(name, args) if name == "MX.DET" => det_steps(&ctx, args.first().ok_or("MX.DET needs a matrix.")?),
         Expr::Call(name, args) if name == "MX.INV" => inverse_steps(&ctx, args.first().ok_or("MX.INV needs a matrix.")?),
-        _ => Err("By hand: a transpose (X'), a product (A@B), MX.DET or MX.INV.".into()),
+        Expr::Binary(BinOp::Solve, a, b) => solve_steps(&ctx, a, b),
+        Expr::Call(name, args) if name == "MX.SOLVE" && args.len() == 2 => solve_steps(&ctx, &args[0], &args[1]),
+        _ => Err("By hand: a transpose (X'), a product (A@B), a system (A\\b), MX.DET or MX.INV.".into()),
     }
 }
 
@@ -124,14 +150,27 @@ impl Ctx<'_> {
             Expr::Number(v) => Ok((vec![vec![*v]], Math::Num(*v))),
             Expr::Unary(UnOp::Transpose, a) => {
                 let (m, shown) = self.value(a, depth + 1)?;
-                Ok((transpose(&m), Math::Sup(Box::new(shown), Box::new(op("T")))))
+                Ok((transpose(&m), sup(shown, "T")))
+            }
+            Expr::Call(name, args) if name == "MX.T" && args.len() == 1 => {
+                self.value(&Expr::Unary(UnOp::Transpose, Box::new(args[0].clone())), depth + 1)
+            }
+            Expr::Call(name, args) if name == "MX.MUL" && args.len() == 2 => {
+                self.value(&Expr::Binary(BinOp::MatMul, Box::new(args[0].clone()), Box::new(args[1].clone())), depth + 1)
+            }
+            Expr::Call(name, args) if name == "MX.INV" && args.len() == 1 => {
+                let (m, shown) = self.value(&args[0], depth + 1)?;
+                let n = square(&m, "An inverse")?;
+                let mut aug = beside(&m, &identity(n));
+                eliminate(&mut aug, n, &mut Vec::new()).map_err(|()| "The matrix is singular: it has no inverse (a pivot is 0).".to_string())?;
+                Ok((right_of(&aug, n), sup(shown, "−1")))
             }
             Expr::Binary(BinOp::MatMul, a, b) => {
                 let (x, xs) = self.value(a, depth + 1)?;
                 let (y, ys) = self.value(b, depth + 1)?;
                 Ok((mul(&x, &y)?, row(vec![xs, ys])))
             }
-            _ => Err("By hand works on ranges, named matrices, array constants, their transposes and products.".into()),
+            _ => Err("By hand works on ranges, named matrices, array constants, their transposes, products and inverses.".into()),
         }
     }
 
@@ -167,7 +206,10 @@ fn mul(a: &Mat, b: &Mat) -> Result<Mat, String> {
     if k != b.len() {
         return Err(format!("{n}×{k} @ {}×{p}: {k} vs {}.", b.len(), b.len()));
     }
-    Ok((0..n).map(|i| (0..p).map(|j| (0..k).map(|t| a[i][t] * b[t][j]).sum()).collect()).collect())
+    let mut c: Mat = (0..n).map(|i| (0..p).map(|j| (0..k).map(|t| a[i][t] * b[t][j]).sum()).collect()).collect();
+    let scale = c.iter().flatten().fold(0.0f64, |acc, x| acc.max(x.abs())).max(1e-300);
+    tidy(&mut c, scale);
+    Ok(c)
 }
 
 fn transpose_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
@@ -175,12 +217,13 @@ fn transpose_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
     let t = transpose(&m);
     let a_t = Math::Sup(Box::new(shown.clone()), Box::new(op("T")));
     Ok(vec![
-        Step { caption: "The matrix".into(), math: row(vec![shown.clone(), op("="), matrix(&m)]) },
+        Step { caption: "The matrix".into(), detail: String::new(), math: row(vec![shown.clone(), op("="), matrix(&m)]) },
         Step {
             caption: "Rows become columns".into(),
+            detail: String::new(),
             math: row(vec![sub(Math::Row(vec![Math::Op("(".into()), a_t.clone(), Math::Op(")".into())]), op("ij")), op("="), sub(shown, op("ji"))]),
         },
-        Step { caption: "The transpose".into(), math: row(vec![a_t, op("="), matrix(&t)]) },
+        Step { caption: "The transpose".into(), detail: String::new(), math: row(vec![a_t, op("="), matrix(&t)]) },
     ])
 }
 
@@ -190,9 +233,14 @@ fn product_steps(ctx: &Ctx, a: &Expr, b: &Expr) -> Result<Vec<Step>, String> {
     let c = mul(&x, &y)?;
     let k = y.len();
     let mut steps = vec![
-        Step { caption: "The factors".into(), math: row(vec![xs.clone(), op("="), matrix(&x), op(","), ys.clone(), op("="), matrix(&y)]) },
+        Step {
+            caption: "The factors".into(),
+            detail: String::new(),
+            math: row(vec![xs.clone(), op("="), matrix(&x), op(","), ys.clone(), op("="), matrix(&y)]),
+        },
         Step {
             caption: "Each element is a row times a column".into(),
+            detail: String::new(),
             math: row(vec![idx("c", 0, 0).relabel("ij"), op("="), sub(op("Σ"), var("k")), sub(var("a"), op("ik")), sub(var("b"), op("kj"))]),
         },
     ];
@@ -200,7 +248,11 @@ fn product_steps(ctx: &Ctx, a: &Expr, b: &Expr) -> Result<Vec<Step>, String> {
     'cells: for (i, line) in c.iter().enumerate() {
         for (j, value) in line.iter().enumerate() {
             if shown >= EXPAND_MAX {
-                steps.push(Step { caption: format!("…and so on for the other {} elements", c.len() * line.len() - shown), math: row(vec![]) });
+                steps.push(Step {
+                    caption: "…and so on for the other {} elements".into(),
+                    detail: (c.len() * line.len() - shown).to_string(),
+                    math: row(vec![]),
+                });
                 break 'cells;
             }
             let mut terms = vec![idx("c", i + 1, j + 1), op("=")];
@@ -217,11 +269,11 @@ fn product_steps(ctx: &Ctx, a: &Expr, b: &Expr) -> Result<Vec<Step>, String> {
             }
             terms.push(op("="));
             terms.push(Math::Num(*value));
-            steps.push(Step { caption: String::new(), math: row(terms) });
+            steps.push(Step { caption: String::new(), detail: String::new(), math: row(terms) });
             shown += 1;
         }
     }
-    steps.push(Step { caption: "The product".into(), math: row(vec![xs, ys, op("="), matrix(&c)]) });
+    steps.push(Step { caption: "The product".into(), detail: String::new(), math: row(vec![xs, ys, op("="), matrix(&c)]) });
     Ok(steps)
 }
 
@@ -273,10 +325,11 @@ fn det_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
     let n = square(&m, "A determinant")?;
     let d = det(&m);
     let det_of = |x: Math| row(vec![op("det"), op("("), x, op(")")]);
-    let mut steps = vec![Step { caption: "The matrix".into(), math: row(vec![shown.clone(), op("="), matrix(&m)]) }];
+    let mut steps = vec![Step { caption: "The matrix".into(), detail: String::new(), math: row(vec![shown.clone(), op("="), matrix(&m)]) }];
     if n == 2 {
         steps.push(Step {
             caption: "Main diagonal minus the other".into(),
+            detail: String::new(),
             math: row(vec![
                 det_of(shown),
                 op("="),
@@ -295,6 +348,7 @@ fn det_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
     }
     steps.push(Step {
         caption: "Expansion along the first row".into(),
+        detail: String::new(),
         math: row(vec![
             det_of(shown.clone()),
             op("="),
@@ -309,7 +363,8 @@ fn det_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
         let minor_m = minor(&m, 0, j);
         let md = det(&minor_m);
         steps.push(Step {
-            caption: format!("Minor of a1{}", j + 1),
+            caption: "Minor of a1{}".into(),
+            detail: (j + 1).to_string(),
             math: row(vec![sub(var("M"), op(&format!("1{}", j + 1))), op("="), matrix(&minor_m), op("→"), op("det ="), Math::Num(md)]),
         });
         if j > 0 {
@@ -321,25 +376,47 @@ fn det_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
     }
     terms.push(op("="));
     terms.push(Math::Num(d));
-    steps.push(Step { caption: "Together".into(), math: row(terms) });
+    steps.push(Step { caption: "Together".into(), detail: String::new(), math: row(terms) });
     Ok(steps)
 }
 
-fn inverse_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
-    let (m, shown) = ctx.value(a, 0)?;
-    let n = square(&m, "An inverse")?;
-    let mut aug: Mat = m.iter().enumerate().map(|(i, r)| r.iter().copied().chain((0..n).map(|j| if i == j { 1.0 } else { 0.0 })).collect()).collect();
-    let show = |aug: &Mat| matrix(aug);
-    let mut steps = vec![Step {
-        caption: "Next to the identity: [A | I]".into(),
-        math: row(vec![op("["), shown.clone(), op("|"), var("I"), op("]"), op("="), show(&aug)]),
-    }];
-    let scale = m.iter().flatten().fold(0.0f64, |acc, x| acc.max(x.abs())).max(1e-300);
+/// Rounding noise read as the number a hand would write: 0, or the integer it is beside.
+fn tidy(m: &mut Mat, scale: f64) {
+    for x in m.iter_mut().flatten() {
+        if x.abs() < 1e-12 * scale.max(1.0) {
+            *x = 0.0;
+        } else if (*x - x.round()).abs() < 1e-9 * x.abs().max(1.0) {
+            *x = x.round();
+        }
+    }
+}
+
+fn identity(n: usize) -> Mat {
+    (0..n).map(|i| (0..n).map(|j| if i == j { 1.0 } else { 0.0 }).collect()).collect()
+}
+
+/// `[a | b]`: each row of `a` followed by the same row of `b`.
+fn beside(a: &Mat, b: &Mat) -> Mat {
+    a.iter().zip(b).map(|(x, y)| x.iter().chain(y).copied().collect()).collect()
+}
+
+/// The columns of `aug` past the first `n`.
+fn right_of(aug: &Mat, n: usize) -> Mat {
+    aug.iter().map(|r| r.get(n..).map(<[f64]>::to_vec).unwrap_or_default()).collect()
+}
+
+/// Gauss–Jordan on the first `n` columns of `aug` (n rows), one step per column with the row
+/// operations named; `Err` when a pivot is 0.
+fn eliminate(aug: &mut Mat, n: usize, steps: &mut Vec<Step>) -> Result<(), ()> {
+    if aug.len() != n || aug.iter().any(|r| r.len() < n) {
+        return Err(());
+    }
+    let scale = aug.iter().flat_map(|r| r.iter().take(n)).fold(0.0f64, |acc, x| acc.max(x.abs())).max(1e-300);
     for col in 0..n {
         // The pivot: the largest in the column, at or below the diagonal.
         let piv = (col..n).max_by(|&p, &q| aug[p][col].abs().total_cmp(&aug[q][col].abs())).unwrap_or(col);
         if aug[piv][col].abs() <= scale * 1e-12 {
-            return Err("The matrix is singular: it has no inverse (a pivot is 0).".into());
+            return Err(());
         }
         let mut ops = Vec::new();
         if piv != col {
@@ -351,7 +428,7 @@ fn inverse_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
             for x in &mut aug[col] {
                 *x /= p;
             }
-            ops.push(format!("R{} ← R{} / {}", col + 1, col + 1, crate::by_hand::number(p)));
+            ops.push(format!("R{} ← R{} / {}", col + 1, col + 1, number(p)));
         }
         for r in 0..n {
             if r == col {
@@ -365,28 +442,62 @@ fn inverse_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
             for (x, y) in aug[r].iter_mut().zip(&pivot_row) {
                 *x -= f * y;
             }
-            ops.push(format!("R{} ← R{} − ({})·R{}", r + 1, r + 1, crate::by_hand::number(f), col + 1));
+            ops.push(format!("R{} ← R{} − ({})·R{}", r + 1, r + 1, number(f), col + 1));
         }
-        // Rounding noise reads as the number a hand would write: 0, or the integer it is beside.
-        for row_vals in &mut aug {
-            for x in row_vals.iter_mut() {
-                if x.abs() < 1e-12 * scale.max(1.0) {
-                    *x = 0.0;
-                } else if (*x - x.round()).abs() < 1e-9 * x.abs().max(1.0) {
-                    *x = x.round();
-                }
-            }
-        }
-        steps.push(Step {
-            caption: format!("Column {}: {}", col + 1, if ops.is_empty() { "already in place".to_string() } else { ops.join(",  ") }),
-            math: show(&aug),
-        });
+        tidy(aug, scale);
+        let (caption, detail) = if ops.is_empty() {
+            ("Column {}: already in place", (col + 1).to_string())
+        } else {
+            ("Column {}", format!("{}: {}", col + 1, ops.join(",  ")))
+        };
+        steps.push(Step { caption: caption.into(), detail, math: matrix(aug) });
     }
-    let inv: Mat = aug.iter().map(|r| r[n..].to_vec()).collect();
-    steps.push(Step {
-        caption: "The right half is the inverse".into(),
-        math: row(vec![Math::Sup(Box::new(shown), Box::new(op("−1"))), op("="), matrix(&inv)]),
-    });
+    Ok(())
+}
+
+fn inverse_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
+    let (m, shown) = ctx.value(a, 0)?;
+    let n = square(&m, "An inverse")?;
+    let mut aug = beside(&m, &identity(n));
+    let mut steps =
+        vec![Step::new("Next to the identity: [A | I]", row(vec![op("["), shown.clone(), op("|"), var("I"), op("]"), op("="), matrix(&aug)]))];
+    eliminate(&mut aug, n, &mut steps).map_err(|()| "The matrix is singular: it has no inverse (a pivot is 0).".to_string())?;
+    steps.push(Step::new("The right half is the inverse", row(vec![sup(shown, "−1"), op("="), matrix(&right_of(&aug, n))])));
+    Ok(steps)
+}
+
+/// `A\b`: Gauss–Jordan on `[A | b]` when A is square; with more equations than unknowns, least
+/// squares through the normal equations `AᵀA x = Aᵀb` (a regression's coefficients).
+fn solve_steps(ctx: &Ctx, a: &Expr, b: &Expr) -> Result<Vec<Step>, String> {
+    let (m, ms) = ctx.value(a, 0)?;
+    let (r, rs) = ctx.value(b, 0)?;
+    let (rows, cols) = (m.len(), m.first().map_or(0, Vec::len));
+    if rows != r.len() {
+        return Err(format!("{rows}×{cols} \\ {}×{}: {rows} vs {}.", r.len(), r.first().map_or(0, Vec::len), r.len()));
+    }
+    if rows < cols {
+        return Err("Fewer equations than unknowns: the system has no single solution.".into());
+    }
+    let mut steps = vec![Step::new("The system", row(vec![ms.clone(), var("x"), op("="), rs.clone()]))];
+    let (lhs, rhs, lhs_s, rhs_s) = if rows == cols {
+        (m.clone(), r.clone(), ms.clone(), rs.clone())
+    } else {
+        let mt = transpose(&m);
+        let (ata, atb) = (mul(&mt, &m)?, mul(&mt, &r)?);
+        let (ata_s, atb_s) = (row(vec![sup(ms.clone(), "T"), ms.clone()]), row(vec![sup(ms.clone(), "T"), rs.clone()]));
+        steps.push(Step::new(
+            "More equations than unknowns: least squares solves the normal equations",
+            row(vec![ata_s.clone(), var("x"), op("="), atb_s.clone()]),
+        ));
+        steps.push(Step::new("The normal matrix", row(vec![ata_s.clone(), op("="), matrix(&ata)])));
+        steps.push(Step::new("The right-hand side", row(vec![atb_s.clone(), op("="), matrix(&atb)])));
+        (ata, atb, ata_s, atb_s)
+    };
+    let n = square(&lhs, "A system")?;
+    let mut aug = beside(&lhs, &rhs);
+    steps.push(Step::new("The augmented matrix", row(vec![op("["), lhs_s, op("|"), rhs_s, op("]"), op("="), matrix(&aug)])));
+    eliminate(&mut aug, n, &mut steps).map_err(|()| "The system is singular: it has no single solution (a pivot is 0).".to_string())?;
+    steps.push(Step::new("The right part is the solution", row(vec![var("x"), op("="), matrix(&right_of(&aug, n))])));
     Ok(steps)
 }
 
@@ -408,7 +519,14 @@ pub fn latex(steps: &[Step]) -> String {
     let mut out = String::from("\\begin{align*}\n");
     for (i, s) in steps.iter().enumerate() {
         if !s.caption.is_empty() {
-            out.push_str(&format!("&\\text{{{}}}\\\\\n", s.caption.replace('{', "\\{").replace('}', "\\}")));
+            let text = s
+                .text(str::to_string)
+                .replace('{', "\\{")
+                .replace('}', "\\}")
+                .replace('←', "$\\leftarrow$")
+                .replace('↔', "$\\leftrightarrow$")
+                .replace('−', "-");
+            out.push_str(&format!("&\\text{{{text}}}\\\\\n"));
         }
         if s.math != Math::Row(vec![]) {
             out.push_str(&format!("&{}", tex(&s.math)));
@@ -494,6 +612,38 @@ mod tests {
         assert!(matches!(last(&t), Math::Row(v) if v.last() == Some(&matrix(&vec![vec![1.0, 0.0, 5.0], vec![2.0, 1.0, 6.0], vec![3.0, 4.0, 0.0]]))));
         assert!(derive("=SUM(A1:B2)", &wb, 0).is_err());
         assert!(derive("=A@D1:F3", &wb, 0).unwrap_err().contains("vs"));
+    }
+
+    #[test]
+    fn systems_by_elimination_and_least_squares() {
+        let wb = book();
+        // 2x + y = 3, x + 3y = 4 → x = 1, y = 1
+        let sq = derive("=A\\{3;4}", &wb, 0).unwrap();
+        assert!(matches!(last(&sq), Math::Row(v) if v.last() == Some(&matrix(&vec![vec![1.0], vec![1.0]]))), "{:?}", last(&sq));
+        assert_eq!(sq.iter().filter(|s| s.caption.starts_with("Column")).count(), 2);
+        assert!(derive("=MX.SOLVE(A,{3;4})", &wb, 0).is_ok());
+        // y = 1 + 2t through (0,1), (1,3), (2,5): least squares finds it exactly.
+        let ls = derive("={1,0;1,1;1,2}\\{1;3;5}", &wb, 0).unwrap();
+        assert!(ls.iter().any(|s| s.caption == "The normal matrix"
+            && matches!(&s.math, Math::Row(v) if v.last() == Some(&matrix(&vec![vec![3.0, 3.0], vec![3.0, 5.0]])))));
+        assert!(matches!(last(&ls), Math::Row(v) if v.last() == Some(&matrix(&vec![vec![1.0], vec![2.0]]))), "{:?}", last(&ls));
+        assert!(derive("={1,2;2,4}\\{1;2}", &wb, 0).unwrap_err().contains("singular"));
+        assert!(derive("={1,2,3}\\{1}", &wb, 0).unwrap_err().contains("Fewer"));
+    }
+
+    #[test]
+    fn inverses_inside_products() {
+        // The regression formula (XᵀX)⁻¹Xᵀy works as a product of its parts.
+        let steps = derive("=MX.INV({1,0;1,1;1,2}'@{1,0;1,1;1,2})@{1,0;1,1;1,2}'@{1;3;5}", &book(), 0).unwrap();
+        assert!(matches!(last(&steps), Math::Row(v) if v.last() == Some(&matrix(&vec![vec![1.0], vec![2.0]]))), "{:?}", last(&steps));
+    }
+
+    #[test]
+    fn captions_fill_in_their_numbers() {
+        let inv = derive("=MX.INV(D1:F3)", &book(), 0).unwrap();
+        let col = inv.iter().find(|s| s.caption.starts_with("Column")).unwrap();
+        assert!(col.text(|c| c.replace("Column", "Coluna")).starts_with("Coluna 1"));
+        assert!(latex(&inv).contains("\\leftarrow"));
     }
 
     #[test]

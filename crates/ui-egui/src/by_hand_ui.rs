@@ -56,7 +56,11 @@ pub(crate) fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
             });
             ui.add_space(4.0);
             match work {
-                None => hint(ui, lang.tr("Select a cell with a matrix formula: a transpose (X'), a product (A@B), MX.DET or MX.INV."), &t),
+                None => hint(
+                    ui,
+                    lang.tr("Select a cell with a matrix formula: a transpose (X'), a product (A@B), a system (A\\b), MX.DET or MX.INV."),
+                    &t,
+                ),
                 Some((cell, formula, Err(why))) => {
                     ui.label(egui::RichText::new(format!("{cell}   {formula}")).font(FontId::monospace(12.5)).color(t.text_dim));
                     hint(ui, lang.tr(&why), &t);
@@ -79,7 +83,7 @@ fn steps_ui(ui: &mut egui::Ui, steps: &[Step], t: &Tokens, lang: crate::i18n::La
     for s in steps {
         if !s.caption.is_empty() {
             ui.add_space(6.0);
-            ui.label(egui::RichText::new(lang.tr(&s.caption)).font(theme::ui_font(12.0)).color(t.text_dim));
+            ui.label(egui::RichText::new(s.text(|c| lang.tr(c).to_string())).font(theme::ui_font(12.0)).color(t.text_dim));
         }
         if s.math != Math::Row(vec![]) {
             let size = measure(ui.painter(), &s.math, SIZE);
