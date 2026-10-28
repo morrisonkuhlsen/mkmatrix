@@ -1043,6 +1043,9 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Background Color" => "Cor de Fundo",
         "The cell can't be changed while the sheet is protected." => "A célula não pode ser alterada enquanto a planilha estiver protegida.",
         "The cell's formula isn't shown while the sheet is protected." => "A fórmula da célula não aparece enquanto a planilha estiver protegida.",
+        "rank" => "posto",
+        "singular" => "singular",
+        "symmetric" => "simétrica",
         "Welcome to MK Matrix" => "Bem-vindo ao MK Matrix",
         "Numbered Columns" => "Colunas Numeradas",
         "Head the columns 1, 2, 3… as a matrix's a(i,j), rather than A, B, C" => {

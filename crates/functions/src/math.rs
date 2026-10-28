@@ -12,7 +12,7 @@ use crate::util::{
 use crate::{Arg, Ctx, FnSpec, VAR};
 
 mod criteria;
-mod linalg;
+pub mod linalg;
 mod matrix;
 mod roman_base;
 

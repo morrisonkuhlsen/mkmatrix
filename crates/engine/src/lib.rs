@@ -37,6 +37,7 @@ pub use cmd::{CommandInfo, CommandSpec, command_specs, find_command, register_te
 pub use mkmatrix_calc as calc;
 pub use mkmatrix_core as core;
 pub use mkmatrix_formula as formula;
+pub use mkmatrix_functions as functions;
 pub use mkmatrix_model as model;
 pub use mkmatrix_numfmt as numfmt;
 pub use selection::Selection;

@@ -612,3 +612,18 @@ fn linear_algebra_survives_hostile_input() {
     let big = av(arr(vec![vec![nv(1.0); 600]; 600]));
     is_err(ev("MX.SVD", vec![big]), Num);
 }
+
+#[test]
+fn a_selection_summarises_as_a_matrix() {
+    let s = crate::summarize(2, 2, &[2.0, 1.0, 1.0, 2.0]).unwrap();
+    assert_eq!((s.rows, s.cols, s.rank, s.symmetric), (2, 2, 2, true));
+    assert_eq!((s.trace, s.det), (Some(4.0), Some(3.0)));
+    assert!((s.cond.unwrap() - 3.0).abs() < 1e-12);
+    let singular = crate::summarize(2, 2, &[1.0, 2.0, 2.0, 4.0]).unwrap();
+    assert_eq!((singular.rank, singular.cond, singular.det), (1, None, Some(0.0)));
+    let tall = crate::summarize(3, 2, &[1.0, 0.0, 0.0, 1.0, 1.0, 1.0]).unwrap();
+    assert_eq!((tall.rank, tall.trace, tall.det, tall.symmetric), (2, None, None, false));
+    assert!(crate::summarize(0, 3, &[]).is_none());
+    assert!(crate::summarize(2, 2, &[1.0, f64::NAN, 0.0, 1.0]).is_none());
+    assert!(crate::summarize(200, 200, &vec![1.0; 40_000]).is_none(), "too large to summarise each frame");
+}

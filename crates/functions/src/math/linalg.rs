@@ -394,3 +394,49 @@ pub(super) fn exact_determinant(n: usize, m: &[f64]) -> Option<f64> {
     let d = det as f64;
     d.is_finite().then_some(d)
 }
+
+/// What MK Matrix's status bar tells about a selected block of numbers.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MatrixSummary {
+    pub rows: usize,
+    pub cols: usize,
+    pub rank: usize,
+    /// The Frobenius norm.
+    pub norm: f64,
+    /// The 2-norm condition number; `None` for a singular matrix.
+    pub cond: Option<f64>,
+    /// For a square matrix: its trace, determinant and whether it is symmetric.
+    pub trace: Option<f64>,
+    pub det: Option<f64>,
+    pub symmetric: bool,
+}
+
+/// The largest block the status bar summarises: past it the work isn't worth a frame.
+pub const SUMMARY_MAX: usize = 120;
+
+/// Summarises a row-major `rows`×`cols` block of numbers; `None` when it is empty, too large or
+/// a decomposition fails.
+pub fn summarize(rows: usize, cols: usize, data: &[f64]) -> Option<MatrixSummary> {
+    if rows == 0
+        || cols == 0
+        || rows > SUMMARY_MAX
+        || cols > SUMMARY_MAX
+        || data.len() != rows.saturating_mul(cols)
+        || data.iter().any(|x| !x.is_finite())
+    {
+        return None;
+    }
+    let m = DMatrix::from_row_slice(rows, cols, data);
+    let square = rows == cols;
+    let det = square.then(|| exact_determinant(rows, data).unwrap_or_else(|| m.clone().lu().determinant()));
+    let trace = square.then(|| m.trace());
+    let symmetric = square && is_symmetric(&m);
+    let norm = m.norm();
+    let (_, s, _) = svd(m).ok()?;
+    let largest = s.first().copied().unwrap_or(0.0);
+    let tol = rank_tolerance(rows, cols, largest);
+    let rank = s.iter().filter(|x| **x > tol).count();
+    let smallest = s.last().copied().unwrap_or(0.0);
+    let cond = (rank == rows.min(cols) && smallest > 0.0).then(|| largest / smallest);
+    Some(MatrixSummary { rows, cols, rank, norm, cond, trace, det, symmetric })
+}

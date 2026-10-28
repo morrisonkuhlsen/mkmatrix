@@ -179,6 +179,8 @@ pub struct GridState {
     pub reveal_from: Option<CellRef>,
     pub last_title: Option<String>,
     pub drag_select: bool,
+    /// The status bar's matrix summary of the selection, and the hash of the block it is for.
+    pub matrix_summary: Option<(u64, Option<String>)>,
     pub rect: Option<Rect>,
     pub cells_rect: Option<Rect>,
     /// Column and row of the clicked header cell, and where to open the menu.

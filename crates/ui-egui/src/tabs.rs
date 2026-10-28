@@ -335,6 +335,11 @@ pub fn status_bar(app: &mut SheetApp, ui: &mut Ui) {
                     mkmatrix_engine::Mode::Point => "Point",
                 };
                 text(ui, egui::RichText::new(app.ui.language.tr(mode)).font(theme::ui_font(12.5)).color(t.text_dim));
+                // The selection as a matrix: its name, shape and what linear algebra says of it.
+                if let Some(summary) = matrix_summary(app) {
+                    ui.add_space(14.0);
+                    text(ui, egui::RichText::new(summary).font(theme::ui_font(12.5)).color(t.accent));
+                }
                 if let Some(d) = app.session.active() {
                     if d.wb.vba_project.is_some() {
                         ui.add_space(12.0);
@@ -472,6 +477,84 @@ fn status_bar_menu(app: &mut SheetApp, ui: &mut Ui) {
             app.run_or_alert("view.statusBar", json!({ key: on }));
         }
     }
+}
+
+/// A number for the status bar: four significant digits, exponent form when very large or small.
+fn short_number(x: f64) -> String {
+    if x == 0.0 {
+        return "0".into();
+    }
+    if x.abs() >= 1e6 || x.abs() < 1e-3 {
+        return format!("{x:.3e}");
+    }
+    let digits = (3 - x.abs().log10().floor() as i32).clamp(0, 6) as usize;
+    let s = format!("{x:.digits$}");
+    if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s }
+}
+
+/// The status bar's summary of the selection when it is one block of numbers (two cells or more):
+/// `X · 8×3 · rank 3 · ‖·‖ 24.1 · cond 42.7`, and for a square one its trace, determinant and
+/// symmetry. Recomputed only when the block or its numbers change.
+pub(crate) fn matrix_summary(app: &mut SheetApp) -> Option<String> {
+    use std::hash::{Hash, Hasher};
+    let lang = app.ui.language;
+    let d = app.session.active()?;
+    if d.selection.ranges.len() != 1 {
+        return None;
+    }
+    let r = d.selection.current();
+    if r.is_single() || r.is_full_rows() || r.is_full_cols() {
+        return None;
+    }
+    let (rows, cols) = (r.height() as usize, r.width() as usize);
+    if rows > mkmatrix_engine::functions::SUMMARY_MAX || cols > mkmatrix_engine::functions::SUMMARY_MAX {
+        return None;
+    }
+    let sh = d.wb.active()?;
+    let mut data = Vec::with_capacity(rows * cols);
+    for row in r.start.row..=r.end.row {
+        for col in r.start.col..=r.end.col {
+            match sh.value(mkmatrix_engine::core::CellRef::new(row, col)) {
+                mkmatrix_engine::core::Value::Number(n) => data.push(n),
+                _ => return None,
+            }
+        }
+    }
+    let name = crate::matrices::on_sheet(&d.wb, d.wb.active_sheet()).into_iter().find(|(_, m)| *m == r).map(|(n, _)| n);
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (d.uid, d.wb.active_sheet(), r.start.row, r.start.col, r.end.row, r.end.col, &name, lang.code()).hash(&mut h);
+    for x in &data {
+        x.to_bits().hash(&mut h);
+    }
+    let key = h.finish();
+    if let Some((k, s)) = &app.grid.matrix_summary
+        && *k == key
+    {
+        return s.clone();
+    }
+    let text = mkmatrix_engine::functions::summarize(rows, cols, &data).map(|m| {
+        let mut parts = Vec::new();
+        if let Some(n) = &name {
+            parts.push(n.clone());
+        }
+        parts.push(format!("{}×{}", m.rows, m.cols));
+        parts.push(format!("{} {}", lang.tr("rank"), m.rank));
+        parts.push(format!("‖·‖ {}", short_number(m.norm)));
+        match m.cond {
+            Some(c) => parts.push(format!("cond {}", short_number(c))),
+            None => parts.push(lang.tr("singular").to_string()),
+        }
+        if let (Some(tr), Some(det)) = (m.trace, m.det) {
+            parts.push(format!("tr {}", short_number(tr)));
+            parts.push(format!("det {}", short_number(det)));
+            if m.symmetric {
+                parts.push(lang.tr("symmetric").to_string());
+            }
+        }
+        parts.join("  ·  ")
+    });
+    app.grid.matrix_summary = Some((key, text.clone()));
+    text
 }
 
 #[cfg(test)]
