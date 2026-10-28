@@ -168,7 +168,15 @@ pub fn specs() -> Vec<CommandSpec> {
             col_width
         ),
         cmd!("home.autofitRowHeight", "AutoFit Row Height", ["Home", "Cells", "Format"], None, "{sheet?, rows?}", has_doc, autofit_rows),
-        cmd!("home.autofitColumnWidth", "AutoFit Column Width", ["Home", "Cells", "Format"], None, "{sheet?, cols?}", has_doc, autofit_cols),
+        cmd!(
+            "home.autofitColumnWidth",
+            "AutoFit Column Width",
+            ["Home", "Cells", "Format"],
+            None,
+            "{sheet?, cols?, extra?: pixels of room past the widest entry}",
+            has_doc,
+            autofit_cols
+        ),
         cmd!("home.defaultWidth", "Default Width…", ["Home", "Cells", "Format"], None, "{sheet?, width: 64 (pixels)}", has_doc, default_width),
         cmd!("home.hideRows", "Hide Rows", ["Home", "Cells", "Format", "Hide & Unhide"], Some("Cmd+9"), "{sheet?, rows?}", has_doc, |s, p| hide(
             s, p, true, true

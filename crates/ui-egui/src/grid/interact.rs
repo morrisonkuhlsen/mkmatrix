@@ -160,7 +160,18 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
         } else if in_col_header {
             col_edge(geo, sh, p.x).map(|(col, _)| {
                 let selected = sel.ranges.iter().any(|r| r.is_full_cols() && col >= r.start.col && col <= r.end.col);
-                ("home.autofitColumnWidth", if selected { json!({}) } else { json!({"cols": RangeRef::cols(col, col).a1()}) })
+                // Beside a named matrix the column also makes room for its name.
+                let room = if app.ui.matrix_brackets {
+                    app.session.active().map_or(0.0, |d| crate::matrices::room_left_of(&d.wb, d.wb.active_sheet(), col))
+                } else {
+                    0.0
+                };
+                let params = match (selected, room > 0.0) {
+                    (true, _) => json!({}),
+                    (false, false) => json!({"cols": RangeRef::cols(col, col).a1()}),
+                    (false, true) => json!({"cols": RangeRef::cols(col, col).a1(), "extra": room}),
+                };
+                ("home.autofitColumnWidth", params)
             })
         } else if in_row_header {
             row_edge(geo, sh, p.y).map(|(row, _)| {

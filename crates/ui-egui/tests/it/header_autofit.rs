@@ -191,3 +191,36 @@ fn table_filter_autofit_works_through_command_and_header_double_click() {
         }
     }
 }
+
+#[test]
+fn autofit_beside_a_named_matrix_makes_room_for_its_name() {
+    let width_after_double_click = |named: bool| {
+        let mut session = Session::new();
+        session.new_workbook();
+        session.execute("range.setValues", json!({"range": "A1", "values": [[21, 1, 2], [13, 3, 4], [9, 5, 6]]})).unwrap();
+        if named {
+            session.execute("formulas.defineName", json!({"name": "H_exame", "refersTo": "=Sheet1!$B$1:$C$3"})).unwrap();
+        }
+        session.execute("selection.set", json!({"range": "E5"})).unwrap();
+        let mut h = crate::common::builder().with_step_dt(1.0 / 60.0).with_size(vec2(1200.0, 800.0)).build_ui_state(
+            |ui, app: &mut SheetApp| {
+                app.logic(ui.ctx());
+                app.ui(ui);
+            },
+            crate::common::app(session),
+        );
+        h.run_steps(4);
+        let (pos, _) = edge(&h, false, 0);
+        button(&mut h, pos, true);
+        button(&mut h, pos, false);
+        h.step();
+        button(&mut h, pos, true);
+        button(&mut h, pos, false);
+        h.run_steps(3);
+        sizes(&h, false)[0]
+    };
+    let plain = width_after_double_click(false);
+    let named = width_after_double_click(true);
+    let room = mkmatrix_ui_egui::matrices::name_room("H_exame");
+    assert!((named - plain - room).abs() <= 1.0, "{plain} px of numbers, {named} px with the name's {room} px");
+}
