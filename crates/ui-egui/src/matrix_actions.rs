@@ -4,18 +4,39 @@
 //! `=X\`, for the second matrix to be pointed at.
 
 use egui::{Align2, Rect, Sense, pos2, vec2};
-use mkmatrix_engine::core::{CellRef, RangeRef};
+use mkmatrix_engine::core::{CellRef, MAX_COLS, MAX_ROWS, RangeRef};
+use mkmatrix_engine::model::Sheet;
 use serde_json::json;
 
 use crate::SheetApp;
 use crate::theme::{self, Tokens};
 
-/// One action: its glyph, its tooltip, whether it needs a square matrix, and what it does.
+/// One action: its glyph, its tooltip, whether it needs a square matrix, what it does, and the
+/// rows × columns its result takes for a block of the given rows × columns.
 struct Action {
     glyph: &'static str,
     tip: &'static str,
     square: bool,
     kind: Kind,
+    shape: fn(u32, u32) -> (u32, u32),
+}
+
+fn same(r: u32, c: u32) -> (u32, u32) {
+    (r, c)
+}
+fn transposed(r: u32, c: u32) -> (u32, u32) {
+    (c, r)
+}
+/// Eigenvalues: a column, or two (real and imaginary parts) when some are complex.
+fn eigen(r: u32, _: u32) -> (u32, u32) {
+    (r, 2)
+}
+fn singular(r: u32, c: u32) -> (u32, u32) {
+    (r.min(c), 1)
+}
+/// A formula started for a second operand: only the cell it is typed in is known.
+fn one(_: u32, _: u32) -> (u32, u32) {
+    (1, 1)
 }
 
 enum Kind {
@@ -29,14 +50,14 @@ enum Kind {
 }
 
 const ACTIONS: [Action; 8] = [
-    Action { glyph: "A", tip: "Name as a matrix", square: false, kind: Kind::Name },
-    Action { glyph: "X'", tip: "Transpose", square: false, kind: Kind::Write("={}'") },
-    Action { glyph: "inv", tip: "Inverse", square: true, kind: Kind::Write("=MX.INV({})") },
-    Action { glyph: "@", tip: "Multiply by… (point at the second matrix)", square: false, kind: Kind::Start("={}@") },
-    Action { glyph: "\\", tip: "Solve… (point at the right-hand side)", square: false, kind: Kind::Start("={}\\") },
-    Action { glyph: "λ", tip: "Eigenvalues", square: true, kind: Kind::Write("=MX.EIG({})") },
-    Action { glyph: "σ", tip: "Singular values", square: false, kind: Kind::Write("=MX.SVD({})") },
-    Action { glyph: "Σ", tip: "Calculation by hand", square: false, kind: Kind::ByHand },
+    Action { glyph: "A", tip: "Name as a matrix", square: false, kind: Kind::Name, shape: one },
+    Action { glyph: "X'", tip: "Transpose", square: false, kind: Kind::Write("={}'"), shape: transposed },
+    Action { glyph: "inv", tip: "Inverse", square: true, kind: Kind::Write("=MX.INV({})"), shape: same },
+    Action { glyph: "@", tip: "Multiply by… (point at the second matrix)", square: false, kind: Kind::Start("={}@"), shape: one },
+    Action { glyph: "\\", tip: "Solve… (point at the right-hand side)", square: false, kind: Kind::Start("={}\\"), shape: one },
+    Action { glyph: "λ", tip: "Eigenvalues", square: true, kind: Kind::Write("=MX.EIG({})"), shape: eigen },
+    Action { glyph: "σ", tip: "Singular values", square: false, kind: Kind::Write("=MX.SVD({})"), shape: singular },
+    Action { glyph: "Σ", tip: "Calculation by hand", square: false, kind: Kind::ByHand, shape: one },
 ];
 
 /// Draws the column of actions just right of the selection, level with its top (left of it when
@@ -100,20 +121,49 @@ pub(crate) fn show(app: &mut SheetApp, ctx: &egui::Context, selection: Rect, cel
         });
     });
     let Some(action) = picked.and_then(|i| ACTIONS.get(i)) else { return };
-    // The result goes one column past the block, level with its top.
-    let target = CellRef::new(r.start.row, r.end.col.saturating_add(2).min(mkmatrix_engine::core::MAX_COLS - 1));
+    let mut target = || {
+        let at = app.session.active().and_then(|d| d.wb.active()).and_then(|sh| free_spot(sh, r, (action.shape)(r.height(), r.width())));
+        if at.is_none() {
+            app.message = Some(("MK Matrix".into(), lang.tr("There are no empty cells next to the matrix for the result.").to_string()));
+        }
+        at
+    };
     match action.kind {
         Kind::Name => app.open_dialog("defineName", json!({})),
-        Kind::ByHand => app.ui.by_hand = true,
+        Kind::ByHand => app.run_or_alert("view.byHand", json!({"on": true})),
         Kind::Write(f) => {
+            let Some(target) = target() else { return };
             app.run_or_alert("cell.set", json!({"cell": target.a1(), "input": f.replace("{}", &reference)}));
             app.run_or_alert("selection.set", json!({"range": RangeRef::cell(target).a1()}));
             app.grid.ensure_visible = true;
         }
         Kind::Start(f) => {
+            let Some(target) = target() else { return };
             app.run_or_alert("selection.set", json!({"range": RangeRef::cell(target).a1()}));
             app.begin_edit(Some(f.replace("{}", &reference)), false);
             app.grid.ensure_visible = true;
         }
     }
+}
+
+/// Where a result of `rows` × `cols` goes without covering anything: one column past the block,
+/// level with its top, or the first column further right whose cells are all empty; failing that,
+/// one row below the block, or further down. `None` when nothing within reach is free.
+fn free_spot(sh: &Sheet, block: RangeRef, (rows, cols): (u32, u32)) -> Option<CellRef> {
+    const REACH: u32 = 64;
+    let right = (0..REACH).filter_map(|k| block.end.col.checked_add(2 + k).map(|col| CellRef::new(block.start.row, col)));
+    let below = (0..REACH).filter_map(|k| block.end.row.checked_add(2 + k).map(|row| CellRef::new(row, block.start.col)));
+    right.chain(below).find(|&at| {
+        let (Some(last_row), Some(last_col)) = (at.row.checked_add(rows.saturating_sub(1)), at.col.checked_add(cols.saturating_sub(1))) else {
+            return false;
+        };
+        last_row < MAX_ROWS
+            && last_col < MAX_COLS
+            && (at.row..=last_row).all(|row| {
+                (at.col..=last_col).all(|col| {
+                    let c = CellRef::new(row, col);
+                    !sh.cell(c).is_some_and(|cell| cell.formula.is_some() || !cell.value.is_empty()) && sh.value_ref(c).is_none_or(|v| v.is_empty())
+                })
+            })
+    })
 }
