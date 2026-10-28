@@ -70,7 +70,7 @@ pub(super) fn insert(app: &mut SheetApp, ui: &mut Ui) {
         // Menu-style: with no chart type, run_or_alert opens the Insert Chart dialog.
         act(app, "insert.recommendedCharts", json!({}));
     }
-    ui.vertical(|ui| {
+    controls::stack(ui, |ui| {
         ui.horizontal(|ui| {
             for (icon, tip, cid, subs) in [
                 (

@@ -177,10 +177,6 @@ impl SheetApp {
                 self.ui.by_hand = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.by_hand);
                 Ok(json!({"on": self.ui.by_hand}))
             }
-            "view.classicRibbon" => {
-                self.ui.classic_ribbon = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.classic_ribbon);
-                Ok(json!({"on": self.ui.classic_ribbon}))
-            }
             "view.matrixBrackets" => {
                 self.ui.matrix_brackets = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.matrix_brackets);
                 Ok(json!({"on": self.ui.matrix_brackets}))

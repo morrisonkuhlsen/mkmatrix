@@ -11,8 +11,7 @@ fn harness(ui: UiState) -> egui_kittest::Harness<'static, SheetApp> {
     session.new_workbook();
     let mut app = crate::common::app(session);
     app.ui = ui;
-    app.ui.classic_ribbon = true;
-    let mut h = crate::common::builder().with_size(egui::vec2(1200.0, 800.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+    let mut h = crate::common::builder().with_size(egui::vec2(1800.0, 800.0)).with_step_dt(1.0 / 60.0).build_ui_state(
         |ui, app: &mut SheetApp| {
             let ctx = ui.ctx().clone();
             app.logic(&ctx);

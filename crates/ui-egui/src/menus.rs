@@ -1,6 +1,6 @@
-//! The menu bar above MK Matrix's single-row toolbar: File, Edit, View, Insert, Format, Tools,
-//! Data and Help, each a list of the commands the classic ribbon's tabs hold. The same tree as
-//! the macOS menu bar (`apps/mkmatrix/src/native_menu.rs`); items run through [`run`].
+//! The menus: File, Edit, View, Insert, Format, Tools, Data and Help, each a list of the commands
+//! the tabs hold. The macOS menu bar (`apps/mkmatrix/src/native_menu.rs`) shows them all; the top
+//! bar shows File and Help beside the tabs. Items run through [`run`].
 
 use serde_json::{Value, json};
 
@@ -77,7 +77,6 @@ pub fn tree() -> Vec<(&'static str, Vec<Entry>)> {
                 ("Unfreeze Panes", "view.unfreezePanes"),
                 ("-", ""),
                 ("Dark Mode", "view.darkMode"),
-                ("Classic Ribbon", "view.classicRibbon"),
             ],
         ),
         (

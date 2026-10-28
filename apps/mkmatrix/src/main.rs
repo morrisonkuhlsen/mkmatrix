@@ -371,6 +371,12 @@ fn main() -> eframe::Result<()> {
     if cfg!(target_os = "macos") {
         viewport = viewport.with_fullsize_content_view(true).with_titlebar_shown(false).with_title_shown(false);
     }
+    // Windows: no system title bar above MK Matrix's own, which takes its minimize, maximize and
+    // close buttons and the resizing edges.
+    if cfg!(target_os = "windows") {
+        viewport = viewport.with_decorations(false);
+        app.chrome.window_controls = true;
+    }
     if let Some(i) = icon() {
         viewport = viewport.with_icon(i);
     }

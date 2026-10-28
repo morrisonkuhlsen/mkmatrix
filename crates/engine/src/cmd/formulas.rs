@@ -26,7 +26,7 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             insert_function
         ),
-        cmd!(query "formulas.functions", "List Functions", [], None, "{category?, search?} → [{name, category, signature, description}]", always, list_functions),
+        cmd!(query "formulas.functions", "List Functions", [], None, "{category?: Financial|…|LinearAlgebra, search?} → [{name, category, signature, description}]", always, list_functions),
         cmd!(
             "formulas.defineName",
             "Define Name…",
@@ -238,6 +238,12 @@ fn insert_function(s: &mut Session, p: &Json) -> Result<Json> {
     }
 }
 
+/// MK Matrix's Linear Algebra functions (Formulas › Linear Algebra): the `MX.` family, which also
+/// holds Excel's matrix functions under their MK Matrix names (`MX.MUL` for MMULT, `MX.T`…).
+pub fn is_linear_algebra(name: &str) -> bool {
+    name.starts_with("MX.")
+}
+
 pub fn function_list() -> Vec<Json> {
     let mut v: Vec<Json> = mkmatrix_functions::all()
         .iter()
@@ -297,7 +303,16 @@ fn list_functions(_: &mut Session, p: &Json) -> Result<Json> {
     let q = str_param(p, "search").map(str::to_ascii_lowercase);
     let v: Vec<Json> = function_list()
         .into_iter()
-        .filter(|f| cat.as_ref().is_none_or(|c| f["category"].as_str().is_some_and(|x| x.to_ascii_lowercase() == *c)))
+        .filter(|f| {
+            cat.as_ref().is_none_or(|c| {
+                // Linear Algebra gathers functions filed under other categories.
+                if c == "linearalgebra" {
+                    f["name"].as_str().is_some_and(is_linear_algebra)
+                } else {
+                    f["category"].as_str().is_some_and(|x| x.to_ascii_lowercase() == *c)
+                }
+            })
+        })
         .filter(|f| {
             q.as_ref().is_none_or(|q| {
                 f["name"].as_str().is_some_and(|x| x.to_ascii_lowercase().contains(q.as_str()))

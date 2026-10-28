@@ -66,7 +66,7 @@ pub fn start() {
                     // everything, as the default does.
                     if let Some(chrome) = query_param("chrome") {
                         match chrome.as_str() {
-                            "none" => app.chrome = mkmatrix_ui_egui::Chrome { title_bar: false, file_tab: false },
+                            "none" => app.chrome = mkmatrix_ui_egui::Chrome { title_bar: false, file_tab: false, window_controls: false },
                             "notitlebar" => app.chrome.title_bar = false,
                             "nofiletab" => app.chrome.file_tab = false,
                             _ => {}
