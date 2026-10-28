@@ -75,6 +75,25 @@ pub(crate) fn stack<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> egui::Inn
     if single_row(ui) { ui.horizontal(add) } else { ui.vertical(add) }
 }
 
+/// A column of checkboxes (View › Show): stacked in the ribbon, and in the single row too, two
+/// compact rows filling its height, so the boxes line up under each other instead of trailing off
+/// in one line.
+pub(crate) fn check_column<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> egui::InnerResponse<R> {
+    if !single_row(ui) {
+        return ui.vertical(add);
+    }
+    ui.vertical(|ui| {
+        let s = ui.spacing_mut();
+        s.item_spacing.y = 1.0;
+        s.interact_size.y = 14.0;
+        s.icon_width = 12.0;
+        s.icon_width_inner = 6.0;
+        s.icon_spacing = 4.0;
+        ui.style_mut().override_font_id = Some(theme::ui_font(12.0));
+        add(ui)
+    })
+}
+
 /// Translates a label or tooltip for the language of the frame being drawn (English if untranslated).
 /// Ribbon chrome all flows through these widgets, so translating here localises it in one place.
 fn tr<'a>(ui: &Ui, text: &'a str) -> &'a str {

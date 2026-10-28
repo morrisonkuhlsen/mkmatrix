@@ -18,7 +18,7 @@ pub(super) fn show_group_names(ui: &Ui, on: bool) {
     ui.ctx().data_mut(|d| d.insert_temp(group_names_id(), on));
 }
 
-pub(super) use crate::widgets::{set_single_row, single_row, stack};
+pub(super) use crate::widgets::{check_column, set_single_row, single_row, stack};
 
 /// A group's main button: a large one with its label in the ribbon, an icon of the toolbar's
 /// size in the single row.

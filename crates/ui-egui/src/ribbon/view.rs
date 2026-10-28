@@ -22,7 +22,7 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
     let page_layout =
         app.session.active().and_then(|d| d.wb.active().map(|s| s.view == mkmatrix_engine::model::SheetViewMode::PageLayout)).unwrap_or(false);
     // Two columns of two, as in Excel's Show group: four stacked rows overflow the ribbon body.
-    controls::stack(ui, |ui| {
+    controls::check_column(ui, |ui| {
         // Rulers exist only in Page Layout view.
         let mut ruler = !app.session.hide_ruler;
         let ruler_resp = ui.add_enabled(page_layout, egui::Checkbox::new(&mut ruler, lang.tr("Ruler")));
@@ -38,7 +38,7 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
         }
     });
     ui.add_space(6.0);
-    controls::stack(ui, |ui| {
+    controls::check_column(ui, |ui| {
         let mut fb = app.session.prefs.formula_bar;
         let resp = ui.checkbox(&mut fb, lang.tr("Formula Bar"));
         control_keytip(app, ui, &resp, "view.formulaBar");
@@ -54,7 +54,7 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
     });
     // A third column: MK Matrix's numbered column headings.
     ui.add_space(6.0);
-    controls::stack(ui, |ui| {
+    controls::check_column(ui, |ui| {
         let mut numbered = app.ui.numbered_columns;
         let hint = lang.tr("Head the columns 1, 2, 3… as a matrix's a(i,j), rather than A, B, C");
         if ui.checkbox(&mut numbered, lang.tr("Numbered Columns")).on_hover_text(hint).changed() {
