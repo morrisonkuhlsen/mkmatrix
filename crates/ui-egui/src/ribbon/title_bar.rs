@@ -1,6 +1,6 @@
 use super::controls::{act, control_keytip};
 use super::*;
-use crate::widgets::{icon_button_mono, small_button_mono};
+use crate::widgets::icon_button_mono;
 
 /// macOS draws the window into the title bar (`with_fullsize_content_view`) and AppKit paints the
 /// traffic lights itself, centred in its standard 28 pt title-bar band. Moving them would take
@@ -135,7 +135,7 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                 if __k.clicked() {
                     app.open_dialog("commandSearch", json!({}));
                 }
-                let share = small_button_mono(ui, Icon::Share, "Share", "Share: export or save a copy", true);
+                let share = icon_button_mono(ui, Icon::Share, t.text_dim, "Share: export or save a copy", vec2(28.0, ch));
                 egui::Popup::menu(&share).show(|ui| {
                     if ui.button("Export as PDF…").clicked() {
                         app.run_or_alert("file.exportPdf", json!({}));
@@ -156,7 +156,7 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                 // Quick light/dark switch (#194); right-click offers System as well. The same
                 // choice lives in File › Display theme and the View tab.
                 let lang = app.ui.language;
-                let theme = icon_button_mono(ui, Icon::Appearance, t.text_dim, "Dark Mode", vec2(28.0, 26.0));
+                let theme = icon_button_mono(ui, Icon::Appearance, t.text_dim, "Dark Mode", vec2(28.0, ch));
                 let dark = ui.ctx().theme() == egui::Theme::Dark;
                 theme.widget_info(|| egui::WidgetInfo::selected(egui::Role::CheckBox, true, dark, lang.tr("Dark Mode")));
                 if theme.clicked() {
