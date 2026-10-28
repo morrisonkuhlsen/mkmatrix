@@ -11,13 +11,13 @@ use egui::{Rect, pos2};
 use crate::theme::Tokens;
 
 /// The form's label column.
-pub(super) const LABEL_W: f32 = 112.0;
+pub(crate) const LABEL_W: f32 = 112.0;
 /// A list row's height.
-pub(super) const ROW_H: f32 = 28.0;
+pub(crate) const ROW_H: f32 = 28.0;
 
 /// A navigation row: icon and name, the selected one tinted with a bar of the accent. As wide as
 /// the column it is in; `count` (a number of hits, say) sits muted at its right end.
-pub(super) fn nav_item(ui: &mut egui::Ui, icon: Icon, label: &str, selected: bool, count: Option<usize>, t: &Tokens) -> egui::Response {
+pub(crate) fn nav_item(ui: &mut egui::Ui, icon: Icon, label: &str, selected: bool, count: Option<usize>, t: &Tokens) -> egui::Response {
     let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), egui::Sense::click());
     resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, label));
     let p = ui.painter();
@@ -57,7 +57,7 @@ pub(super) fn nav_item(ui: &mut egui::Ui, icon: Icon, label: &str, selected: boo
 
 /// A navigation rail `width` wide and `height` tall beside a hairline, then the gap before the
 /// content.
-pub(super) fn nav_rail(ui: &mut egui::Ui, width: f32, height: f32, t: &Tokens, add: impl FnOnce(&mut egui::Ui)) {
+pub(crate) fn nav_rail(ui: &mut egui::Ui, width: f32, height: f32, t: &Tokens, add: impl FnOnce(&mut egui::Ui)) {
     ui.vertical(|ui| {
         ui.set_width(width);
         ui.set_min_height(height);
@@ -70,25 +70,25 @@ pub(super) fn nav_rail(ui: &mut egui::Ui, width: f32, height: f32, t: &Tokens, a
 }
 
 /// A section's heading: small, muted, with room above.
-pub(super) fn heading(ui: &mut egui::Ui, text: &str) {
+pub(crate) fn heading(ui: &mut egui::Ui, text: &str) {
     let t = Tokens::get(ui.ctx());
     ui.add_space(2.0);
     ui.label(egui::RichText::new(text).font(theme::ui_bold(11.5)).color(t.text_dim));
 }
 
 /// A form of labelled rows: labels in a column of their own, controls lined up beside them.
-pub(super) fn form(ui: &mut egui::Ui, id: &str, add: impl FnOnce(&mut egui::Ui)) {
+pub(crate) fn form(ui: &mut egui::Ui, id: &str, add: impl FnOnce(&mut egui::Ui)) {
     egui::Grid::new(id).num_columns(2).min_col_width(LABEL_W).spacing([12.0, 10.0]).show(ui, add);
 }
 
 /// A row's label; its id names the row's control for screen readers.
-pub(super) fn label(ui: &mut egui::Ui, text: &str) -> egui::Id {
+pub(crate) fn label(ui: &mut egui::Ui, text: &str) -> egui::Id {
     let t = Tokens::get(ui.ctx());
     ui.label(egui::RichText::new(text).font(theme::ui_font(13.0)).color(t.text_dim)).id
 }
 
 /// One choice of a segmented control: joined buttons of one height, the chosen one filled.
-pub(super) fn segment(ui: &mut egui::Ui, text: &str, on: bool, width: f32, a11y: &str) -> egui::Response {
+pub(crate) fn segment(ui: &mut egui::Ui, text: &str, on: bool, width: f32, a11y: &str) -> egui::Response {
     let t = Tokens::get(ui.ctx());
     let (r, resp) = ui.allocate_exact_size(vec2(width, 28.0), egui::Sense::click());
     resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, a11y));
@@ -110,7 +110,7 @@ pub(super) fn segment(ui: &mut egui::Ui, text: &str, on: bool, width: f32, a11y:
 }
 
 /// A segmented control over `options` (value, label): returns the value clicked.
-pub(super) fn segments<'a>(ui: &mut egui::Ui, current: &str, options: &[(&'a str, &str)], width: f32) -> Option<&'a str> {
+pub(crate) fn segments<'a>(ui: &mut egui::Ui, current: &str, options: &[(&'a str, &str)], width: f32) -> Option<&'a str> {
     let mut picked = None;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
@@ -125,7 +125,7 @@ pub(super) fn segments<'a>(ui: &mut egui::Ui, current: &str, options: &[(&'a str
 
 /// The search box: a magnifier, then the text, on the input colour with a border that takes the
 /// accent while typing. `width` is the box's whole width.
-pub(super) fn search_field(ui: &mut egui::Ui, text: &mut String, hint: &str, name: &str, width: f32) -> egui::Response {
+pub(crate) fn search_field(ui: &mut egui::Ui, text: &mut String, hint: &str, name: &str, width: f32) -> egui::Response {
     let t = Tokens::get(ui.ctx());
     let (r, _) = ui.allocate_exact_size(vec2(width, 32.0), egui::Sense::hover());
     ui.painter().rect_filled(r, 0.0, t.input_bg);
@@ -142,7 +142,7 @@ pub(super) fn search_field(ui: &mut egui::Ui, text: &mut String, hint: &str, nam
 
 /// A flat list row: `primary` text, then `secondary` muted beside it (clipped), the chosen row
 /// tinted with the accent. Screen readers read it by `primary`.
-pub(super) fn list_row(ui: &mut egui::Ui, primary: &str, secondary: Option<&str>, selected: bool, primary_w: f32) -> egui::Response {
+pub(crate) fn list_row(ui: &mut egui::Ui, primary: &str, secondary: Option<&str>, selected: bool, primary_w: f32) -> egui::Response {
     let t = Tokens::get(ui.ctx());
     let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), egui::Sense::click());
     resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, primary));
@@ -166,7 +166,7 @@ pub(super) fn list_row(ui: &mut egui::Ui, primary: &str, secondary: Option<&str>
 
 /// A choice among several shown at once: a round mark (filled with the accent when chosen) and
 /// its text, as wide as `width`.
-pub(super) fn option_row(ui: &mut egui::Ui, text: &str, on: bool, width: f32) -> egui::Response {
+pub(crate) fn option_row(ui: &mut egui::Ui, text: &str, on: bool, width: f32) -> egui::Response {
     let t = Tokens::get(ui.ctx());
     let (r, resp) = ui.allocate_exact_size(vec2(width, 30.0), egui::Sense::click());
     resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::RadioButton, true, on, text));
@@ -187,7 +187,7 @@ pub(super) fn option_row(ui: &mut egui::Ui, text: &str, on: bool, width: f32) ->
 
 /// A framed panel on the input colour (a list, a detail card), `height` tall and as wide as the
 /// space left.
-pub(super) fn panel<R>(ui: &mut egui::Ui, height: f32, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+pub(crate) fn panel<R>(ui: &mut egui::Ui, height: f32, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     let t = Tokens::get(ui.ctx());
     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), height), egui::Sense::hover());
     ui.painter().rect_filled(r, 0.0, t.input_bg);
@@ -198,7 +198,7 @@ pub(super) fn panel<R>(ui: &mut egui::Ui, height: f32, add: impl FnOnce(&mut egu
 }
 
 /// A button of the footer's size; the default one in the accent.
-pub(super) fn button(ui: &mut egui::Ui, text: &str, primary: bool) -> egui::Response {
+pub(crate) fn button(ui: &mut egui::Ui, text: &str, primary: bool) -> egui::Response {
     let t = Tokens::get(ui.ctx());
     let label = egui::RichText::new(text).font(theme::ui_font(13.0));
     let b = if primary { egui::Button::new(label.color(t.on_accent)).fill(t.accent) } else { egui::Button::new(label) };
@@ -208,7 +208,7 @@ pub(super) fn button(ui: &mut egui::Ui, text: &str, primary: bool) -> egui::Resp
 
 /// The footer: a rule across, then `left` (a hint, a count, a button of its own) and Cancel / OK
 /// on the right.
-pub(super) fn footer(ui: &mut egui::Ui, confirm: &mut bool, open: &mut bool, left: impl FnOnce(&mut egui::Ui)) {
+pub(crate) fn footer(ui: &mut egui::Ui, confirm: &mut bool, open: &mut bool, left: impl FnOnce(&mut egui::Ui)) {
     rule(ui);
     ui.horizontal(|ui| {
         left(ui);
@@ -219,7 +219,7 @@ pub(super) fn footer(ui: &mut egui::Ui, confirm: &mut bool, open: &mut bool, lef
 }
 
 /// The hairline above a footer, with room on both sides.
-pub(super) fn rule(ui: &mut egui::Ui) {
+pub(crate) fn rule(ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     ui.add_space(6.0);
     let (rule, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), egui::Sense::hover());
@@ -228,7 +228,7 @@ pub(super) fn rule(ui: &mut egui::Ui) {
 }
 
 /// Muted text, for counts and empty states.
-pub(super) fn hint(ui: &mut egui::Ui, text: &str) {
+pub(crate) fn hint(ui: &mut egui::Ui, text: &str) {
     let t = Tokens::get(ui.ctx());
     ui.label(egui::RichText::new(text).font(theme::ui_font(12.5)).color(t.text_dim));
 }
