@@ -166,7 +166,15 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                 ui.min_rect().left()
             });
             // Centred title, cut with "…" so it never runs under the controls on either side.
-            let title = app.session.active().map(|d| d.display_title()).unwrap_or_default();
+            // Sheets selected together edit as one: the title says so, as Excel's does.
+            let title = app
+                .session
+                .active()
+                .map(|d| {
+                    let title = d.display_title();
+                    if d.sheet_group.len() > 1 { format!("{title}  {}", app.ui.language.tr("[Group]")) } else { title }
+                })
+                .unwrap_or_default();
             let dirty = app.session.active().is_some_and(|d| d.is_dirty());
             let max_w = title_max_width(rect.center().x, left_end, right.inner);
             paint_title(ui, rect.center(), &title, dirty, max_w, t.text);
