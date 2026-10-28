@@ -892,14 +892,19 @@ fn paint_with(p: &Painter, rect: Rect, icon: Icon, c: Color32, pal: &Palette) {
             g.ring(8.0, 8.0, 1.75, a);
         }
         Icon::Appearance => {
-            g.ring(8.0, 8.0, 6.0, c);
-            let half: Vec<(f32, f32)> = (0..=16)
-                .map(|i| {
-                    let t = PI * (i as f32 / 16.0 - 0.5);
-                    (8.0 + 6.0 * t.cos(), 8.0 + 6.0 * t.sin())
+            // A crescent moon in line art, and a four-pointed star in the bite it leaves: the
+            // outer circle's arc from one horn round to the other, and the bite's arc between them.
+            let (outer, bite) = (((7.0, 9.0), 6.0), ((10.6, 5.6), 4.9));
+            let arc = |((cx, cy), r): ((f32, f32), f32), a0: f32, a1: f32| {
+                (0..=24).map(move |i| {
+                    let t = a0 + (a1 - a0) * i as f32 / 24.0;
+                    (cx + r * t.cos(), cy + r * t.sin())
                 })
-                .collect();
-            g.poly(&half, c);
+            };
+            // Two open strokes meeting at the horns: a closed path would mitre the sharp tips out.
+            g.stroke(&arc(outer, 0.1523, 4.6172).collect::<Vec<_>>(), c);
+            g.stroke(&arc(bite, 3.6944, 1.0751).collect::<Vec<_>>(), c);
+            g.poly(&[(13.0, 0.75), (13.55, 2.25), (15.0, 2.8), (13.55, 3.35), (13.0, 4.85), (12.45, 3.35), (11.0, 2.8), (12.45, 2.25)], a);
         }
         Icon::Book => {
             g.block(1.5, 1.5, 14.5, 5.0, a);
