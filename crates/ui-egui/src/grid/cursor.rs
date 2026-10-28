@@ -1,5 +1,5 @@
 use super::geo::Geo;
-use super::interact::{OBJECT_RESIZE_RADIUS, col_edge, freeze_handles, hidden_col_edge, hidden_row_edge, on_border, row_edge};
+use super::interact::{col_edge, freeze_handles, handle_cursor, hidden_col_edge, hidden_row_edge, object_handle_at, on_border, row_edge};
 use super::*;
 
 /// Decide after interaction so drag start and release use the new state in the same frame.
@@ -49,11 +49,11 @@ fn drag_cursor(drag: &Drag) -> Option<CursorIcon> {
         Drag::Select => Some(CursorIcon::Cell),
         Drag::Rows(_) | Drag::Cols(_) => Some(CursorIcon::Default),
         Drag::Fill { .. } => Some(CursorIcon::Crosshair),
-        Drag::Move { .. } | Drag::MoveCols { .. } | Drag::Object { resize: false, .. } => Some(CursorIcon::Move),
+        Drag::Move { .. } | Drag::MoveCols { .. } | Drag::Object { resize: None, .. } => Some(CursorIcon::Move),
         Drag::ResizeCol { .. } => Some(CursorIcon::ResizeColumn),
         Drag::ResizeRow { .. } => Some(CursorIcon::ResizeRow),
         Drag::Freeze { cols, .. } => Some(if *cols { CursorIcon::ResizeHorizontal } else { CursorIcon::ResizeVertical }),
-        Drag::Object { resize: true, .. } => Some(CursorIcon::ResizeNwSe),
+        Drag::Object { resize: Some(sides), .. } => Some(handle_cursor(*sides)),
     }
 }
 
@@ -89,10 +89,10 @@ fn hover_cursor(app: &SheetApp, ctx: &egui::Context, resp: &egui::Response, poin
     let border_panes = geo.range_panes(sel.current());
     let on_handle = handle.contains(p) && handle_panes.iter().any(|r| r.contains(p));
     let on_cur_border = on_border(cur_rect, p) && border_panes.iter().any(|r| r.contains(p));
-    let selected_object = crate::chartview::hit(app, geo, sh, p).filter(|&(_, id, _)| app.selected_chart == Some(id));
-    let near_corner = selected_object.is_some_and(|(_, _, rect)| (p - rect.right_bottom()).length() < OBJECT_RESIZE_RADIUS);
-    if app.grid.drag == Drag::None && near_corner {
-        ctx.set_cursor_icon(CursorIcon::ResizeNwSe);
+    if app.grid.drag == Drag::None
+        && let Some((_, _, sides)) = object_handle_at(app, geo, sh, p)
+    {
+        ctx.set_cursor_icon(handle_cursor(sides));
     } else if near_col_edge || (in_row_header && row_edge(geo, sh, p.y).is_some()) {
         header_edge_cursor(app, ctx, pointer, geo, sh, p, near_col_edge);
     } else if on_handle && app.editor.is_none() {

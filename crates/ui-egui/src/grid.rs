@@ -129,7 +129,9 @@ pub enum Drag {
         id: u32,
         start: Pos2,
         orig: (CellRef, f32, f32, f32, f32),
-        resize: bool,
+        /// The sizing handle held, as the sides it moves: (-1 left, 0 neither, 1 right) and
+        /// (-1 top, 0 neither, 1 bottom); `None` moves the object.
+        resize: Option<(i8, i8)>,
     },
 }
 

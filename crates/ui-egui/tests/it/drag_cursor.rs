@@ -255,7 +255,15 @@ fn selecting_headers_keeps_default_cursor_and_extends_whole_lines() {
 
 #[test]
 fn object_move_and_resize_keep_their_cursors_and_update_the_object() {
-    for resize in [false, true] {
+    // None moves; each handle is (the sides it moves, where it sits on the 300×200 frame).
+    let cases: [(Option<(i8, i8)>, egui::Vec2, CursorIcon); 5] = [
+        (None, vec2(40.0, 40.0), CursorIcon::Move),
+        (Some((1, 1)), vec2(300.0, 200.0), CursorIcon::ResizeNwSe),
+        (Some((-1, 0)), vec2(0.0, 100.0), CursorIcon::ResizeHorizontal),
+        (Some((0, -1)), vec2(150.0, 0.0), CursorIcon::ResizeVertical),
+        (Some((1, -1)), vec2(300.0, 0.0), CursorIcon::ResizeNeSw),
+    ];
+    for (resize, at, cursor) in cases {
         let mut h = harness();
         let result = h.state_mut().session.execute("insert.chart", json!({"type": "column", "at": "D3", "width": 300, "height": 200})).unwrap();
         let id = result["chart"].as_u64().unwrap() as u32;
@@ -263,23 +271,58 @@ fn object_move_and_resize_keep_their_cursors_and_update_the_object() {
         h.run_steps(2);
         let g = geo(&h);
         let min = cell(&h, "D3").min;
-        let start = if resize { min + vec2(300.0, 200.0) * g.z } else { min + vec2(40.0, 40.0) };
+        let start = min + if resize.is_some() { at * g.z } else { at };
         press(&mut h, start);
-        let target = start + vec2(60.0, 30.0);
-        let cursor = if resize { CursorIcon::ResizeNwSe } else { CursorIcon::Move };
+        // Out and away from the frame: every side held grows.
+        let out = resize.map_or(vec2(60.0, 30.0), |(sx, sy)| vec2(60.0 * f32::from(sx), 30.0 * f32::from(sy)));
+        let target = start + out;
         move_with_cursor(&mut h, target, cursor);
-        assert!(matches!(h.state().grid.drag, Drag::Object { resize: r, .. } if r == resize));
-        move_with_cursor(&mut h, target + vec2(1.0, 1.0), cursor);
+        assert!(matches!(h.state().grid.drag, Drag::Object { resize: r, .. } if r == resize), "{resize:?}");
+        move_with_cursor(&mut h, target, cursor);
         button(&mut h, target, false);
         assert_eq!(h.state().grid.drag, Drag::None);
         let a = h.state().session.active().unwrap().wb.active().unwrap().charts.iter().find(|c| c.id == id).unwrap().anchor;
-        if resize {
-            assert!(a.width > 340.0 && a.height > 220.0);
-        } else {
-            assert_ne!((a.cell, a.dx, a.dy), (CellRef::parse("D3").unwrap(), 0.0, 0.0));
-            assert_eq!((a.width, a.height), (300.0, 200.0));
+        let d3 = CellRef::parse("D3").unwrap();
+        match resize {
+            None => {
+                assert_ne!((a.cell, a.dx, a.dy), (d3, 0.0, 0.0));
+                assert_eq!((a.width, a.height), (300.0, 200.0));
+            }
+            Some((sx, sy)) => {
+                if sx != 0 {
+                    assert!(a.width > 340.0, "{resize:?}: width {}", a.width);
+                } else {
+                    assert_eq!(a.width, 300.0, "{resize:?}");
+                }
+                if sy != 0 {
+                    assert!(a.height > 220.0, "{resize:?}: height {}", a.height);
+                } else {
+                    assert_eq!(a.height, 200.0, "{resize:?}");
+                }
+                // A left or top handle moves the corner; a right or bottom one leaves it.
+                let moved = (a.cell, a.dx, a.dy) != (d3, 0.0, 0.0);
+                assert_eq!(moved, sx < 0 || sy < 0, "{resize:?}: anchor {:?}", (a.cell, a.dx, a.dy));
+            }
         }
     }
+}
+
+#[test]
+fn a_text_box_resizes_from_its_side_handles() {
+    let mut h = harness();
+    let result = h.state_mut().session.execute("insert.textBox", json!({"at": "B2", "width": 400, "height": 40, "text": "Enunciado"})).unwrap();
+    let id = result["shape"].as_u64().or_else(|| result["id"].as_u64()).unwrap() as u32;
+    h.state_mut().selected_chart = Some(id);
+    h.run_steps(2);
+    let g = geo(&h);
+    let min = cell(&h, "B2").min;
+    // The bottom-centre handle, dragged down: the box grows taller.
+    let start = min + vec2(200.0, 40.0) * g.z;
+    press(&mut h, start);
+    move_with_cursor(&mut h, start + vec2(0.0, 40.0), CursorIcon::ResizeVertical);
+    button(&mut h, start + vec2(0.0, 40.0), false);
+    let a = h.state().session.active().unwrap().wb.active().unwrap().shapes.iter().find(|s| s.id == id).unwrap().anchor;
+    assert!(a.height > 70.0 && a.width == 400.0, "{:?}", (a.width, a.height));
 }
 
 #[test]
