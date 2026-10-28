@@ -135,6 +135,10 @@ pub enum Icon {
     OpenFolder,
     Info,
     Print,
+    /// Formulas › Linear Algebra: λ, the eigenvalue.
+    Lambda,
+    /// Formulas › Math & Trig: π.
+    Pi,
 }
 
 impl Icon {
@@ -261,6 +265,8 @@ impl Icon {
         Icon::OpenFolder,
         Icon::Info,
         Icon::Print,
+        Icon::Lambda,
+        Icon::Pi,
     ];
 }
 
@@ -960,6 +966,15 @@ fn paint_with(p: &Painter, rect: Rect, icon: Icon, c: Color32, pal: &Palette) {
             g.line(&[(8.0, 7.0), (8.0, 11.5)], c, 1.3);
             g.dot(8.0, 4.75, 0.9, a);
         }
+        Icon::Lambda => {
+            g.stroke(&[(3.5, 1.5), (5.5, 1.5), (12.5, 14.5)], c);
+            g.stroke(&[(8.25, 6.75), (3.5, 14.5)], a);
+        }
+        Icon::Pi => {
+            g.stroke(&[(2.0, 4.0), (14.0, 4.0)], a);
+            g.stroke(&[(5.75, 4.0), (5.0, 14.5)], c);
+            g.stroke(&[(10.5, 4.0), (10.5, 13.0), (12.5, 14.5)], c);
+        }
         Icon::Print => {
             g.stroke(&[(4.5, 5.5), (4.5, 1.5), (11.5, 1.5), (11.5, 5.5)], c);
             g.stroke(&[(4.5, 11.5), (1.5, 11.5), (1.5, 5.5), (14.5, 5.5), (14.5, 11.5), (11.5, 11.5)], c);
@@ -1001,6 +1016,8 @@ pub const LIBRARY: &[(&str, Icon)] = &[
     ("text", Icon::TextBox),
     ("trace", Icon::Trace),
     ("validation", Icon::Validation),
+    ("lambda", Icon::Lambda),
+    ("pi", Icon::Pi),
 ];
 
 pub fn from_name(name: &str) -> Option<Icon> {
