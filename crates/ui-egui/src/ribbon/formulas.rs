@@ -19,9 +19,38 @@ fn circular_references(app: &SheetApp) -> Vec<(usize, String, String)> {
         .collect()
 }
 
+/// A function-category button and its menu of functions (`cat` is a `formulas.functions` category).
+fn function_menu(app: &mut SheetApp, ui: &mut Ui, label: &str, cat: &str, cid: &'static str) {
+    let r = big_button(ui, Icon::Book, label, label, true);
+    control_keytip(app, ui, &r, cid);
+    let forced_c = invoke(app, cid);
+    egui::Popup::menu(&r).open_memory(popup_command(forced_c, r.clicked())).show(|ui| {
+        ui.set_max_height(420.0);
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for f in mkmatrix_engine::cmd::formulas::function_list() {
+                let Some(n) = f["name"].as_str() else { continue };
+                let listed =
+                    if cat == "LinearAlgebra" { mkmatrix_engine::cmd::formulas::is_linear_algebra(n) } else { f["category"].as_str() == Some(cat) };
+                if !listed {
+                    continue;
+                }
+                let locale = app.ui.language.formula_locale();
+                let name = app.session.active().map(|d| crate::formula_locale::completion_name(n, locale, &d.wb, d.wb.active_sheet())).unwrap_or(n);
+                let desc = crate::formula_locale::description(n, locale, app.ui.language).unwrap_or_default();
+                if ui.button(name).on_hover_text(desc).clicked() {
+                    app.run_or_alert("formulas.insertFunction", json!({"name": n}));
+                    ui.close();
+                }
+            }
+        });
+    });
+}
+
 /// The Formulas tab: Insert Function, AutoSum, the function-category menus (names in the formula
 /// language, descriptions in the interface language), defined names, auditing and calculation.
 pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
+    // MK Matrix's own category leads: the matrix functions.
+    function_menu(app, ui, "Linear\nAlgebra", "LinearAlgebra", "formulas.linearAlgebra");
     let __k = big_button(ui, Icon::Function, "Insert\nFunction", "Insert Function (⇧F3)", false);
     control_keytip(app, ui, &__k, "dialog:insertFunction");
     if __k.clicked() {
@@ -42,28 +71,7 @@ pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
         ("Math &\nTrig", "MathTrig", "formulas.mathTrig"),
         ("More\nFunctions", "Statistical", "formulas.moreFunctions"),
     ] {
-        let r = big_button(ui, Icon::Book, label, label, true);
-        control_keytip(app, ui, &r, cid);
-        let forced_c = invoke(app, cid);
-        egui::Popup::menu(&r).open_memory(popup_command(forced_c, r.clicked())).show(|ui| {
-            ui.set_max_height(420.0);
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                for f in mkmatrix_engine::cmd::formulas::function_list() {
-                    if f["category"].as_str() == Some(cat)
-                        && let Some(n) = f["name"].as_str()
-                    {
-                        let locale = app.ui.language.formula_locale();
-                        let name =
-                            app.session.active().map(|d| crate::formula_locale::completion_name(n, locale, &d.wb, d.wb.active_sheet())).unwrap_or(n);
-                        let desc = crate::formula_locale::description(n, locale, app.ui.language).unwrap_or_default();
-                        if ui.button(name).on_hover_text(desc).clicked() {
-                            app.run_or_alert("formulas.insertFunction", json!({"name": n}));
-                            ui.close();
-                        }
-                    }
-                }
-            });
-        });
+        function_menu(app, ui, label, cat, cid);
     }
     sep(ui, "Function Library");
     let __k = big_button(ui, Icon::Name, "Name\nManager", "Name Manager", false);
