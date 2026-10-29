@@ -28,7 +28,7 @@ fn open(h: &mut Harness, tab: &str, button: &str) -> bool {
     h.run_steps(3);
     // The header names the menu (some menus also have an item of the button's name).
     let opened = h.query_all_by_label(button).count();
-    assert!(opened >= before + 1, "{tab} › {button}: no header ({before} → {opened})");
+    assert!(opened > before, "{tab} › {button}: no header ({before} → {opened})");
     h.query_by_label("B2:B4").is_some()
 }
 
