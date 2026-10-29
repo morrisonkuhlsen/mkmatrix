@@ -122,6 +122,14 @@ pub struct UiState {
     /// it up to edit in (it goes when the edit ends), Ctrl pressed twice shows or hides it, Esc
     /// puts it away.
     pub floating_formula_bar: bool,
+    /// Where the floating formula bar was dragged to by its grip, from the grid's top-left corner;
+    /// `None` keeps it just above the active cell (a double-click on the grip brings it back).
+    pub floating_bar_at: Option<[f32; 2]>,
+    /// The floating formula bar's width as its right edge was dragged to (`None`: 560 px).
+    pub floating_bar_width: Option<f32>,
+    /// The rows the floating formula bar shows at least, as its bottom edge was dragged to
+    /// (`None`: as many as the formula takes, up to five).
+    pub floating_bar_lines: Option<u8>,
     /// The formula under the formula field in mathematical notation: fractions, exponents,
     /// A⁻¹, Aᵀ, matrices (the Σ button at the bar's end).
     pub math_notation: bool,
@@ -212,6 +220,9 @@ impl Default for UiState {
             density: Density::Normal,
             matrix_brackets: true,
             floating_formula_bar: false,
+            floating_bar_at: None,
+            floating_bar_width: None,
+            floating_bar_lines: None,
             math_notation: false,
             by_hand: false,
         }

@@ -232,6 +232,11 @@ fn math_panel(app: &SheetApp, ctx: &egui::Context, field: Rect, t: &Tokens) {
 /// again when the edit ends; Ctrl pressed twice shows or hides it; Esc puts it away. It steps aside
 /// while a dialog is open (the Formula Builder works on the same edit). Works with
 /// `UiState::floating_formula_bar`.
+///
+/// The grip at its left end moves it: dragged, the bar stays where it is dropped
+/// (`UiState::floating_bar_at`) instead of following the cell, and a double-click on the grip
+/// sends it back. Its right edge sets the width and its bottom edge the rows it shows (the corner
+/// both); a double-click on an edge puts the size back.
 pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
     floating_keys(app, ctx);
     let Some(grid) = app.grid.rect else { return };
@@ -258,17 +263,26 @@ pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
     let font = theme::ui_font(13.0);
     let row_h = ctx.fonts_mut(|f| f.row_height(&font));
     let last = BarLayout::get(ctx);
-    let lines = if app.ui.formula_bar_expanded { MAX_LINES } else { last.lines.clamp(1, MAX_LINES) };
+    let at_least = app.ui.floating_bar_lines.map_or(1, usize::from);
+    let lines = if app.ui.formula_bar_expanded { MAX_LINES } else { last.lines.max(at_least).clamp(1, MAX_LINES) };
     let h = one_line(row_h) + (lines - 1) as f32 * row_h;
-    let w = 560.0_f32.min(grid.width() - 16.0).max(240.0);
-    // Above the cell, its left edge on the cell's, kept inside the grid.
+    let w = app.ui.floating_bar_width.unwrap_or(560.0).min(grid.width() - 16.0).max(FLOATING_MIN_W);
+    // Where it was dropped, or above the cell with its left edge on the cell's; inside the grid.
     let gap = 6.0;
-    let x = cell.left().clamp(grid.left() + 8.0, (grid.right() - w - 8.0).max(grid.left() + 8.0));
-    let above = cell.top() - gap - h - 4.0;
-    let y = if above >= grid.top() + 4.0 { above } else { cell.bottom() + gap };
+    let (x, y) = match app.ui.floating_bar_at {
+        Some([dx, dy]) => (grid.left() + dx, grid.top() + dy),
+        None => {
+            let above = cell.top() - gap - h - 4.0;
+            (cell.left(), if above >= grid.top() + 4.0 { above } else { cell.bottom() + gap })
+        }
+    };
+    let x = x.clamp(grid.left() + 8.0, (grid.right() - w - 8.0).max(grid.left() + 8.0));
+    let y = y.clamp(grid.top() + 4.0, (grid.bottom() - h - 8.0).max(grid.top() + 4.0));
     let mut layout = BarLayout { height: h, ..Default::default() };
+    let mut moved: Option<egui::Vec2> = None;
+    let mut reset_at = false;
     egui::Area::new(egui::Id::unique("mkmatrix.floating_formula_bar")).order(egui::Order::Foreground).fixed_pos(pos2(x, y)).show(ctx, |ui| {
-        egui::Frame::new()
+        let frame = egui::Frame::new()
             .fill(t.window)
             .stroke(egui::Stroke::new(1.0, t.input_border))
             .corner_radius(6.0)
@@ -279,11 +293,97 @@ pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
                 ui.set_height(h);
                 ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
+                    let name = crate::i18n::current(ui.ctx()).tr("Move the formula bar").to_owned();
+                    let grip = grip(ui, h, &t, &name);
+                    if grip.dragged() {
+                        moved = Some(grip.drag_delta());
+                    }
+                    reset_at = grip.double_clicked();
                     contents(app, ui, &t, &font, row_h, &mut layout);
                 });
             });
+        resize_edges(app, ui, frame.response.rect, w, lines, row_h, &t);
     });
+    if reset_at {
+        app.ui.floating_bar_at = None;
+    } else if let Some(d) = moved {
+        app.ui.floating_bar_at = Some([x + d.x - grid.left(), y + d.y - grid.top()]);
+    }
     ctx.data_mut(|d| d.insert_temp(BarLayout::id(), layout));
+}
+
+/// The floating formula bar's narrowest width.
+const FLOATING_MIN_W: f32 = 240.0;
+
+/// The floating bar's grip: two columns of dots at its left end, dragged to move the bar.
+fn grip(ui: &mut egui::Ui, h: f32, t: &Tokens, name: &str) -> egui::Response {
+    let (r, resp) = ui.allocate_exact_size(vec2(10.0, h), egui::Sense::click_and_drag());
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, name));
+    let ink = if resp.hovered() || resp.dragged() { t.accent } else { t.text_dim };
+    for i in 0..3 {
+        for j in 0..2 {
+            let c = pos2(r.center().x - 2.0 + 4.0 * j as f32, r.center().y - 4.0 + 4.0 * i as f32);
+            ui.painter().circle_filled(c, 1.1, ink);
+        }
+    }
+    if resp.hovered() || resp.dragged() {
+        ui.ctx().set_cursor_icon(if resp.dragged() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab });
+    }
+    resp.on_hover_text(name)
+}
+
+/// The floating bar's right edge (width), bottom edge (rows) and their corner (both), dragged
+/// from the size at the press; a double-click on any of them puts the size back.
+#[allow(clippy::too_many_arguments)]
+fn resize_edges(app: &mut SheetApp, ui: &mut egui::Ui, bar: Rect, w: f32, lines: usize, row_h: f32, t: &Tokens) {
+    let lang = crate::i18n::current(ui.ctx());
+    let start_id = egui::Id::unique("mkmatrix.floating_bar.resize_start");
+    let edges = [
+        (
+            "e",
+            Rect::from_min_max(pos2(bar.right() - 5.0, bar.top() + 4.0), pos2(bar.right() + 3.0, bar.bottom() - 8.0)),
+            egui::CursorIcon::ResizeHorizontal,
+        ),
+        (
+            "s",
+            Rect::from_min_max(pos2(bar.left() + 8.0, bar.bottom() - 4.0), pos2(bar.right() - 8.0, bar.bottom() + 4.0)),
+            egui::CursorIcon::ResizeVertical,
+        ),
+        (
+            "se",
+            Rect::from_min_max(pos2(bar.right() - 8.0, bar.bottom() - 8.0), pos2(bar.right() + 4.0, bar.bottom() + 4.0)),
+            egui::CursorIcon::ResizeNwSe,
+        ),
+    ];
+    for (side, r, cursor) in edges {
+        let resp = ui.interact(r, egui::Id::unique(("mkmatrix.floating_bar.edge", side)), egui::Sense::click_and_drag());
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, lang.tr("Resize the formula bar")));
+        if resp.hovered() || resp.dragged() {
+            ui.ctx().set_cursor_icon(cursor);
+        }
+        if resp.double_clicked() {
+            app.ui.floating_bar_width = None;
+            app.ui.floating_bar_lines = None;
+            continue;
+        }
+        if resp.drag_started() {
+            ui.ctx().data_mut(|d| d.insert_temp(start_id, (w, lines)));
+        }
+        if resp.dragged() {
+            let (w0, lines0) = ui.ctx().data(|d| d.get_temp::<(f32, usize)>(start_id)).unwrap_or((w, lines));
+            let (Some(origin), Some(now)) = (ui.input(|i| i.pointer.press_origin()), ui.input(|i| i.pointer.latest_pos())) else { continue };
+            let d = now - origin;
+            if side != "s" {
+                app.ui.floating_bar_width = Some((w0 + d.x).max(FLOATING_MIN_W).round());
+            }
+            if side != "e" {
+                let rows = (lines0 as f32 + d.y / row_h.max(1.0)).round().clamp(1.0, MAX_LINES as f32);
+                app.ui.floating_bar_lines = Some(rows as u8);
+            }
+            // The edge being dragged, in the accent.
+            ui.painter().rect_stroke(bar, 6.0, egui::Stroke::new(1.0, t.accent), egui::StrokeKind::Inside);
+        }
+    }
 }
 
 /// Ctrl pressed twice in a row (alone, each tap within 400 ms of the last) toggles the floating
