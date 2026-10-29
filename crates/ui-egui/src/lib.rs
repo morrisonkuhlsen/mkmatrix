@@ -29,6 +29,7 @@ pub mod i18n;
 pub mod icons;
 pub mod keymap;
 pub mod keytips;
+pub mod math_notation;
 pub mod matrices;
 mod matrix_actions;
 pub mod menus;
@@ -121,6 +122,9 @@ pub struct UiState {
     /// it up to edit in (it goes when the edit ends), Ctrl pressed twice shows or hides it, Esc
     /// puts it away.
     pub floating_formula_bar: bool,
+    /// The formula under the formula field in mathematical notation: fractions, exponents,
+    /// A⁻¹, Aᵀ, matrices (the Σ button at the bar's end).
+    pub math_notation: bool,
     /// The Calculation by Hand panel beside the sheet (View › Calculation by Hand).
     pub by_hand: bool,
 }
@@ -208,6 +212,7 @@ impl Default for UiState {
             density: Density::Normal,
             matrix_brackets: true,
             floating_formula_bar: false,
+            math_notation: false,
             by_hand: false,
         }
     }

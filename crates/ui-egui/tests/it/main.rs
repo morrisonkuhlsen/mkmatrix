@@ -60,6 +60,7 @@ mod interaction;
 mod interface_scale;
 mod keyboard_shortcuts;
 mod keytips_generated;
+mod math_notation;
 mod matrix_actions;
 mod menu_hover;
 mod merged_cells;

@@ -117,7 +117,8 @@ fn contents(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens, font: &FontId, ro
     layout.buttons = fx.rect;
     ui.add_space(4.0);
     // The formula field fills the rest, as tall as the bar.
-    let avail = ui.available_width() - 24.0;
+    // Room at the end for the notation toggle and the chevron.
+    let avail = ui.available_width() - 48.0;
     let field = Rect::from_min_size(ui.cursor().min, vec2(avail, ui.available_height()));
     // Darker under the pointer, and darker again while typing in it.
     let typing_here = app.editor.as_ref().is_some_and(|e| e.from_formula_bar);
@@ -173,10 +174,57 @@ fn contents(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens, font: &FontId, ro
     layout.visible_lines = ((inner.height() / row_h).floor() as usize).max(1);
     layout.caret = info.caret;
     ui.allocate_space(vec2(avail, field.height()));
+    // Mathematical notation: the formula drawn as maths in a panel under the field.
+    let ink = if app.ui.math_notation { t.accent } else { t.text_dim };
+    let math = crate::widgets::icon_button(ui, Icon::Sum, ink, app.ui.language.tr("Mathematical Notation"), vec2(22.0, 24.0));
+    if math.clicked() {
+        app.ui.math_notation = !app.ui.math_notation;
+    }
     let chevron = if app.ui.formula_bar_expanded { Icon::ChevronUp } else { Icon::Chevron };
     if crate::widgets::icon_button(ui, chevron, t.text_dim, "Expand formula bar", vec2(20.0, 24.0)).clicked() {
         app.ui.formula_bar_expanded = !app.ui.formula_bar_expanded;
     }
+    if app.ui.math_notation && app.dialog.is_none() {
+        math_panel(app, ui.ctx(), field, t);
+    }
+}
+
+/// The formula being edited (or the active cell's) in canonical syntax, when there is one.
+fn math_source(app: &SheetApp) -> Option<String> {
+    let d = app.session.active()?;
+    if let Some(ed) = &app.editor {
+        let text = crate::formula_locale::canonical(&ed.text, ed.locale, &d.wb, ed.sheet, ed.cell).ok()?;
+        return text.starts_with('=').then_some(text);
+    }
+    let sh = d.wb.active()?;
+    let c = sh.cell(d.selection.active)?;
+    c.formula.as_ref()?;
+    Some(c.input_text())
+}
+
+/// The formula in mathematical notation, in a card just under the formula field.
+fn math_panel(app: &SheetApp, ctx: &egui::Context, field: Rect, t: &Tokens) {
+    let Some(node) = math_source(app).and_then(|f| crate::math_notation::from_formula(&f)) else { return };
+    let size = 17.0;
+    egui::Area::new(egui::Id::unique("mkmatrix.math_notation")).order(egui::Order::Foreground).fixed_pos(field.left_bottom() + vec2(0.0, 4.0)).show(
+        ctx,
+        |ui| {
+            egui::Frame::new()
+                .fill(t.window)
+                .stroke(egui::Stroke::new(1.0, t.input_border))
+                .corner_radius(6.0)
+                .inner_margin(egui::Margin::symmetric(14, 10))
+                .shadow(egui::epaint::Shadow { offset: [0, 3], blur: 12, spread: 0, color: egui::Color32::from_black_alpha(40) })
+                .show(ui, |ui| {
+                    let m = crate::math_notation::measure(&node, ui.painter(), size);
+                    // A long formula is clipped to the field's width rather than running off.
+                    let w = m.width.min(field.width().max(200.0) - 28.0);
+                    let (r, resp) = ui.allocate_exact_size(vec2(w, m.height()), Sense::hover());
+                    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, "Mathematical Notation"));
+                    crate::math_notation::show(&node, &ui.painter().with_clip_rect(r), r.min, size, t.text);
+                });
+        },
+    );
 }
 
 /// The floating formula bar: over the sheet, just above the active cell (below it when the cell is

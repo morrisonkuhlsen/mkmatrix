@@ -10,6 +10,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Paste Formatting" => "Colar Formatação",
         "Transpose" => "Transpor",
         "Paste Link" => "Colar Vínculo",
+        "Mathematical Notation" => "Notação Matemática",
         "Floating Formula Bar" => "Barra de Fórmulas Flutuante",
         "Show the formula bar just above the active cell (F2 to edit in it, or Ctrl twice), with the Name Box in the sheet tab bar" => {
             "Mostrar a barra de fórmulas logo acima da célula ativa (F2 para editar nela, ou Ctrl duas vezes), com a Caixa de Nome na barra das planilhas"
