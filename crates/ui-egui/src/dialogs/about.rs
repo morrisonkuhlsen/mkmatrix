@@ -19,7 +19,8 @@ pub(super) fn about(ui: &mut egui::Ui, d: &mut Dialog, open: &mut bool) {
     let lang = crate::i18n::current(ui.ctx());
     let t = Tokens::get(ui.ctx());
     ui.horizontal_top(|ui| {
-        nav_rail(ui, NAV_W, BODY_H, &t, |ui| {
+        let names: Vec<&str> = SECTIONS.iter().map(|(s, _)| lang.tr(s)).collect();
+        nav_rail(ui, super::kit::nav_width(ui, &names, NAV_W), BODY_H, &t, |ui| {
             for (tab, icon) in SECTIONS {
                 if nav_item(ui, icon, lang.tr(tab), d.tab == tab, None, &t).clicked() {
                     d.tab = tab.to_string();

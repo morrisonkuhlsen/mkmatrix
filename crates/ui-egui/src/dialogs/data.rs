@@ -154,7 +154,7 @@ pub(super) fn data_validation_fields(kind: &str, operator: &str) -> Vec<Field> {
 /// (as Excel's tabs), the chosen section's fields on the right, and the footer. Every field stays
 /// in `d.fields`, so OK sends all of them whichever section is showing.
 pub(super) fn data_validation_form(ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool, open: &mut bool) {
-    use super::kit::{nav_item, nav_rail, rule};
+    use super::kit::{nav_item, nav_rail, nav_width, rule};
     const SECTIONS: [(&str, Icon); 3] = [("Settings", Icon::Validation), ("Input Message", Icon::Comment), ("Error Alert", Icon::Info)];
     let lang = crate::i18n::current(ui.ctx());
     let t = crate::theme::Tokens::get(ui.ctx());
@@ -170,7 +170,8 @@ pub(super) fn data_validation_form(ui: &mut egui::Ui, d: &mut Dialog, confirm: &
         _ => "Settings",
     };
     ui.horizontal_top(|ui| {
-        nav_rail(ui, 150.0, 300.0, &t, |ui| {
+        let names: Vec<&str> = SECTIONS.iter().map(|(s, _)| lang.tr(s)).collect();
+        nav_rail(ui, nav_width(ui, &names, 150.0), 300.0, &t, |ui| {
             for (tab, icon) in SECTIONS {
                 if nav_item(ui, icon, lang.tr(tab), d.tab == tab, None, &t).clicked() {
                     d.tab = tab.to_string();

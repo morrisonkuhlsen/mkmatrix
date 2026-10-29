@@ -69,6 +69,14 @@ pub(crate) fn nav_rail(ui: &mut egui::Ui, width: f32, height: f32, t: &Tokens, a
     ui.add_space(16.0);
 }
 
+/// The width a navigation rail needs so none of `labels` is cut: the widest name (in the bold
+/// the chosen one takes) beside the icon, and never less than `min`.
+pub(crate) fn nav_width(ui: &egui::Ui, labels: &[&str], min: f32) -> f32 {
+    let widest =
+        labels.iter().map(|l| ui.painter().layout_no_wrap((*l).to_string(), theme::ui_bold(13.0), Color32::WHITE).size().x).fold(0.0, f32::max);
+    (42.0 + widest + 14.0).ceil().max(min)
+}
+
 /// A section's heading: small, muted, with room above.
 pub(crate) fn heading(ui: &mut egui::Ui, text: &str) {
     let t = Tokens::get(ui.ctx());

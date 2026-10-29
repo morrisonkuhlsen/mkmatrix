@@ -25,7 +25,8 @@ pub(super) fn find(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, open: 
     let mut look_in = d.values.get("lookIn").and_then(Json::as_str).unwrap_or("formulas").to_string();
     let replacing = d.tab == "Replace";
     ui.horizontal_top(|ui| {
-        nav_rail(ui, FIND_NAV_W, FIND_BODY_H, &t, |ui| {
+        let names: Vec<&str> = SECTIONS.iter().map(|(s, _)| lang.tr(s)).collect();
+        nav_rail(ui, super::kit::nav_width(ui, &names, FIND_NAV_W), FIND_BODY_H, &t, |ui| {
             for (tab, icon) in SECTIONS {
                 if nav_item(ui, icon, lang.tr(tab), d.tab == tab, None, &t).clicked() {
                     d.tab = tab.to_string();
