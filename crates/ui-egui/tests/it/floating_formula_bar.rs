@@ -183,11 +183,13 @@ fn the_right_and_bottom_edges_resize_the_bar_and_a_double_click_puts_the_size_ba
     let w = h.state().ui.floating_bar_width.unwrap();
     assert!((w - 400.0).abs() < 2.0, "560 − 160 = {w}");
     let bottom = h.get_all_by_label("Resize the formula bar").map(|n| n.rect()).max_by(|a, b| a.width().total_cmp(&b.width())).unwrap();
-    let h0 = bar_rect(&h).height();
+    let (h0, top0) = (bar_rect(&h).height(), bar_rect(&h).top());
     drag(&mut h, bottom.center(), bottom.center() + egui::vec2(0.0, 60.0));
     let lines = h.state().ui.floating_bar_lines.unwrap();
     assert!(lines >= 3, "60 px down adds rows: {lines}");
-    assert!(bar_rect(&h).height() > h0 + 30.0, "and the bar grows");
+    let grown = bar_rect(&h);
+    assert!(grown.height() > h0 + 30.0, "and the bar grows");
+    assert!((grown.top() - top0).abs() < 1.5, "down from where it was, under the pointer: {top0} → {}", grown.top());
     let right = h.get_all_by_label("Resize the formula bar").map(|n| n.rect()).max_by(|a, b| a.height().total_cmp(&b.height())).unwrap();
     double_click(&mut h, right.center());
     assert_eq!((h.state().ui.floating_bar_width, h.state().ui.floating_bar_lines), (None, None));

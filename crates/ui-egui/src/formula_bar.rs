@@ -302,7 +302,7 @@ pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
                     contents(app, ui, &t, &font, row_h, &mut layout);
                 });
             });
-        resize_edges(app, ui, frame.response.rect, w, lines, row_h, &t);
+        resize_edges(app, ui, frame.response.rect, grid.min, w, lines, row_h, &t);
     });
     if reset_at {
         app.ui.floating_bar_at = None;
@@ -333,9 +333,11 @@ fn grip(ui: &mut egui::Ui, h: f32, t: &Tokens, name: &str) -> egui::Response {
 }
 
 /// The floating bar's right edge (width), bottom edge (rows) and their corner (both), dragged
-/// from the size at the press; a double-click on any of them puts the size back.
+/// from the size at the press; a double-click on any of them puts the size back. Taking the
+/// bottom edge or the corner pins the bar where it is (`grid` is the grid's top-left), so it
+/// grows down under the pointer instead of up from the cell it sits above.
 #[allow(clippy::too_many_arguments)]
-fn resize_edges(app: &mut SheetApp, ui: &mut egui::Ui, bar: Rect, w: f32, lines: usize, row_h: f32, t: &Tokens) {
+fn resize_edges(app: &mut SheetApp, ui: &mut egui::Ui, bar: Rect, grid: egui::Pos2, w: f32, lines: usize, row_h: f32, t: &Tokens) {
     let lang = crate::i18n::current(ui.ctx());
     let start_id = egui::Id::unique("mkmatrix.floating_bar.resize_start");
     let edges = [
@@ -368,6 +370,9 @@ fn resize_edges(app: &mut SheetApp, ui: &mut egui::Ui, bar: Rect, w: f32, lines:
         }
         if resp.drag_started() {
             ui.ctx().data_mut(|d| d.insert_temp(start_id, (w, lines)));
+            if side != "e" {
+                app.ui.floating_bar_at = Some([bar.left() - grid.x, bar.top() - grid.y]);
+            }
         }
         if resp.dragged() {
             let (w0, lines0) = ui.ctx().data(|d| d.get_temp::<(f32, usize)>(start_id)).unwrap_or((w, lines));
