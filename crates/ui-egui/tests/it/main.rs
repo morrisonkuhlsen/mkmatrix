@@ -35,6 +35,7 @@ mod fill_handle_double_click;
 mod fill_handle_right_drag;
 mod fill_options_button;
 mod filter_list_scroll;
+mod filter_menu_actions;
 mod filter_menu_enter;
 mod find_dialog_focus;
 mod floating_formula_bar;
