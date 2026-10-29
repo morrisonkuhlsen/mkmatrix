@@ -184,7 +184,7 @@ fn rows<const N: usize>(ui: &mut Ui, lang: Language, t: &Tokens, items: [(&str, 
     }
 }
 
-/// A rule: its glyph in a small box in the accent, then its name.
+/// A rule: its glyph in the accent, on no background, then its name.
 fn item_row(ui: &mut Ui, label: &str, glyph: Glyph, w: f32, t: &Tokens) -> Response {
     let (r, resp) = ui.allocate_exact_size(vec2(w, ROW_H), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::MenuItem, true, label));
@@ -193,7 +193,6 @@ fn item_row(ui: &mut Ui, label: &str, glyph: Glyph, w: f32, t: &Tokens) -> Respo
         p.rect_filled(r, 4.0, t.hover);
     }
     let g = Rect::from_center_size(pos2(r.left() + 14.0, r.center().y), vec2(22.0, 18.0));
-    p.rect_filled(g, 3.0, t.accent_soft);
     let ink = t.accent;
     match glyph {
         Glyph::Icon(icon) => icons::paint(p, Rect::from_center_size(g.center(), vec2(14.0, 14.0)), icon, ink),
