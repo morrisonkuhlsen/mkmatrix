@@ -180,12 +180,14 @@ pub(super) fn advanced_filter_form(ui: &mut egui::Ui, d: &mut Dialog, confirm: &
     ui.allocate_ui(vec2(ui.available_width(), ui.spacing().interact_size.y + 8.0), |ui| ok_cancel(ui, confirm, open));
 }
 
-/// Draws the sort-level editor: header toggle, column/by/order controls, add/remove level, and `data.sort` on confirmation.
+/// Sort, in Format Cells' style: Add Level and My list has headers above a table of levels (Sort
+/// by / Then by, the column, what to sort on and the order as two joined buttons, a cross to drop
+/// the level), then the footer; OK runs `data.sort`.
 pub(super) fn sort(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool) {
+    use super::kit::{button, footer, rule, segments};
     let lang = app.ui.language;
+    let t = crate::theme::Tokens::get(ui.ctx());
     let mut header = d.values.get("header").and_then(Json::as_bool).unwrap_or(true);
-    ui.checkbox(&mut header, "My list has headers");
-    d.values.insert("header".into(), json!(header));
     let mut levels: Vec<Json> = d.values.get("levels").and_then(Json::as_array).cloned().unwrap_or_default();
     // Columns of the region around the active cell, labelled with their header (or first value).
     let columns: Vec<(String, String)> = app
@@ -210,16 +212,44 @@ pub(super) fn sort(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confir
             )
         })
         .unwrap_or_default();
+
+    let mut add = false;
+    ui.horizontal(|ui| {
+        add = button(ui, lang.tr("+ Add Level"), false).clicked();
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.checkbox(&mut header, lang.tr("My list has headers"));
+        });
+    });
+    d.values.insert("header".into(), json!(header));
+    rule(ui);
+
     let mut remove = None;
-    for (i, lv) in levels.iter_mut().enumerate() {
-        ui.horizontal(|ui| {
-            let label = ui.label(lang.tr(if i == 0 { "Sort by" } else { "Then by" }));
+    // The only level can't be removed.
+    let removable = levels.len() > 1;
+    egui::Grid::new("sort_levels").num_columns(5).spacing([10.0, 8.0]).min_col_width(0.0).show(ui, |ui| {
+        // Muted headings, as `kit::heading` draws them (which can't sit in a grid).
+        let heading = |ui: &mut egui::Ui, text: &str| ui.label(egui::RichText::new(text).font(theme::ui_bold(11.5)).color(t.text_dim));
+        ui.label("");
+        heading(ui, lang.tr("Column"));
+        heading(ui, lang.tr("Sort On"));
+        heading(ui, lang.tr("Order"));
+        ui.label("");
+        ui.end_row();
+        for (i, lv) in levels.iter_mut().enumerate() {
+            let label = ui.add_sized(
+                vec2(64.0, 28.0),
+                egui::Label::new(
+                    egui::RichText::new(lang.tr(if i == 0 { "Sort by" } else { "Then by" })).font(theme::ui_font(13.0)).color(t.text_dim),
+                ),
+            );
             let mut col = lv["column"].as_str().unwrap_or("A").to_string();
             if columns.is_empty() {
-                ui.add(egui::TextEdit::singleline(&mut col).desired_width(50.0)).labelled_by(label.id);
+                ui.add(egui::TextEdit::singleline(&mut col).desired_width(170.0)).labelled_by(label.id);
             } else {
+                let shown = columns.iter().find(|(l, _)| *l == col).map(|(_, text)| text.clone()).unwrap_or_else(|| col.clone());
                 craft_ui::ComboBox::from_id_salt(("sort_col", i))
-                    .selected_text(col.clone())
+                    .selected_text(shown)
+                    .width(170.0)
                     .show_ui(ui, |ui| {
                         for (letter, label) in &columns {
                             ui.selectable_value(&mut col, letter.clone(), label.as_str());
@@ -230,36 +260,37 @@ pub(super) fn sort(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confir
             }
             lv["column"] = json!(col.to_ascii_uppercase());
             let mut by = lv["by"].as_str().unwrap_or("values").to_string();
+            let ons = [("values", "Cell Values"), ("cellColor", "Cell Color"), ("fontColor", "Font Color")];
             craft_ui::ComboBox::from_id_salt(("by", i))
-                .selected_text(match by.as_str() {
-                    "cellColor" => "Cell Color",
-                    "fontColor" => "Font Color",
-                    _ => "Cell Values",
-                })
+                .selected_text(lang.tr(ons.iter().find(|(v, _)| *v == by).map_or("Cell Values", |(_, text)| text)))
+                .width(120.0)
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut by, "values".into(), "Cell Values");
-                    ui.selectable_value(&mut by, "cellColor".into(), "Cell Color");
-                    ui.selectable_value(&mut by, "fontColor".into(), "Font Color");
+                    for (v, text) in ons {
+                        ui.selectable_value(&mut by, v.into(), lang.tr(text));
+                    }
                 })
                 .response
                 .accessible_name(lang.tr("Sort On"));
             lv["by"] = json!(by);
-            let mut desc = lv["order"].as_str() == Some("desc");
-            ui.radio_value(&mut desc, false, "A to Z");
-            ui.radio_value(&mut desc, true, "Z to A");
-            lv["order"] = json!(if desc { "desc" } else { "asc" });
-            if crate::widgets::icon_button(ui, Icon::Close, crate::theme::Tokens::get(ui.ctx()).text_dim, "Remove level", vec2(18.0, 18.0)).clicked()
+            let order = if lv["order"].as_str() == Some("desc") { "desc" } else { "asc" };
+            let picked = ui.push_id(("order", i), |ui| segments(ui, order, &[("asc", lang.tr("A to Z")), ("desc", lang.tr("Z to A"))], 64.0)).inner;
+            lv["order"] = json!(picked.unwrap_or(order));
+            if ui
+                .add_enabled_ui(removable, |ui| crate::widgets::icon_button(ui, Icon::Close, t.text_dim, "Remove level", vec2(18.0, 18.0)))
+                .inner
+                .clicked()
             {
                 remove = Some(i);
             }
-        });
-    }
+            ui.end_row();
+        }
+    });
     if let Some(i) = remove
         && levels.len() > 1
     {
         levels.remove(i);
     }
-    if ui.button("+ Add Level").clicked() {
+    if add {
         let used: Vec<String> = levels.iter().filter_map(|l| l.get("column").and_then(Json::as_str).map(str::to_string)).collect();
         let next = columns
             .iter()
@@ -272,7 +303,7 @@ pub(super) fn sort(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confir
     }
     d.values.insert("levels".into(), Json::Array(levels.clone()));
     let mut open = true;
-    ok_cancel(ui, confirm, &mut open);
+    footer(ui, confirm, &mut open, |_| {});
     if *confirm {
         app.run_or_alert("data.sort", json!({"header": header, "keys": levels}));
     }

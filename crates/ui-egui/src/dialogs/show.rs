@@ -121,12 +121,15 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         "find" => 620.0,
         "goTo" => 440.0,
         "goToSpecial" => 480.0,
-        "nameManager" | "manageRules" | "journal" | "agents" | "macros" => 520.0,
+        "nameManager" => 640.0,
+        "sort" => 600.0,
+        "pasteName" => 400.0,
+        "manageRules" | "journal" | "agents" | "macros" => 520.0,
         "recommendedCharts" => 600.0,
         "analysisToolPak" => 420.0,
         "solver" => 460.0,
         "zoom" => 220.0,
-        "pasteSpecial" => 480.0,
+        "pasteSpecial" => 500.0,
         _ => 380.0,
     };
     let window = egui::Window::new(app.ui.language.tr(&d.title))
