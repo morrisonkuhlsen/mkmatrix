@@ -11,6 +11,7 @@ use crate::theme::{self, Cat, Tokens};
 use crate::widgets::{big_button, big_split_button, color_palette, icon_button, small_button, small_split_button, split_button, toggle_button};
 
 mod automate;
+mod cf_menu;
 mod contextual;
 mod controls;
 mod data;

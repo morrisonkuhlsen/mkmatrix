@@ -1,3 +1,4 @@
+use super::cf_menu::cf_menu;
 use super::controls::{
     ComboResult, Mark, RowExtra, act, active_style, anchor_keytip, control_keytip, invoke, keytip, list_combo, marked_combo, menu_items,
     popup_command, sep, stack, theme_colors, tool, wide,
@@ -726,93 +727,6 @@ fn number_combo(app: &mut SheetApp, ui: &mut Ui, st: &Style) {
             "__more" => app.open_dialog("formatCells", json!({"tab": "Number"})),
             n => act(app, "home.numberFormat", json!({"format": n})),
         }
-    }
-}
-
-fn cf_menu(app: &mut SheetApp, ui: &mut Ui) {
-    ui.menu_button("Highlight Cells Rules", |ui| {
-        for (label, op) in [("Greater Than…", "greater"), ("Less Than…", "less"), ("Between…", "between"), ("Equal To…", "equal")] {
-            if ui.button(label).clicked() {
-                app.open_dialog("cfQuick", json!({"type": "cellIs", "operator": op, "title": label}));
-            }
-        }
-        if ui.button("Text that Contains…").clicked() {
-            app.open_dialog("cfQuick", json!({"type": "containsText", "title": "Text that Contains"}));
-        }
-        if ui.button("A Date Occurring…").clicked() {
-            app.open_dialog("cfQuick", json!({"type": "timePeriod", "title": "A Date Occurring"}));
-        }
-        if ui.button("Duplicate Values…").clicked() {
-            act(app, "home.conditionalFormat", json!({"rule": {"type": "duplicate"}}));
-        }
-    });
-    ui.menu_button("Top/Bottom Rules", |ui| {
-        menu_items(
-            app,
-            ui,
-            &[
-                ("Top 10 Items", "home.conditionalFormat", json!({"rule": {"type": "top10", "rank": 10}})),
-                ("Top 10%", "home.conditionalFormat", json!({"rule": {"type": "top10", "rank": 10, "percent": true}})),
-                ("Bottom 10 Items", "home.conditionalFormat", json!({"rule": {"type": "top10", "rank": 10, "bottom": true}})),
-                ("Bottom 10%", "home.conditionalFormat", json!({"rule": {"type": "top10", "rank": 10, "bottom": true, "percent": true}})),
-                ("Above Average", "home.conditionalFormat", json!({"rule": {"type": "aboveAverage"}})),
-                ("Below Average", "home.conditionalFormat", json!({"rule": {"type": "aboveAverage", "below": true}})),
-            ],
-        );
-    });
-    ui.menu_button("Data Bars", |ui| {
-        for (label, c) in
-            [("Blue", "#638EC6"), ("Green", "#63BE7B"), ("Red", "#F8696B"), ("Orange", "#FFB628"), ("Light Blue", "#008AEF"), ("Purple", "#D6007B")]
-        {
-            if ui.button(label).clicked() {
-                act(app, "home.conditionalFormat", json!({"rule": {"type": "dataBar", "color": c}}));
-            }
-        }
-    });
-    ui.menu_button("Color Scales", |ui| {
-        for (label, cols) in [
-            ("Green - Yellow - Red", vec!["#63BE7B", "#FFEB84", "#F8696B"]),
-            ("Red - Yellow - Green", vec!["#F8696B", "#FFEB84", "#63BE7B"]),
-            ("Green - White - Red", vec!["#63BE7B", "#FCFCFF", "#F8696B"]),
-            ("Blue - White - Red", vec!["#5A8AC6", "#FCFCFF", "#F8696B"]),
-            ("White - Green", vec!["#FCFCFF", "#63BE7B"]),
-            ("White - Red", vec!["#FCFCFF", "#F8696B"]),
-        ] {
-            if ui.button(label).clicked() {
-                act(app, "home.conditionalFormat", json!({"rule": {"type": "colorScale", "colors": cols}}));
-            }
-        }
-    });
-    ui.menu_button("Icon Sets", |ui| {
-        for (label, set) in [
-            ("3 Arrows", "3Arrows"),
-            ("3 Traffic Lights", "3TrafficLights1"),
-            ("3 Symbols", "3Symbols"),
-            ("4 Ratings", "4Rating"),
-            ("5 Arrows", "5Arrows"),
-            ("5 Quarters", "5Quarters"),
-        ] {
-            if ui.button(label).clicked() {
-                act(app, "home.conditionalFormat", json!({"rule": {"type": "iconSet", "set": set}}));
-            }
-        }
-    });
-    ui.separator();
-    if ui.button("New Rule…").clicked() {
-        app.open_dialog("cfQuick", json!({"type": "expression", "title": "New Formatting Rule"}));
-    }
-    ui.menu_button("Clear Rules", |ui| {
-        menu_items(
-            app,
-            ui,
-            &[
-                ("Clear Rules from Selected Cells", "home.clearRules", json!({})),
-                ("Clear Rules from Entire Sheet", "home.clearRules", json!({"sheet": true})),
-            ],
-        );
-    });
-    if ui.button("Manage Rules…").clicked() {
-        app.open_dialog("manageRules", json!({}));
     }
 }
 
