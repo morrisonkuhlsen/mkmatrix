@@ -1,6 +1,6 @@
 # Localization parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-23 · **Change:** minor (missing translations are listed by `cargo xtask i18n-report` and never fail a check) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-29 · **Change:** minor (Brazilian Portuguese formula syntax, #91) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
 
 Per-language status against Excel, which ships its UI in dozens of languages (Windows language
 packs cover 100+), with localized function names, argument separators, number and date formats,
@@ -22,8 +22,8 @@ right-to-left sheets and full complex-script support. Part of
   menus) follows the interface language through per-language tables keyed by the catalog's
   English text (`i18n/<lang>_functions.rs`): descriptions, and argument names from which the
   hint is assembled with the formula syntax's function name and separator. Spanish translates
-  the 10 common functions it had help for (SUM, AVERAGE, IF…); other languages show the English
-  help.
+  the 10 common functions it had help for (SUM, AVERAGE, IF…), Brazilian Portuguese 30 (SUM,
+  VLOOKUP, IF, XLOOKUP, PMT…); other languages show the English help.
 - **A first catalog exists.** `crates/ui-egui/src/i18n.rs` (merged 10-10 in #31, #104, #82; German
   added 10-11) adds an interface-language preference that defaults to the system language (closes
   #20) and a View-tab switcher, with English-keyed lookup tables: Simplified Chinese, Korean,
@@ -37,10 +37,14 @@ right-to-left sheets and full complex-script support. Part of
 - **About 2,200 user-visible strings** in all (heuristic source scan: ~1,700 UI and command
   strings plus ~500 function descriptions), so the ribbon-only languages cover **~12%** and
   Japanese and Portuguese **~43%** (measured count / estimated total).
-- **en-US only formulas and formats.** Function names, `,` argument separator, `.` decimal
-  separator, en-US number and date formats (`crates/numfmt` says "en-US only"). Users ask for
-  localized function names and `;` separators (#45). German with localized numbers and formulas
-  is in PR #163 (open).
+- **Formula syntax: English, Spanish and Brazilian Portuguese.** Other languages use English
+  function names, `,` argument separator and `.` decimal separator. Spanish (`FormulaLocale::Es`)
+  and Brazilian Portuguese (`FormulaLocale::Pt`, #91: =SOMA, =PROCV, =SE, =MÉDIA… 107 names,
+  VERDADEIRO/FALSO, `;` and `,` decimals, `\` between array columns) translate at the formula bar
+  and cell editor only; files, commands and the API keep English. Names compare case-blind in any
+  script (`média` = `MÉDIA`); English names keep working; the matrix functions keep their `MX.`
+  names. Number and date formats are en-US only (`crates/numfmt`). German with localized numbers
+  and formulas is in PR #163 (open).
 - **Script support.** System-font fallback for CJK, Thai and Hebrew landed in #38 (closes #32;
   #142 is still open pending confirmation). Native CJK fallback also probes Flatpak's read-only
   `/run/host/fonts`, `/run/host/local-fonts` and `/run/host/user-fonts` layouts, so installed
@@ -110,6 +114,7 @@ language (none so far) and of localized function names.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-29 | minor | Brazilian Portuguese formula syntax (#91): `FormulaLocale::Pt` with 107 Portuguese names (SOMA, PROCV, SE, MÉDIA, CONT.SE, SEERRO, ÍNDICE, CORRESP, PGTO…), VERDADEIRO/FALSO, `;` separators and decimal commas at the formula bar and cell editor; the Portuguese interface selects it. Localized names compare case-blind in any script; the Spanish code path is now shared by both. Portuguese function help for 30 common functions, descriptions written for MK Matrix. A test checks every localized table names real functions, once each, and never another function's English name. Names taken from public documentation; nothing from Office's files or other spreadsheets' sources |
 | 2026-10-23 | minor | Missing translations are reported, never a failure: `cargo xtask i18n-report` prints, per language, the strings other catalogs translate and it lacks (plus Spanish function help rows keyed by English the function catalog no longer has) and always passes; `cargo xtask ci` runs it first. Coverage and per-language parity tests and tests of one language's exact wording are gone; UI tests take the expected text from the catalog. Duplicate-key, placeholder, context-prefix and line-shape checks stay |
 | 2026-10-21 | minor | Romanian interface (`ro`, Română): 970 labels covering every key of the other catalogs (`crates/ui-egui/src/i18n/ro.rs`), `ro-*` system locales, the View-tab switcher and `app.language.set`; context keys show no prefix (File › Options test). English formulas and formats; AI-assisted draft pending native-speaker review |
 | 2026-10-20 | minor | Japanese: furigana (`rPh` phonetic runs and `<phoneticPr>` in `xl/sharedStrings.xml`) is no longer deleted by an open + save; it is kept on the workbook and written back (a `<phoneticPr>` without runs is kept too, while duplicate texts with different readings keep only the first, reported on open). Display of the readings is still missing (`crates/xlsx/src/tests/phonetic_tests.rs`) |
