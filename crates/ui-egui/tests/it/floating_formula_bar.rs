@@ -107,3 +107,90 @@ fn turning_it_off_brings_the_docked_bar_back() {
     h.run_steps(3);
     assert!(bar_shown(&h), "the docked bar is back");
 }
+
+fn drag(h: &mut Harness, from: Pos2, to: Pos2) {
+    h.input_mut().events.extend([
+        Event::PointerMoved(from),
+        Event::PointerButton { pos: from, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE },
+    ]);
+    h.step();
+    for i in 1..=4 {
+        h.input_mut().events.push(Event::PointerMoved(from + (to - from) * (i as f32 / 4.0)));
+        h.step();
+    }
+    h.input_mut().events.push(Event::PointerButton { pos: to, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE });
+    h.step();
+    h.run_steps(3);
+}
+
+/// Two clicks a frame apart: the harness's frames are a quarter second, and egui's double-click
+/// interval is 0.3 s.
+fn double_click(h: &mut Harness, pos: Pos2) {
+    for _ in 0..2 {
+        h.input_mut().events.push(Event::PointerMoved(pos));
+        for pressed in [true, false] {
+            h.input_mut().events.push(Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE });
+        }
+        h.step();
+    }
+    h.run_steps(3);
+}
+
+fn bar_rect(h: &Harness) -> egui::Rect {
+    let grip = h.get_by_role_and_label(egui::accesskit::Role::Button, "Move the formula bar").rect();
+    let fx = h.get_by_label("Insert Function").rect();
+    grip.union(fx)
+}
+
+#[test]
+fn the_grip_moves_the_bar_and_a_double_click_sends_it_back_to_the_cell() {
+    let mut h = harness();
+    click(&mut h, "D8");
+    h.key_press(egui::Key::F2);
+    h.run_steps(3);
+    let grip = h.get_by_role_and_label(egui::accesskit::Role::Button, "Move the formula bar").rect().center();
+    let before = bar_rect(&h);
+    drag(&mut h, grip, grip + egui::vec2(120.0, 160.0));
+    let after = bar_rect(&h);
+    assert!((after.left() - before.left() - 120.0).abs() < 1.5 && (after.top() - before.top() - 160.0).abs() < 1.5, "{before:?} → {after:?}");
+    assert!(h.state().ui.floating_bar_at.is_some());
+    assert!(h.state().editor.as_ref().is_some_and(|e| e.from_formula_bar), "moving the bar doesn't end the edit");
+    // It stays where it was dropped when another cell is picked.
+    h.key_press(egui::Key::Enter);
+    click(&mut h, "B3");
+    h.key_press(egui::Key::F2);
+    h.run_steps(3);
+    assert!((bar_rect(&h).left() - after.left()).abs() < 1.5, "the dropped bar doesn't follow the cell");
+    let grip = h.get_by_role_and_label(egui::accesskit::Role::Button, "Move the formula bar").rect().center();
+    double_click(&mut h, grip);
+    assert!(h.state().ui.floating_bar_at.is_none(), "a double-click on the grip sends it back");
+    let fx = h.get_by_label("Insert Function").rect();
+    assert!(fx.bottom() < cell_center(&h, "B3").y || fx.top() > cell_center(&h, "B3").y);
+}
+
+#[test]
+fn the_right_and_bottom_edges_resize_the_bar_and_a_double_click_puts_the_size_back() {
+    let mut h = harness();
+    ctrl_tap(&mut h);
+    ctrl_tap(&mut h);
+    h.run_steps(3);
+    let edges: Vec<egui::Rect> = h.get_all_by_label("Resize the formula bar").map(|n| n.rect()).collect();
+    assert_eq!(edges.len(), 3, "the right edge, the bottom edge and their corner");
+    let right = edges.iter().copied().max_by(|a, b| a.height().total_cmp(&b.height())).unwrap();
+    let w0 = h.state().ui.floating_bar_width;
+    assert!(w0.is_none());
+    drag(&mut h, right.center(), right.center() - egui::vec2(160.0, 0.0));
+    let w = h.state().ui.floating_bar_width.unwrap();
+    assert!((w - 400.0).abs() < 2.0, "560 − 160 = {w}");
+    let bottom = h.get_all_by_label("Resize the formula bar").map(|n| n.rect()).max_by(|a, b| a.width().total_cmp(&b.width())).unwrap();
+    let (h0, top0) = (bar_rect(&h).height(), bar_rect(&h).top());
+    drag(&mut h, bottom.center(), bottom.center() + egui::vec2(0.0, 60.0));
+    let lines = h.state().ui.floating_bar_lines.unwrap();
+    assert!(lines >= 3, "60 px down adds rows: {lines}");
+    let grown = bar_rect(&h);
+    assert!(grown.height() > h0 + 30.0, "and the bar grows");
+    assert!((grown.top() - top0).abs() < 1.5, "down from where it was, under the pointer: {top0} → {}", grown.top());
+    let right = h.get_all_by_label("Resize the formula bar").map(|n| n.rect()).max_by(|a, b| a.height().total_cmp(&b.height())).unwrap();
+    double_click(&mut h, right.center());
+    assert_eq!((h.state().ui.floating_bar_width, h.state().ui.floating_bar_lines), (None, None));
+}

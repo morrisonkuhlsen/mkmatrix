@@ -41,6 +41,18 @@ People trust MK Matrix with their numbers; a crash loses their work. **This outr
 - **Rust only** (no handwritten JS/TS). **Never break wasm** (`cargo xtask wasm`).
 - **Quality gates** before every commit: `cargo xtask ci` (fmt, clippy -D warnings, tests, assets, layers, wasm). One task id per commit (`M2.1: borders gallery`).
 
+## One look per kind of element — visual consistency
+The app must look like one piece of work, not a collection of screens. **Every element follows the pattern already set for its kind; nothing gets a look of its own.**
+- **Reuse before drawing.** Before building a menu, dialog, pane, list or button, find the existing one of the same kind and use its helper. Don't restyle it locally.
+- **A change to one is a change to all.** When a request changes how one element looks (a header, an icon treatment, spacing, a colour), apply it to every element of that kind in the same change. If that's too big, list the rest in an issue. Asked to fix "this menu", fix the pattern.
+- **The patterns:**
+  - **Ribbon dropdowns** open with `ribbon::controls::menu_header`: the button's icon in the accent, its name, the selection's range (dimmed) when the menu acts on it, then a rule. Items are `menu_items` rows; sections are small muted headings.
+  - **Dialogs** are built from `dialogs/kit.rs`: nav rail, `heading`, `form` rows on a fixed grid, `segments`, `list_row`, `panel`, `footer` (default button in the accent).
+  - **Panes** (PivotTable Fields, History…) use the same kit pieces: `search_field`, `panel`, `rule`.
+  - **Glyphs and icons** come from `icons.rs` (or are drawn in code), in the accent or the text colour, on no background: no tinted boxes behind them.
+  - **Colours** come only from `theme::Tokens`, and **fonts** only from `theme::ui_font` / `theme::ui_bold`. No literal colours or sizes in panels (data-driven swatches such as palettes are the exception).
+- **Check by looking.** Render the new element next to an existing one of its kind (snapshot PNG) and compare before committing.
+
 ## Running and looking at the app
 - `cargo run --release -p mkmatrix -- --sample sales --control 7979` (sample workbook + control channel).
 - Drive it: `mkmatrix-cli send 7979 <method> '<json>'` (reads the token file the app printed on stderr), or JSON lines on `127.0.0.1:7979` whose first line is `{"id":0,"method":"auth","params":{"token":"…"}}` (token: `$XDG_RUNTIME_DIR/mkmatrix/control-7979.token`, or your own `MKMATRIX_CONTROL_TOKEN`), e.g. `{"id":1,"method":"engine.execute","params":{"command":"cell.set","params":{"cell":"B2","input":"=SUM(A1:A9)"}}}` then `{"id":2,"method":"ui.screenshot","params":{"path":"/tmp/shot.png"}}`. Methods: `crates/ui-egui/src/control.rs`, docs: `docs/control-protocol.md`.

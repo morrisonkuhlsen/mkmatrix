@@ -346,6 +346,24 @@ fn redo_selects_the_redone_cell() {
     assert_eq!(s.doc().unwrap().selection.a1(), "A3");
 }
 
+/// Undoing big edits keeps every one of them for Redo: the redo stack's oldest entry is the
+/// newest workbook, so a byte-budget trim there lost the latest edits (fuzz seed 5, #57).
+#[test]
+fn undoing_big_edits_keeps_the_latest_for_redo() {
+    let mut s = s();
+    for (cell, text) in [("A1", "one"), ("A2", "two"), ("A3", "three")] {
+        s.execute("cell.set", json!({"cell": cell, "input": text})).unwrap();
+    }
+    // Each step as if it held a whole-column fill: together far past the undo byte budget.
+    for e in &mut s.doc_mut().unwrap().undo {
+        e.retained_bytes = super::UNDO_BYTES_LIMIT;
+    }
+    s.execute("edit.undo", json!({"steps": 2})).unwrap();
+    assert_eq!(s.doc().unwrap().redo.len(), 2);
+    s.execute("edit.redo", json!({"steps": 2})).unwrap();
+    assert_eq!(v(&s, "A3"), Value::from("three"), "the latest edit comes back");
+}
+
 #[test]
 fn bulk_formula_history_is_bounded_and_latest_edit_still_undoes() {
     use std::sync::Arc;

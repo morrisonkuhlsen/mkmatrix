@@ -316,3 +316,20 @@ fn display_scale_follows_the_screen_density() {
     assert_eq!(display_scale_for(2.0), DISPLAY_SCALE);
     assert_eq!(display_scale(), DISPLAY_SCALE);
 }
+
+#[test]
+fn a_scrub_steps_by_a_hundredth_of_the_number_without_float_noise() {
+    use super::interact::scrubbed;
+    // 3 px a step: 1 for 100, a tenth of that with Shift.
+    assert_eq!(scrubbed(100.0, 30.0, false), 110.0);
+    assert_eq!(scrubbed(100.0, 30.0, true), 101.0);
+    assert_eq!(scrubbed(100.0, -3.0, false), 99.0);
+    assert_eq!(scrubbed(0.25, 3.0, false), 0.251);
+    assert_eq!(scrubbed(0.1, 21.0, false), 0.107);
+    // From zero: steps of 1; the number's own decimals are kept.
+    assert_eq!(scrubbed(0.0, 6.0, false), 2.0);
+    assert_eq!(scrubbed(12.345, 3.0, false), 12.445);
+    assert_eq!(scrubbed(-50.0, 3.0, false), -49.9);
+    // Under a step's half it stays.
+    assert_eq!(scrubbed(7.0, 1.0, false), 7.0);
+}

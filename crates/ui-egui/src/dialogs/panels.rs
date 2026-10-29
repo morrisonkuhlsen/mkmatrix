@@ -413,6 +413,148 @@ pub(super) fn explain_formula(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dia
     close_footer(ui, open, lang.tr("A click goes to the cell"));
 }
 
+/// Data › What-If Analysis › Sensitivity (beyond Excel): which inputs move the active cell's
+/// result most, as a tornado chart. Each bar runs from the result with that input lowered to the
+/// result with it raised, around the result now (the centre line), widest first; the change is
+/// picked above the chart. A click on a row goes to the input.
+pub(super) fn sensitivity(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, open: &mut bool) {
+    let lang = app.ui.language;
+    let t = Tokens::get(ui.ctx());
+    ui.spacing_mut().item_spacing.y = 8.0;
+    let Some(root) = d.result.clone() else {
+        let why = d.values.get("error").and_then(Json::as_str).unwrap_or("The cell has no formula.").to_string();
+        empty_panel(ui, lang.tr(&why));
+        close_footer(ui, open, "");
+        return;
+    };
+    let sheet = root["sheet"].as_str().unwrap_or("").to_string();
+    let base = root["value"].as_f64().unwrap_or(0.0);
+    let cell = root["cell"].as_str().unwrap_or("").to_string();
+    egui::Frame::new().fill(t.input_bg).stroke(Stroke::new(1.0, t.input_border)).inner_margin(egui::Margin::symmetric(12, 8)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(format!("{sheet}!{cell}")).font(theme::ui_bold(13.5)).color(t.text));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(egui::RichText::new(general(base)).font(theme::ui_bold(15.0)).color(t.accent));
+            });
+        });
+    });
+    // How far each input moves.
+    let change = root["change"].as_f64().unwrap_or(0.1);
+    let current = format!("{}", (change * 100.0).round());
+    ui.horizontal(|ui| {
+        hint(ui, lang.tr("Change each input by"));
+        if let Some(pct) = super::kit::segments(ui, &current, &[("5", "±5%"), ("10", "±10%"), ("20", "±20%"), ("50", "±50%")], 64.0) {
+            let at = format!("{}!{cell}", mkmatrix_engine::formula::quote_sheet(&sheet));
+            let change = pct.parse::<f64>().unwrap_or(10.0) / 100.0;
+            if let Ok(r) = app.session.run("data.sensitivity", json!({"cell": at, "change": change})) {
+                d.result = Some(r);
+            }
+        }
+    });
+    let inputs: Vec<Json> = root["inputs"].as_array().cloned().unwrap_or_default();
+    let moving: Vec<&Json> = inputs.iter().filter(|i| i["swing"].as_f64().is_none_or(|s| s > 0.0)).collect();
+    let still = inputs.len() - moving.len();
+    heading(ui, lang.tr("What moves the result most"));
+    if moving.is_empty() {
+        empty_panel(ui, lang.tr(if inputs.is_empty() { "It reads no numbers that can change." } else { "No input changes the result." }));
+        close_footer(ui, open, "");
+        return;
+    }
+    // One scale for every bar: the farthest result from the one now.
+    let num = |v: &Json| v.as_f64().filter(|x| x.is_finite());
+    let reach = moving
+        .iter()
+        .flat_map(|i| [num(&i["lowResult"]), num(&i["highResult"])])
+        .flatten()
+        .map(|r| (r - base).abs())
+        .fold(0.0f64, f64::max)
+        .max(f64::MIN_POSITIVE);
+    const BAR_H: f32 = 26.0;
+    let mut go: Option<(String, String)> = None;
+    panel(ui, (moving.len().min(10) as f32) * BAR_H + 2.0, |ui| {
+        egui::ScrollArea::vertical().id_salt("sensitivity.bars").auto_shrink([false, false]).show(ui, |ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            for i in &moving {
+                let s = |k: &str| i.get(k).and_then(Json::as_str).unwrap_or("").to_string();
+                let name = if s("sheet") == sheet { s("cell") } else { format!("{}!{}", s("sheet"), s("cell")) };
+                let (row, resp) = ui.allocate_exact_size(vec2(ui.available_width(), BAR_H), Sense::click());
+                resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &name));
+                let p = ui.painter();
+                if resp.hovered() {
+                    p.rect_filled(row, 0.0, t.hover);
+                }
+                // The input and its value, then the bars.
+                let label_w = 150.0;
+                p.text(pos2(row.left() + 10.0, row.center().y), egui::Align2::LEFT_CENTER, &name, theme::ui_bold(12.5), t.text);
+                let value = i["value"].as_f64().map(general).unwrap_or_default();
+                p.text(
+                    pos2(row.left() + label_w - 8.0, row.center().y),
+                    egui::Align2::RIGHT_CENTER,
+                    &value,
+                    egui::FontId::monospace(11.5),
+                    t.text_dim,
+                );
+                let chart = egui::Rect::from_min_max(pos2(row.left() + label_w + 56.0, row.top()), pos2(row.right() - 56.0, row.bottom()));
+                let mid = chart.center().x;
+                let x_of = |r: f64| mid + ((r - base) / reach) as f32 * chart.width() / 2.0;
+                p.line_segment([pos2(mid, row.top()), pos2(mid, row.bottom())], Stroke::new(1.0, t.separator));
+                for (key, ink) in [("lowResult", t.text_dim), ("highResult", t.accent)] {
+                    let Some(r) = num(&i[key]) else {
+                        // The formula errors with the input moved this way.
+                        let shown = s(key);
+                        let right = key == "highResult";
+                        let at = if right { pos2(mid + 6.0, row.center().y) } else { pos2(mid - 6.0, row.center().y) };
+                        let align = if right { egui::Align2::LEFT_CENTER } else { egui::Align2::RIGHT_CENTER };
+                        p.text(at, align, shown, theme::ui_bold(11.5), t.danger);
+                        continue;
+                    };
+                    let x = x_of(r);
+                    let bar = egui::Rect::from_x_y_ranges(mid.min(x)..=mid.max(x), row.center().y - 7.0..=row.center().y + 7.0);
+                    p.rect_filled(bar, 2.0, ink);
+                    // The result there, past the bar's end.
+                    let (at, align) = if x >= mid {
+                        (pos2(x + 5.0, row.center().y), egui::Align2::LEFT_CENTER)
+                    } else {
+                        (pos2(x - 5.0, row.center().y), egui::Align2::RIGHT_CENTER)
+                    };
+                    if (x - mid).abs() > 0.5 {
+                        p.text(at, align, general(r), theme::ui_font(11.0), t.text_dim);
+                    }
+                }
+                if resp.clicked() {
+                    go = Some((s("sheet"), s("cell")));
+                }
+            }
+        });
+    });
+    if let Some((sheet, cell)) = go {
+        go_to(app, &sheet, &cell);
+    }
+    // The key, and what was left out.
+    ui.horizontal(|ui| {
+        for (ink, what) in [(t.text_dim, "Input lowered"), (t.accent, "Input raised")] {
+            let (r, _) = ui.allocate_exact_size(vec2(12.0, 12.0), Sense::hover());
+            ui.painter().rect_filled(r, 2.0, ink);
+            hint(ui, lang.tr(what));
+            ui.add_space(10.0);
+        }
+    });
+    let mut left = String::new();
+    if still > 0 {
+        left = lang
+            .tr(if still == 1 { "{count} input does not change it" } else { "{count} inputs do not change it" })
+            .replace("{count}", &still.to_string());
+    }
+    if root["more"].as_bool() == Some(true) {
+        if !left.is_empty() {
+            left.push_str("  ·  ");
+        }
+        left.push_str(lang.tr("only the nearest inputs were tried"));
+    }
+    close_footer(ui, open, &left);
+}
+
 /// One node of the explanation tree and, when open, its children (a cell's formula reads, a
 /// range's formula cells). Nesting is the tree's own, bounded by the engine (depth ≤ 8).
 fn tree_row(ui: &mut egui::Ui, n: &Json, level: usize, path: &str, t: &Tokens, lang: crate::i18n::Language, go: &mut Option<String>) {

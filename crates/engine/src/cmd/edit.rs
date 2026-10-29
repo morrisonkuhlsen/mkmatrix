@@ -295,7 +295,10 @@ fn undo(s: &mut Session, p: &Json) -> Result<Json> {
         label = e.label.clone();
         d.wb = e.wb;
         d.selection = e.selection;
-        crate::push_history(&mut d.redo, label.clone(), cur_wb, &d.wb, cur_selection);
+        // Not trimmed: the redo stack's oldest entry is the newest workbook, the one a budget
+        // trim would drop first, losing the latest edits to Redo. These steps were within the
+        // limits while they were undo steps.
+        crate::push_entry(&mut d.redo, label.clone(), cur_wb, &d.wb, cur_selection);
     }
     super::extra::keep_watch_list(&now, &mut d.wb);
     d.calc.rebuild(&d.wb);

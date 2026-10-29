@@ -17,9 +17,9 @@ mod sort;
 mod tools;
 mod validation;
 
-pub use filter::filter_values;
 pub(crate) use filter::{apply_filter, grow_autofilter};
 use filter::{clear_filter, filter_by, reapply, toggle_filter};
+pub use filter::{filter_value_counts, filter_values};
 use grouping::{detail, group, outline_settings, show_levels, subtotal};
 use sort::{quick_sort, sort};
 #[cfg(test)]

@@ -146,6 +146,15 @@ pub enum Drag {
         grab: CellRef,
         to: Option<CellRef>,
     },
+    /// Alt+drag on a typed number (beyond Excel): sideways changes it, its dependents recalculate
+    /// as it moves, and the whole drag is one undo step. `start` is the press's x, `orig` the
+    /// number before, `last` the one written last.
+    Scrub {
+        cell: CellRef,
+        start: f32,
+        orig: f64,
+        last: f64,
+    },
     Object {
         kind: &'static str,
         id: u32,

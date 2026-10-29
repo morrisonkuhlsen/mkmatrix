@@ -16,6 +16,7 @@ pub mod fill;
 pub mod io;
 pub mod links;
 pub mod outline;
+pub mod palette;
 pub mod paper;
 pub mod pivot;
 pub mod pivot_calc;
@@ -256,7 +257,7 @@ fn push_history_with_budget(
 
 /// Adds a step without applying the limits: inside a command they wait for the outermost
 /// command to collapse its steps (see [`Session::trim_history`]).
-fn push_entry(history: &mut Vec<HistoryEntry>, label: String, wb: Arc<Workbook>, next: &Workbook, selection: Selection) {
+pub(crate) fn push_entry(history: &mut Vec<HistoryEntry>, label: String, wb: Arc<Workbook>, next: &Workbook, selection: Selection) {
     let retained_bytes = history_retained_bytes(&wb, next);
     history.push(HistoryEntry { label, wb, selection, retained_bytes });
 }

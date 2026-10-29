@@ -1,4 +1,4 @@
-//! Pivot field buttons use the surface color for the active theme.
+//! Pivot field chips use the surface color for the active theme.
 
 use egui::{Color32, RawInput, Rect, Shape, pos2, vec2};
 use mkmatrix_engine::Session;
@@ -30,23 +30,26 @@ fn render_pivot_field_buttons(dark: bool) -> Vec<Shape> {
     output.shapes.into_iter().map(|shape| shape.shape).collect()
 }
 
+/// The fill behind the field chip painted with `label`: of the shapes that paint the label (the
+/// field list paints it too, straight on the pane), the one inside the smallest rectangle.
 fn field_button_fill(shapes: &[Shape], label: &str) -> Color32 {
-    let text = shapes
-        .iter()
-        .find_map(|shape| match shape {
-            Shape::Text(text) if text.galley.text() == label => Some(text),
-            _ => None,
-        })
-        .unwrap_or_else(|| panic!("pivot field button {label:?} was not painted"));
-    let text_rect = text.galley.rect.translate(text.pos.to_vec2());
     shapes
         .iter()
         .filter_map(|shape| match shape {
-            Shape::Rect(rect) if rect.rect.contains(text_rect.center()) => Some(rect),
+            Shape::Text(text) if text.galley.text() == label => Some(text.galley.rect.translate(text.pos.to_vec2())),
             _ => None,
         })
+        .filter_map(|text_rect| {
+            shapes
+                .iter()
+                .filter_map(|shape| match shape {
+                    Shape::Rect(rect) if rect.rect.contains(text_rect.center()) && rect.fill != Color32::TRANSPARENT => Some(rect),
+                    _ => None,
+                })
+                .min_by(|a, b| a.rect.area().total_cmp(&b.rect.area()))
+        })
         .min_by(|a, b| a.rect.area().total_cmp(&b.rect.area()))
-        .unwrap_or_else(|| panic!("pivot field button {label:?} has no painted background"))
+        .unwrap_or_else(|| panic!("pivot field chip {label:?} has no painted background"))
         .fill
 }
 
@@ -54,6 +57,6 @@ fn field_button_fill(shapes: &[Shape], label: &str) -> Color32 {
 fn pivot_field_button_surfaces_follow_the_active_theme() {
     for (dark, expected) in [(false, theme::Tokens::light().ribbon), (true, theme::Tokens::dark().ribbon)] {
         let shapes = render_pivot_field_buttons(dark);
-        assert_eq!(field_button_fill(&shapes, "Region ▾"), expected, "dark mode: {dark}");
+        assert_eq!(field_button_fill(&shapes, "Region"), expected, "dark mode: {dark}");
     }
 }

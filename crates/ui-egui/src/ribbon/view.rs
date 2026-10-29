@@ -1,4 +1,4 @@
-use super::controls::{act, checkbox_on, control_keytip, invoke, keytip, menu_items, popup_command, sep};
+use super::controls::{act, checkbox_on, control_keytip, invoke, keytip, menu_header, menu_items, popup_command, sep};
 use super::*;
 
 /// Draws the View tab: view modes, ruler/gridlines/formula-bar/headings toggles, zoom, freeze panes, theme, animations and interface size (the language is in File › Options).
@@ -115,6 +115,7 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
         keytip(app, ui, sequence, fp.rect.center_bottom());
     }
     egui::Popup::menu(&fp).show(|ui| {
+        menu_header(app, ui, Icon::Freeze, "Freeze Panes", false);
         menu_items(
             app,
             ui,
@@ -200,6 +201,7 @@ fn switch_windows(app: &mut SheetApp, ui: &mut Ui) {
     control_keytip(app, ui, &anchor, "view.switchWindows");
     let forced = std::mem::take(&mut app.open_switch_windows) | invoke(app, "view.switchWindows");
     egui::Popup::menu(&anchor).open_memory(popup_command(forced, anchor.clicked())).show(|ui| {
+        menu_header(app, ui, Icon::Book, "Switch Windows", false);
         for w in app.open_windows() {
             let label = theme::available_text(ui, &format!("{}{}", if w.active { "✓ " } else { "    " }, w.label()));
             if ui.add(egui::Button::selectable(w.active, label).min_size(vec2(220.0, 22.0))).clicked() {
