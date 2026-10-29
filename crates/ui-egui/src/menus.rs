@@ -154,6 +154,7 @@ pub fn tree() -> Vec<(&'static str, Vec<Entry>)> {
                 ("Protect Workbook", "review.protectWorkbook"),
                 ("-", ""),
                 ("Goal Seek…", "dialog:goalSeek"),
+                ("Sensitivity…", "dialog:sensitivity"),
                 ("Error Checking…", "dialog:errorChecking"),
                 ("Evaluate Formula…", "dialog:evaluateFormula"),
                 ("-", ""),

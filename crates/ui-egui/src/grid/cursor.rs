@@ -54,6 +54,7 @@ fn drag_cursor(drag: &Drag) -> Option<CursorIcon> {
         Drag::ResizeRow { .. } => Some(CursorIcon::ResizeRow),
         Drag::Freeze { cols, .. } => Some(if *cols { CursorIcon::ResizeHorizontal } else { CursorIcon::ResizeVertical }),
         Drag::Object { resize: Some(sides), .. } => Some(handle_cursor(*sides)),
+        Drag::Scrub { .. } => Some(CursorIcon::ResizeHorizontal),
     }
 }
 
@@ -102,6 +103,12 @@ fn hover_cursor(app: &SheetApp, ctx: &egui::Context, resp: &egui::Response, poin
         }
     } else if in_cells && app.editor.is_none() && on_cur_border {
         ctx.set_cursor_icon(CursorIcon::Move);
+    } else if in_cells
+        && ctx.input(|i| i.modifiers.alt && !i.modifiers.command && !i.modifiers.shift)
+        && let Some(d) = app.session.active()
+        && super::interact::scrub_value(&d.wb, sh, geo.cell_at(sh, p)).is_some()
+    {
+        ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
     } else if in_cells {
         ctx.set_cursor_icon(CursorIcon::Cell);
     } else if in_col_header {

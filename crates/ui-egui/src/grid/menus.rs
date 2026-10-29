@@ -151,6 +151,7 @@ pub(super) fn context_menu(app: &mut SheetApp, ui: &mut egui::Ui) {
                 ("Define Name…", "ui:defineName"),
                 ("Link…", "ui:insertLink"),
                 ("Explain Formula…", "ui:explainFormula"),
+                ("Sensitivity…", "ui:sensitivity"),
             ];
             if let Some(item) = insert_copied {
                 items.insert(6, item);
@@ -176,6 +177,7 @@ pub(super) fn context_menu(app: &mut SheetApp, ui: &mut egui::Ui) {
                         "ui:deleteCells" => app.open_dialog("deleteCells", json!({})),
                         "ui:formatCells" => app.open_dialog("formatCells", json!({})),
                         "ui:explainFormula" => app.open_dialog("explainFormula", json!({})),
+                        "ui:sensitivity" => app.open_dialog("sensitivity", json!({})),
                         "ui:newComment" => app.open_dialog("comment", json!({"threaded": true})),
                         "ui:newNote" => app.open_dialog("comment", json!({"threaded": false})),
                         "ui:defineName" => app.open_dialog("defineName", json!({})),
