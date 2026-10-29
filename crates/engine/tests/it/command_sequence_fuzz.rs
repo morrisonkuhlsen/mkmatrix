@@ -221,6 +221,8 @@ struct Harness {
     s: Session,
     /// The workbook at the start of the current episode (what undoing everything gives back).
     base: Arc<Workbook>,
+    /// Whether the undo limits dropped the oldest steps of this episode.
+    trimmed: bool,
 }
 
 fn fail(step: usize, kind: &'static str, what: impl Into<String>) -> Failure {
@@ -244,17 +246,29 @@ impl Harness {
         let mut s = Session::new();
         s.execute("file.new", json!({"sample": sample})).expect("sample opens");
         let base = s.doc().expect("document").wb.clone();
-        Harness { s, base }
+        Harness { s, base, trimmed: false }
     }
 
     fn wb(&self) -> Arc<Workbook> {
         self.s.doc().expect("document").wb.clone()
     }
 
+    /// The workbook the oldest undo step goes back to.
+    fn bottom(&self) -> Option<Arc<Workbook>> {
+        self.s.doc().expect("document").undo.first().map(|e| e.wb.clone())
+    }
+
     fn step(&mut self, i: usize, id: &str, params: &Json) -> Result<(), Failure> {
         let before = self.wb();
+        let bottom = self.bottom();
         let r = self.s.execute(id, params.clone());
         self.s.take_ui_requests();
+        // The history's oldest step changed under an edit: the undo limits dropped it.
+        if let (Some(was), Some(now)) = (bottom, self.bottom())
+            && !Arc::ptr_eq(&was, &now)
+        {
+            self.trimmed = true;
+        }
         if let Err(EngineError::Internal(_, msg)) = &r {
             return Err(fail(i, "panic", format!("`{id}` panicked (caught by Session::execute): {msg}")));
         }
@@ -304,7 +318,11 @@ impl Harness {
             }
         }
         let undone = self.wb();
-        if let Some(diff) = workbook_diff(&self.base, &undone) {
+        // Past the undo limits (100 steps, 128 MB) the oldest steps are dropped by design; the
+        // start is then out of reach, but redoing everything must still give back the end.
+        if !self.trimmed
+            && let Some(diff) = workbook_diff(&self.base, &undone)
+        {
             return Err(fail(i, "undo", format!("undoing all {n} steps doesn't give back the starting workbook: {diff}")));
         }
         if watch_list(&end) != watch_list(&undone) {
@@ -326,6 +344,7 @@ impl Harness {
         d.undo.clear();
         d.redo.clear();
         self.base = d.wb.clone();
+        self.trimmed = false;
         Ok(())
     }
 

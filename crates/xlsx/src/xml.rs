@@ -204,6 +204,17 @@ fn named_entity(name: &str) -> Option<char> {
     })
 }
 
+/// Elements below `el` (not counting it), walked without recursion.
+fn descendants(el: &El) -> usize {
+    let mut n = 0usize;
+    let mut todo: Vec<&El> = vec![el];
+    while let Some(e) = todo.pop() {
+        n = n.saturating_add(e.children.len());
+        todo.extend(&e.children);
+    }
+    n
+}
+
 /// Parses a whole part into a tree.
 pub fn parse(xml: &[u8]) -> Result<El, IoError> {
     parse_streaming(xml, &[], &mut |_| Ok(()))
@@ -240,6 +251,9 @@ pub fn parse_streaming(xml: &[u8], split: &[&str], cb: &mut dyn FnMut(El) -> Res
         match stack.last_mut() {
             Some(parent) => {
                 if split.contains(&el.name.as_str()) {
+                    // Its descendants were counted while it was built; handed off, they leave the
+                    // tree, so they stop counting (a sheet of a million cells streams its rows).
+                    *kept = kept.saturating_sub(descendants(&el));
                     cb(el)?;
                 } else {
                     *kept = kept.saturating_add(1);
@@ -561,6 +575,26 @@ mod tests {
         let xml = format!("<r>{}<y/></r>", "<x/>".repeat(MAX_XML_NODES + 1));
         let err = parse(xml.as_bytes()).unwrap_err();
         assert!(err.to_string().contains("elements"), "{err}");
+    }
+
+    /// Streamed elements don't count towards the cap once handed off: a sheet whose rows hold
+    /// more than a million cells in all reads whole (#57: Fill Down over whole columns lost every
+    /// row past ~166,000 on reload). One row of too many cells is still refused.
+    #[test]
+    fn streamed_rows_hand_their_cells_back_to_the_element_cap() {
+        let rows = MAX_XML_NODES / 4;
+        let xml = format!("<ws><sheetData>{}</sheetData><x/></ws>", "<row><c><v>1</v></c><c><v>2</v></c><c><v>3</v></c></row>".repeat(rows));
+        let mut seen = 0usize;
+        let root = parse_streaming(xml.as_bytes(), &["row"], &mut |row| {
+            assert_eq!(row.kids("c").count(), 3);
+            seen += 1;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(seen, rows);
+        assert!(root.child("x").is_some(), "the elements after the rows are read too");
+        let one_row = format!("<ws><row>{}</row></ws>", "<c/>".repeat(MAX_XML_NODES + 1));
+        assert!(parse_streaming(one_row.as_bytes(), &["row"], &mut |_| Ok(())).is_err());
     }
 
     #[test]
