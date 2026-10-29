@@ -218,7 +218,6 @@ impl SheetApp {
         } else {
             self.preview_hover = None;
             ribbon::show(self, ui);
-            self.update_preview();
             widgets::notice_bar(self, ui);
             if self.session.prefs.formula_bar && !self.ui.floating_formula_bar {
                 formula_bar::show(self, ui);
@@ -228,6 +227,8 @@ impl SheetApp {
             }
             tabs::sheet_tabs(self, ui);
             pivot_pane::show(self, ui);
+            // After the ribbon and the PivotTable pane, which both set what is previewed.
+            self.update_preview();
             panes::show(self, ui);
             by_hand_ui::show(self, ui);
             egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.grid_bg)).show(ui, |ui| {
