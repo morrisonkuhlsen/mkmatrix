@@ -70,9 +70,45 @@ pub(crate) fn single_row(ui: &Ui) -> bool {
     ui.ctx().data(|d| d.get_temp::<bool>(single_row_id())).unwrap_or(false)
 }
 
-/// A group's rows of controls: stacked in the ribbon, side by side in the single row.
+/// The toolbar's spacing, one rule for every control in the bar: a label sits `LABEL_GAP` before
+/// the control it names, and one item (a stack, a labelled control, a checkbox after a combo) sits
+/// `ITEM_GAP` from the next.
+pub(crate) const LABEL_GAP: f32 = 6.0;
+/// See [`LABEL_GAP`].
+pub(crate) const ITEM_GAP: f32 = 14.0;
+/// The row's own spacing, which every gap includes.
+const ROW_SPACING: f32 = 2.0;
+
+/// A group's rows of controls: stacked in the ribbon, side by side in the single row, there with
+/// half an `ITEM_GAP` on each side, so two stacks in a row sit one `ITEM_GAP` apart.
 pub(crate) fn stack<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> egui::InnerResponse<R> {
-    if single_row(ui) { ui.horizontal(add) } else { ui.vertical(add) }
+    if !single_row(ui) {
+        return ui.vertical(add);
+    }
+    let margin = (ITEM_GAP - ROW_SPACING) / 2.0;
+    ui.add_space(margin);
+    let r = ui.horizontal(add);
+    ui.add_space(margin);
+    r
+}
+
+/// The gap between two items inside one stack (a combo and the checkbox after it): `ITEM_GAP` in
+/// the single row; nothing in the ribbon, where they are on rows of their own.
+pub(crate) fn item_gap(ui: &mut Ui) {
+    if single_row(ui) {
+        ui.add_space(ITEM_GAP - ROW_SPACING);
+    }
+}
+
+/// A control's name, muted and small, as every labelled control in the bar has it; in the single
+/// row followed by `LABEL_GAP` before the control. Its id names the control for screen readers.
+pub(crate) fn field_label(ui: &mut Ui, text: &str) -> egui::Id {
+    let dim = Tokens::get(ui.ctx()).text_dim;
+    let id = ui.label(egui::RichText::new(text).font(theme::ui_font(11.5)).color(dim)).id;
+    if single_row(ui) {
+        ui.add_space(LABEL_GAP - ROW_SPACING);
+    }
+    id
 }
 
 /// A column of checkboxes (View › Show): stacked in the ribbon, and in the single row too, two

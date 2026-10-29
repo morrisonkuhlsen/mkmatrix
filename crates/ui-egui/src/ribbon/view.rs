@@ -114,7 +114,7 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
     });
     switch_windows(app, ui);
     controls::stack(ui, |ui| {
-        let label_response = ui.label(lang.tr("Display theme"));
+        let label_id = controls::field_label(ui, lang.tr("Display theme"));
         let mode = app.ui.theme_mode();
         let label = match mode {
             "system" => "System",
@@ -132,7 +132,8 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
                 }
             })
             .response
-            .labelled_by(label_response.id);
+            .labelled_by(label_id);
+        controls::item_gap(ui);
         let mut animations = app.ui.animations;
         let hint = lang.tr("Glide the selection outline to the cell you move to instead of jumping there");
         if ui.checkbox(&mut animations, lang.tr("Animations")).on_hover_text(hint).changed() {
@@ -142,7 +143,7 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
     sep(ui, "Window");
     // Interface size (issue #230): scales the whole window on top of the desktop's scale.
     controls::stack(ui, |ui| {
-        let label = ui.label(egui::RichText::new(lang.tr("Interface size")).font(theme::ui_font(11.5)).color(t.text_dim));
+        let label = controls::field_label(ui, lang.tr("Interface size"));
         let current = app.ui.interface_scale;
         let text = |v: u16| if v == 100 { lang.tr("Auto").to_string() } else { format!("{v}%") };
         craft_ui::ComboBox::from_id_salt("ui_interface_size")
@@ -156,11 +157,11 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
                 }
             })
             .response
-            .labelled_by(label.id);
+            .labelled_by(label);
     });
     // Density: how much room the bars above and below the sheet take.
     controls::stack(ui, |ui| {
-        let label = ui.label(egui::RichText::new(lang.tr("Density")).font(theme::ui_font(11.5)).color(t.text_dim));
+        let label = controls::field_label(ui, lang.tr("Density"));
         let current = app.ui.density;
         craft_ui::ComboBox::from_id_salt("ui_density")
             .width(110.0)
@@ -173,12 +174,12 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
                 }
             })
             .response
-            .labelled_by(label.id);
+            .labelled_by(label);
     });
     // Interface language: settings live in the View tab, like Excel's Options. The label follows
     // the current language so it stays readable; the choices are always shown in their own script.
     controls::stack(ui, |ui| {
-        let label = ui.label(egui::RichText::new(lang.tr("Interface language")).font(theme::ui_font(11.5)).color(t.text_dim));
+        let label = controls::field_label(ui, lang.tr("Interface language"));
         craft_ui::ComboBox::from_id_salt("ui_language")
             .width(120.0)
             .selected_text(egui::RichText::new(lang.name()).font(theme::ui_font(12.5)))
@@ -190,7 +191,7 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
                 }
             })
             .response
-            .labelled_by(label.id);
+            .labelled_by(label);
     });
 }
 
