@@ -554,8 +554,10 @@ impl Session {
             return None;
         }
         let after = after_doc.wb.sheet(sheet)?;
+        // Stored cells and spilled ones (a dynamic array's results aren't stored cells).
         let mut cells: std::collections::BTreeSet<CellRef> = before.cells.iter().map(|(c, _)| c).collect();
         cells.extend(after.cells.iter().map(|(c, _)| c));
+        cells.extend(before.spill.keys().copied().chain(after.spill.keys().copied()));
         let mut out = Vec::new();
         for c in cells {
             let old = display::cell_text(&src.wb, before, c);

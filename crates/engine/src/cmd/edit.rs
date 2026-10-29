@@ -265,8 +265,10 @@ fn history_diff(s: &mut Session, p: &Json) -> Result<Json> {
     if now_sh.cells.len().max(then_sh.cells.len()) > crate::PREVIEW_SHEET_CELLS {
         return Ok(json!({"cells": []}));
     }
+    // Stored cells and spilled ones (a dynamic array's results aren't stored cells).
     let mut keys: std::collections::BTreeSet<CellRef> = now_sh.cells.iter().map(|(c, _)| c).collect();
     keys.extend(then_sh.cells.iter().map(|(c, _)| c));
+    keys.extend(now_sh.spill.keys().copied().chain(then_sh.spill.keys().copied()));
     let mut cells = Vec::new();
     for c in keys {
         let then_text = crate::display::cell_text(&then, then_sh, c);

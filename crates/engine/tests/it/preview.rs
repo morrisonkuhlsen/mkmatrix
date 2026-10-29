@@ -53,3 +53,13 @@ fn the_history_lists_the_steps_and_diffs_any_point_without_running_anything() {
     );
     assert!(s.execute("edit.historyDiff", json!({"position": 9})).is_err(), "past the end is an error");
 }
+
+#[test]
+fn spilled_cells_are_in_the_history_difference() {
+    let mut s = Session::new();
+    s.new_workbook();
+    s.execute("cell.set", json!({"cell": "A1", "input": "=SEQUENCE(3)"})).unwrap();
+    // At the start A2 and A3 (spilled, not stored) were blank too.
+    let cells = s.execute("edit.historyDiff", json!({"position": 0})).unwrap()["cells"].clone();
+    assert_eq!(cells, json!([{"cell": "A1", "text": ""}, {"cell": "A2", "text": ""}, {"cell": "A3", "text": ""}]));
+}

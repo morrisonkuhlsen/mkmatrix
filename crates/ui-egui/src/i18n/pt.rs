@@ -10,6 +10,8 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Paste Formatting" => "Colar Formatação",
         "Transpose" => "Transpor",
         "Paste Link" => "Colar Vínculo",
+        "Set Values" => "Definir Valores",
+        "Enter Cell" => "Inserir na Célula",
         "History" => "Linha do Tempo",
         "Nothing has changed in this workbook yet." => "Nada mudou nesta pasta de trabalho ainda.",
         "Drag to see how the sheet stood at each step" => "Arraste para ver como a planilha estava em cada passo",
