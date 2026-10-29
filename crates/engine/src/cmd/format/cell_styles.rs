@@ -1,95 +1,101 @@
 use super::*;
 
-/// Built-in cell styles (our own palette).
+/// Built-in cell styles (our own vintage palette, [`crate::palette`]: inks on paper).
 pub fn builtin_cell_style(name: &str, theme: &Theme) -> Option<Style> {
-    let _ = theme;
+    use crate::palette::{self, CREAM, INK, tone};
     let mut s = Style::default();
-    let accent = |i: u8, tint: i16| Color::Theme(i, tint);
+    // Accent `i` (1..=6) at a tint.
+    let accent = |i: u8, tint: i16| tone(palette::accent(usize::from(i).saturating_sub(1)), tint);
+    let rgb = Color::Rgb;
+    let ink = rgb(INK);
+    let taupe = rgb(0x8C8279);
     match name {
         "Normal" => {}
+        // Good, Bad and Neutral: sage, dusty rose and parchment, each with its own deep ink.
         "Good" => {
-            s.fill = Fill::solid(Color::rgb(0xC6, 0xEF, 0xCE));
-            s.font.color = Color::rgb(0x00, 0x61, 0x00);
+            s.fill = Fill::solid(rgb(0xDDE5CF));
+            s.font.color = rgb(0x3F5A2A);
         }
         "Bad" => {
-            s.fill = Fill::solid(Color::rgb(0xFF, 0xC7, 0xCE));
-            s.font.color = Color::rgb(0x9C, 0x00, 0x06);
+            s.fill = Fill::solid(rgb(0xF0D5D0));
+            s.font.color = rgb(0x7A2E3A);
         }
         "Neutral" => {
-            s.fill = Fill::solid(Color::rgb(0xFF, 0xEB, 0x9C));
-            s.font.color = Color::rgb(0x9C, 0x57, 0x00);
+            s.fill = Fill::solid(rgb(0xF3E6C4));
+            s.font.color = rgb(0x7A5A1E);
         }
         "Calculation" => {
-            s.fill = Fill::solid(Color::rgb(0xF2, 0xF2, 0xF2));
-            s.font.color = Color::rgb(0xFA, 0x7D, 0x00);
+            s.fill = Fill::solid(rgb(0xF4EFE6));
+            s.font.color = rgb(0xA0522D);
             s.font.bold = true;
-            let l = BorderLine { style: BorderStyle::Thin, color: Color::rgb(0x7F, 0x7F, 0x7F) };
+            let l = BorderLine { style: BorderStyle::Thin, color: taupe };
             s.borders = Borders { left: l, right: l, top: l, bottom: l, ..Default::default() };
         }
         "Check Cell" => {
-            s.fill = Fill::solid(Color::rgb(0xA5, 0xA5, 0xA5));
-            s.font.color = Color::rgb(0xFF, 0xFF, 0xFF);
+            s.fill = Fill::solid(taupe);
+            s.font.color = rgb(CREAM);
             s.font.bold = true;
-            let l = BorderLine { style: BorderStyle::Double, color: Color::rgb(0x3F, 0x3F, 0x3F) };
+            let l = BorderLine { style: BorderStyle::Double, color: ink };
             s.borders = Borders { left: l, right: l, top: l, bottom: l, ..Default::default() };
         }
         "Explanatory Text" => {
             s.font.italic = true;
-            s.font.color = Color::rgb(0x7F, 0x7F, 0x7F);
+            s.font.color = rgb(0x7D746B);
         }
         "Input" => {
-            s.fill = Fill::solid(Color::rgb(0xFF, 0xCC, 0x99));
-            s.font.color = Color::rgb(0x3F, 0x3F, 0x76);
-            let l = BorderLine { style: BorderStyle::Thin, color: Color::rgb(0x7F, 0x7F, 0x7F) };
+            s.fill = Fill::solid(rgb(0xF6E3CC));
+            s.font.color = rgb(0x2F4A5C);
+            let l = BorderLine { style: BorderStyle::Thin, color: taupe };
             s.borders = Borders { left: l, right: l, top: l, bottom: l, ..Default::default() };
         }
         "Linked Cell" => {
-            s.font.color = Color::rgb(0xFA, 0x7D, 0x00);
-            s.borders.bottom = BorderLine { style: BorderStyle::Double, color: Color::rgb(0xFF, 0x80, 0x01) };
+            s.font.color = rgb(0xA0522D);
+            s.borders.bottom = BorderLine { style: BorderStyle::Double, color: accent(5, 0) };
         }
         "Note" => {
-            s.fill = Fill::solid(Color::rgb(0xFF, 0xFF, 0xCC));
-            let l = BorderLine { style: BorderStyle::Thin, color: Color::rgb(0xB2, 0xB2, 0xB2) };
+            s.fill = Fill::solid(rgb(0xFBF3D5));
+            let l = BorderLine { style: BorderStyle::Thin, color: rgb(0xC9BFA8) };
             s.borders = Borders { left: l, right: l, top: l, bottom: l, ..Default::default() };
         }
         "Output" => {
-            s.fill = Fill::solid(Color::rgb(0xF2, 0xF2, 0xF2));
-            s.font.color = Color::rgb(0x3F, 0x3F, 0x3F);
+            s.fill = Fill::solid(rgb(0xF4EFE6));
+            s.font.color = ink;
             s.font.bold = true;
-            let l = BorderLine { style: BorderStyle::Thin, color: Color::rgb(0x3F, 0x3F, 0x3F) };
+            let l = BorderLine { style: BorderStyle::Thin, color: ink };
             s.borders = Borders { left: l, right: l, top: l, bottom: l, ..Default::default() };
         }
-        "Warning Text" => s.font.color = Color::rgb(0xFF, 0x00, 0x00),
+        "Warning Text" => s.font.color = rgb(0xA3322B),
+        // Titles and headings in the ink, ruled in petrol.
         "Title" => {
             s.font.size = 18.0;
-            s.font.color = Color::Theme(3, 0);
+            s.font.color = ink;
             s.font.name = theme.major_font.clone();
         }
         "Heading 1" => {
             s.font.size = 15.0;
             s.font.bold = true;
-            s.font.color = Color::Theme(3, 0);
-            s.borders.bottom = BorderLine { style: BorderStyle::Thick, color: accent(4, 0) };
+            s.font.color = ink;
+            s.borders.bottom = BorderLine { style: BorderStyle::Thick, color: accent(1, 0) };
         }
         "Heading 2" => {
             s.font.size = 13.0;
             s.font.bold = true;
-            s.font.color = Color::Theme(3, 0);
-            s.borders.bottom = BorderLine { style: BorderStyle::Thick, color: accent(4, 500) };
+            s.font.color = ink;
+            s.borders.bottom = BorderLine { style: BorderStyle::Thick, color: accent(1, 500) };
         }
         "Heading 3" => {
             s.font.bold = true;
-            s.font.color = Color::Theme(3, 0);
-            s.borders.bottom = BorderLine { style: BorderStyle::Medium, color: accent(4, 400) };
+            s.font.color = ink;
+            s.borders.bottom = BorderLine { style: BorderStyle::Medium, color: accent(1, 400) };
         }
         "Heading 4" => {
             s.font.bold = true;
-            s.font.color = Color::Theme(3, 0);
+            s.font.color = ink;
         }
         "Total" => {
             s.font.bold = true;
-            s.borders.top = BorderLine { style: BorderStyle::Thin, color: accent(4, 0) };
-            s.borders.bottom = BorderLine { style: BorderStyle::Double, color: accent(4, 0) };
+            s.borders.top = BorderLine { style: BorderStyle::Thin, color: accent(1, 0) };
+            s.borders.bottom = BorderLine { style: BorderStyle::Double, color: accent(1, 0) };
         }
         "Currency" => s.num_fmt = NumFmt::new(ACCOUNTING),
         "Comma" => s.num_fmt = NumFmt::new(COMMA),
@@ -106,15 +112,12 @@ pub fn builtin_cell_style(name: &str, theme: &Theme) -> Option<Style> {
             if !(1..=6).contains(&i) {
                 return None;
             }
-            match pct {
-                None => {
-                    s.fill = Fill::solid(accent(3 + i, 0));
-                    s.font.color = Color::Theme(0, 0);
-                }
-                Some(p) => {
-                    s.fill = Fill::solid(accent(3 + i, (1000 - p * 10).clamp(0, 1000)));
-                    s.font.color = if p >= 60 { Color::Theme(0, 0) } else { Color::Theme(1, 0) };
-                }
+            // The text in cream or the ink, whichever reads on the fill.
+            let tint = pct.map_or(0, |p| (1000 - p.saturating_mul(10)).clamp(0, 1000));
+            let fill = accent(i, tint);
+            s.fill = Fill::solid(fill);
+            if let Color::Rgb(c) = fill {
+                s.font.color = rgb(palette::on(c));
             }
         }
     }

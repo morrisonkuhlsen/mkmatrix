@@ -16,6 +16,7 @@ pub mod fill;
 pub mod io;
 pub mod links;
 pub mod outline;
+pub mod palette;
 pub mod paper;
 pub mod pivot;
 pub mod pivot_calc;

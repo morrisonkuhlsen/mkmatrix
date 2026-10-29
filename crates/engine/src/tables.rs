@@ -1,8 +1,11 @@
-//! Table styles: how a cell inside a table looks (our own palettes, keyed by the familiar
-//! `TableStyleLight1…21 / Medium1…28 / Dark1…11` names so files round-trip).
+//! Table styles: how a cell inside a table looks (our own vintage palette, [`crate::palette`],
+//! keyed by the familiar `TableStyleLight1…21 / Medium1…28 / Dark1…11` names so files
+//! round-trip).
 
 use mkmatrix_core::{CellRef, RangeRef};
 use mkmatrix_model::{BorderLine, BorderStyle, Cell, Color, Fill, Formula, PatternType, Style, Table, Workbook};
+
+use crate::palette;
 
 /// (family, number) from a style name, e.g. `TableStyleMedium2` → ("Medium", 2).
 pub fn parse_style_name(name: &str) -> (&'static str, u32) {
@@ -16,10 +19,10 @@ pub fn parse_style_name(name: &str) -> (&'static str, u32) {
     ("Medium", 2)
 }
 
-/// Accent theme slot (4..=9) for a style number; 1 and every 7th style are neutral (dk1).
-fn accent_for(n: u32) -> Option<u8> {
+/// The palette accent (0..6) for a style number; 1 and every 7th style are neutral (the ink).
+fn accent_for(n: u32) -> Option<usize> {
     let k = (n.saturating_sub(1)) % 7;
-    if k == 0 { None } else { Some(3 + k as u8) }
+    if k == 0 { None } else { Some(k as usize - 1) }
 }
 
 /// Header/band/body colours for a table style.
@@ -36,14 +39,12 @@ pub struct TableLook {
 pub fn look(style: &str) -> TableLook {
     let (fam, n) = parse_style_name(style);
     let acc = accent_for(n);
-    let base = |tint: i16| match acc {
-        Some(a) => Color::Theme(a, tint),
-        None => Color::Theme(1, if tint == 0 { 0 } else { tint.clamp(-1000, 1000) }),
-    };
-    let neutral_light = |tint: i16| match acc {
-        Some(a) => Color::Theme(a, tint),
-        None => Color::Theme(0, -((1000 - tint).clamp(0, 1000) / 6)),
-    };
+    let base = |tint: i16| palette::tone(acc.map_or(palette::INK, palette::accent), tint);
+    // Bands: a wash of the accent on paper; the neutral styles' a touch lighter, as the ink is dark.
+    let neutral_light = |tint: i16| base(tint.saturating_add(if acc.is_some() { 0 } else { 60 }));
+    let cream = Color::Rgb(palette::CREAM);
+    // Cream or the ink, whichever reads on `fill`.
+    let text_on = |fill: Color| if let Color::Rgb(c) = fill { Color::Rgb(palette::on(c)) } else { cream };
     match fam {
         "Light" => {
             let group = (n - 1) / 7; // 0: lines only, 1: banded header line, 2: grid
@@ -58,17 +59,17 @@ pub fn look(style: &str) -> TableLook {
             }
         }
         "Dark" => TableLook {
-            header_fill: Some(Color::Theme(1, 0)),
-            header_font: Color::Theme(0, 0),
+            header_fill: Some(palette::tone(palette::INK, -300)),
+            header_font: cream,
             header_bold: true,
             band_fill: Some(base(-250)),
             body_fill: Some(base(0)),
             line: None,
-            total_top: Some(Color::Theme(0, 0)),
+            total_top: Some(cream),
         },
         _ => TableLook {
             header_fill: Some(base(0)),
-            header_font: Color::Theme(0, 0),
+            header_font: text_on(base(0)),
             header_bold: true,
             band_fill: Some(neutral_light(800)),
             body_fill: None,
@@ -128,7 +129,8 @@ pub fn table_cell_style(wb: &Workbook, sheet: usize, t: &Table, c: CellRef) -> S
         s.font.bold = true;
     }
     if t.style.starts_with("TableStyleDark") && !is_header && own.font.color == Color::Auto {
-        s.font.color = Color::Theme(0, 0);
+        // Cream or the ink, whichever reads on the row's fill.
+        s.font.color = Color::Rgb(if let Color::Rgb(c) = s.fill.fg { palette::on(c) } else { palette::CREAM });
     }
     s
 }
