@@ -106,6 +106,10 @@ pub enum Icon {
     Theme,
     Margins,
     Orient,
+    /// A sheet of paper standing (Portrait).
+    Portrait,
+    /// A sheet of paper lying on its side (Landscape).
+    Landscape,
     SheetRtl,
     Paper,
     PrintArea,
@@ -240,6 +244,8 @@ impl Icon {
         Icon::Theme,
         Icon::Margins,
         Icon::Orient,
+        Icon::Portrait,
+        Icon::Landscape,
         Icon::SheetRtl,
         Icon::Paper,
         Icon::PrintArea,
@@ -407,9 +413,8 @@ impl Icon {
             | Book | Home | Info => ink::TERRACOTTA,
             Bold | Italic | Underline | Strike | Borders | BorderAll | BorderNone | BorderOutside | BorderThick | Fill | FontColor | AlignTop
             | AlignMiddle | AlignBottom | AlignLeft | AlignCenter | AlignRight | Orientation | IndentDec | IndentInc | Wrap | Merge | Freeze
-            | Zoom | Gridlines | Normal | PageLayout | PageBreak | Margins | Orient | SheetRtl | Paper | PrintArea | Header | Footer | Theme => {
-                ink::SLATE
-            }
+            | Zoom | Gridlines | Normal | PageLayout | PageBreak | Margins | Orient | Portrait | Landscape | SheetRtl | Paper | PrintArea
+            | Header | Footer | Theme => ink::SLATE,
             Currency | Percent | Comma | DecInc | DecDec | CondFormat | FormatTable | CellStyles | Insert | Delete | Format | SortFilter | Filter
             | SortAsc | SortDesc | Duplicates | TextColumns | Validation | Group | Ungroup | Subtotal => ink::MUSTARD,
             Table | PivotTable | Chart | ChartBar | ChartLine | ChartPie | ChartScatter | Picture | Shapes | Link | Comment | Note | TextBox
@@ -890,6 +895,18 @@ fn paint_with(p: &Painter, rect: Rect, icon: Icon, c: Color32, pal: &Palette) {
         Icon::Margins => {
             g.frame(2.5, 1.5, 13.5, 14.5, c);
             g.closed(&[(5.0, 4.0), (11.0, 4.0), (11.0, 12.0), (5.0, 12.0)], a);
+        }
+        Icon::Portrait => {
+            g.frame(3.5, 1.5, 12.5, 14.5, c);
+            for y in [5.0, 7.5, 10.0] {
+                g.stroke(&[(5.5, y), (10.5, y)], muted);
+            }
+        }
+        Icon::Landscape => {
+            g.frame(1.5, 3.5, 14.5, 12.5, c);
+            for y in [6.0, 8.0, 10.0] {
+                g.stroke(&[(3.5, y), (12.5, y)], muted);
+            }
         }
         Icon::Orient => {
             g.frame(1.5, 4.5, 8.5, 14.5, c);

@@ -169,7 +169,39 @@ pub(crate) fn editable_combo(
     items: &[(&str, String)],
     forced: bool,
 ) -> ComboResult {
-    combo_popup(ui, anchor, salt, current_value, items, forced, true, None)
+    combo_popup(ui, anchor, salt, current_value, items, forced, true, None, &[])
+}
+
+/// What sits before a combo row's name: an icon, or a short glyph (`123`, `½`).
+#[derive(Clone, Copy)]
+pub(crate) enum Mark {
+    /// No mark: the name starts at the row's left.
+    None,
+    Icon(Icon),
+    Text(&'static str),
+}
+
+/// A combo row's extras, by value: its mark and a muted note at its right end (a preview).
+pub(crate) struct RowExtra<'a> {
+    pub value: &'a str,
+    pub mark: Mark,
+    pub note: String,
+    /// The name's own font (a font list shows each name in its font), else the interface's.
+    pub font: Option<egui::FontFamily>,
+}
+
+/// [`editable_combo`] whose rows carry a mark before the name and a note after it, as Excel's
+/// Number Format list shows a symbol and a preview for each format.
+pub(crate) fn marked_combo(
+    ui: &mut Ui,
+    anchor: &egui::Response,
+    salt: &'static str,
+    current_value: &str,
+    items: &[(&str, String)],
+    forced: bool,
+    extras: &[RowExtra],
+) -> ComboResult {
+    combo_popup(ui, anchor, salt, current_value, items, forced, true, None, extras)
 }
 
 /// The dropdown of [`editable_combo`] without the filter field: the whole list, picked by click or
@@ -183,7 +215,7 @@ pub(super) fn list_combo(
     current_value: &str,
     items: &[(&str, String)],
 ) -> ComboResult {
-    combo_popup(ui, anchor, salt, current_value, items, false, false, Some(under))
+    combo_popup(ui, anchor, salt, current_value, items, false, false, Some(under), &[])
 }
 
 /// What the header of a combo popup hands to its list: the rows to show and the highlighted one.
@@ -212,7 +244,8 @@ fn combo_head(ui: &mut Ui, text: Option<(&mut String, egui::Id)>, open_now: bool
     }
     let mut lower = String::new();
     if let Some((text, text_id)) = text {
-        let te = ui.add(egui::TextEdit::singleline(text).id(text_id).desired_width(220.0).hint_text("Type to filter…"));
+        let te =
+            ui.add(egui::TextEdit::singleline(text).id(text_id).desired_width(220.0).hint_text(crate::i18n::current(ui.ctx()).tr("Type to filter…")));
         if open_now && !te.has_focus() {
             ui.ctx().memory_mut(|m| m.request_focus(text_id));
             // Select all once focus lands so typing replaces the filter.
@@ -241,7 +274,7 @@ fn combo_head(ui: &mut Ui, text: Option<(&mut String, egui::Id)>, open_now: bool
 }
 
 /// The rows of a combo popup. Returns the picked value and the highlighted row.
-fn combo_rows(ui: &mut Ui, head: ComboHead, items: &[(&str, String)], row_w: f32) -> (Option<String>, i32) {
+fn combo_rows(ui: &mut Ui, head: ComboHead, items: &[(&str, String)], row_w: f32, extras: &[RowExtra]) -> (Option<String>, i32) {
     let ComboHead { filtered, mut sel, down, up, enter } = head;
     let mut picked = None;
     if enter && !filtered.is_empty() {
@@ -250,7 +283,11 @@ fn combo_rows(ui: &mut Ui, head: ComboHead, items: &[(&str, String)], row_w: f32
     }
     for (pos, i) in filtered.iter().enumerate() {
         let (value, disp) = &items[*i];
-        let row = ui.add(egui::Button::selectable(pos as i32 == sel, egui::RichText::new(disp)).min_size(vec2(row_w, 20.0)));
+        let extra = extras.iter().find(|e| e.value == *value);
+        let row = match extra {
+            Some(extra) => marked_row(ui, pos as i32 == sel, disp, extra, row_w),
+            None => ui.add(egui::Button::selectable(pos as i32 == sel, egui::RichText::new(disp)).min_size(vec2(row_w, 20.0))),
+        };
         if (down || up) && pos as i32 == sel && !ui.clip_rect().contains_rect(row.rect) {
             row.scroll_to_me(Some(if down { egui::Align::Max } else { egui::Align::Min }));
         }
@@ -267,6 +304,54 @@ fn combo_rows(ui: &mut Ui, head: ComboHead, items: &[(&str, String)], row_w: f32
     (picked, sel)
 }
 
+/// Where [`marked_row`] lists the font rows it drew this frame.
+fn shown_fonts_id() -> egui::Id {
+    egui::Id::unique("marked_combo_shown_fonts")
+}
+
+/// The font rows drawn since the last call (a font list's visible names), emptied.
+pub(crate) fn take_shown_fonts(ctx: &egui::Context) -> Vec<String> {
+    ctx.data_mut(|d| d.remove_temp::<Vec<String>>(shown_fonts_id())).unwrap_or_default()
+}
+
+/// A combo row with its mark in a column of its own, the name, and the note muted at the right.
+fn marked_row(ui: &mut Ui, selected: bool, name: &str, extra: &RowExtra, width: f32) -> egui::Response {
+    let t = Tokens::get(ui.ctx());
+    let (r, resp) = ui.allocate_exact_size(vec2(width, 26.0), Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, name));
+    let p = ui.painter();
+    if selected {
+        p.rect_filled(r, 2.0, t.accent_soft);
+    } else if resp.hovered() {
+        p.rect_filled(r, 2.0, t.hover);
+    }
+    let ink = if selected { t.accent } else { t.text };
+    let mark = Rect::from_center_size(pos2(r.left() + 16.0, r.center().y), vec2(16.0, 16.0));
+    match extra.mark {
+        Mark::None => {}
+        Mark::Icon(icon) => crate::icons::paint_mono(p, mark, icon, if selected { t.accent } else { t.text_dim }),
+        Mark::Text(glyph) => {
+            p.text(mark.center(), Align2::CENTER_CENTER, glyph, theme::ui_bold(11.0), if selected { t.accent } else { t.text_dim });
+        }
+    }
+    let note_left = if extra.note.is_empty() {
+        r.right()
+    } else {
+        let at = p.text(pos2(r.right() - 8.0, r.center().y), Align2::RIGHT_CENTER, &extra.note, theme::ui_font(11.5), t.text_dim);
+        at.left() - 8.0
+    };
+    let clip = Rect::from_min_max(r.min, pos2(note_left, r.max.y));
+    let left = if matches!(extra.mark, Mark::None) { 10.0 } else { 34.0 };
+    // A row in view asks for its font, so a font list can bind the families it shows.
+    if extra.font.is_some() && ui.is_rect_visible(r) {
+        ui.ctx().data_mut(|d| d.get_temp_mut_or_default::<Vec<String>>(shown_fonts_id()).push(extra.value.to_string()));
+    }
+    let font = extra.font.clone().map_or_else(|| theme::ui_font(13.0), |family| egui::FontId::new(14.0, family));
+    p.with_clip_rect(clip).text(pos2(r.left() + left, r.center().y), Align2::LEFT_CENTER, name, font, ink);
+    resp
+}
+
+#[allow(clippy::too_many_arguments)]
 fn combo_popup(
     ui: &mut Ui,
     anchor: &egui::Response,
@@ -276,6 +361,7 @@ fn combo_popup(
     forced: bool,
     filter: bool,
     under: Option<Rect>,
+    extras: &[RowExtra],
 ) -> ComboResult {
     let popup_id = egui::Popup::default_response_id(anchor);
     let state_id = anchor.id.with(salt).with("__combo_state");
@@ -297,9 +383,9 @@ fn combo_popup(
     if let Some(r) = under {
         field.rect = r;
     }
-    let row_w = under.map_or(220.0, |r| r.width() - 12.0);
+    let row_w = under.map_or(if extras.is_empty() { 220.0 } else { 300.0 }, |r| r.width() - 12.0);
     // Nine rows as today, plus the filter field and its separator, plus the popup frame.
-    let button_h = ui.spacing().interact_size.y.max(20.0);
+    let button_h = if extras.is_empty() { ui.spacing().interact_size.y.max(20.0) } else { 26.0 };
     let spacing = ui.spacing().item_spacing.y;
     let max_rows = 9.0_f32;
     let mut height = max_rows * button_h + (max_rows - 1.0) * spacing + egui::Frame::popup(ui.style()).total_margin().sum().y;
@@ -312,12 +398,12 @@ fn combo_popup(
     let shown = if filter {
         menu.show_ui_with_header(
             |ui| combo_head(ui, Some((&mut st.text, text_id)), open_now, sel0, items),
-            |ui, head| combo_rows(ui, head, items, row_w),
+            |ui, head| combo_rows(ui, head, items, row_w, extras),
         )
     } else {
         menu.show_ui(|ui| {
             let head = combo_head(ui, None, open_now, sel0, items);
-            combo_rows(ui, head, items, row_w)
+            combo_rows(ui, head, items, row_w, extras)
         })
     };
     let mut result = ComboResult::None;

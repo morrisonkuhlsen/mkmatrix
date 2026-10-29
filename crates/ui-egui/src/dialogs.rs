@@ -25,6 +25,7 @@ mod insert_function;
 pub(crate) mod kit;
 mod macros;
 mod names;
+mod panels;
 mod paste;
 mod show;
 mod spelling;

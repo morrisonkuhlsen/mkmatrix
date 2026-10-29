@@ -112,8 +112,8 @@ fn settings(app: &mut SheetApp, ui: &mut Ui, bs: &mut Backstage, pr: &mkmatrix_e
     // Orientation.
     let landscape = pr.orientation == mkmatrix_engine::model::Orientation::Landscape;
     let orient = [
-        (Icon::Orient, lang.tr("Portrait Orientation").to_string(), String::new()),
-        (Icon::Orient, lang.tr("Landscape Orientation").to_string(), String::new()),
+        (Icon::Portrait, lang.tr("Portrait Orientation").to_string(), String::new()),
+        (Icon::Landscape, lang.tr("Landscape Orientation").to_string(), String::new()),
     ];
     if let Some(i) = setting(ui, &orient, usize::from(landscape), lang.tr("Orientation"), t)
         && (i == 1) != landscape
