@@ -1,4 +1,4 @@
-use super::controls::{act, control_keytip, keytip, menu_items, sep};
+use super::controls::{act, control_keytip, keytip, menu_header, menu_items, sep};
 use super::*;
 
 pub(super) fn data(app: &mut SheetApp, ui: &mut Ui) {
@@ -71,6 +71,7 @@ pub(super) fn data(app: &mut SheetApp, ui: &mut Ui) {
         keytip(app, ui, sequence, dv.rect.center_bottom());
     }
     egui::Popup::menu(&dv).show(|ui| {
+        menu_header(app, ui, Icon::Validation, "Data Validation", true);
         menu_items(
             app,
             ui,
@@ -89,6 +90,7 @@ pub(super) fn data(app: &mut SheetApp, ui: &mut Ui) {
         keytip(app, ui, sequence, wi.rect.center_bottom());
     }
     egui::Popup::menu(&wi).show(|ui| {
+        menu_header(app, ui, Icon::Calc, "What-If Analysis", false);
         menu_items(
             app,
             ui,

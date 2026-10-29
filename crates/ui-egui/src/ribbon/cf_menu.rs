@@ -7,7 +7,7 @@
 use egui::{Color32, Painter, Rect, Response, Sense, Stroke, Ui, pos2, vec2};
 use serde_json::{Value as Json, json};
 
-use super::controls::act;
+use super::controls::{act, menu_header, menu_section};
 use crate::SheetApp;
 use crate::i18n::Language;
 use crate::icons::{self, Icon};
@@ -64,17 +64,8 @@ pub(super) fn cf_menu(app: &mut SheetApp, ui: &mut Ui) {
     ui.spacing_mut().item_spacing = vec2(6.0, 4.0);
     let mut chosen: Option<Action> = None;
     // The header: what the rules will apply to.
-    let range = app.session.active().map(|d| d.selection.ranges.iter().map(|r| r.a1()).collect::<Vec<_>>().join(", ")).unwrap_or_default();
-    ui.horizontal(|ui| {
-        let (r, _) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::hover());
-        icons::paint(ui.painter(), r, Icon::CondFormat, t.accent);
-        ui.label(egui::RichText::new(lang.tr("Conditional Formatting")).font(theme::ui_bold(13.5)).color(t.text));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.label(egui::RichText::new(range).font(theme::ui_font(11.5)).color(t.text_dim));
-        });
-    });
-    rule(ui, &t);
-    section(ui, lang.tr("Highlight Cells Rules"), &t);
+    menu_header(app, ui, Icon::CondFormat, "Conditional Formatting", true);
+    menu_section(ui, lang.tr("Highlight Cells Rules"));
     let highlight: [(&str, Glyph, Action); 7] = [
         ("Greater Than…", Glyph::Text(">"), Action::Dialog("cfQuick", json!({"type": "cellIs", "operator": "greater", "title": "Greater Than…"}))),
         ("Less Than…", Glyph::Text("<"), Action::Dialog("cfQuick", json!({"type": "cellIs", "operator": "less", "title": "Less Than…"}))),
@@ -85,7 +76,7 @@ pub(super) fn cf_menu(app: &mut SheetApp, ui: &mut Ui) {
         ("Duplicate Values…", Glyph::Icon(Icon::Duplicates), Action::Command("home.conditionalFormat", json!({"rule": {"type": "duplicate"}}))),
     ];
     rows(ui, lang, &t, highlight, &mut chosen);
-    section(ui, lang.tr("Top/Bottom Rules"), &t);
+    menu_section(ui, lang.tr("Top/Bottom Rules"));
     let top: [(&str, Glyph, Action); 6] = [
         ("Top 10 Items", Glyph::Rank(true, false), Action::Command("home.conditionalFormat", json!({"rule": {"type": "top10", "rank": 10}}))),
         (
@@ -107,7 +98,7 @@ pub(super) fn cf_menu(app: &mut SheetApp, ui: &mut Ui) {
         ("Below Average", Glyph::Average(false), Action::Command("home.conditionalFormat", json!({"rule": {"type": "aboveAverage", "below": true}}))),
     ];
     rows(ui, lang, &t, top, &mut chosen);
-    section(ui, lang.tr("Data Bars"), &t);
+    menu_section(ui, lang.tr("Data Bars"));
     ui.horizontal(|ui| {
         for (label, c) in DATA_BARS {
             if tile(ui, lang.tr(label), &t, |p, r| paint_bars(p, r, hex(c))).clicked() {
@@ -115,7 +106,7 @@ pub(super) fn cf_menu(app: &mut SheetApp, ui: &mut Ui) {
             }
         }
     });
-    section(ui, lang.tr("Color Scales"), &t);
+    menu_section(ui, lang.tr("Color Scales"));
     ui.horizontal(|ui| {
         for (label, stops) in COLOR_SCALES {
             if tile(ui, lang.tr(label), &t, |p, r| paint_scale(p, r, stops)).clicked() {
@@ -123,7 +114,7 @@ pub(super) fn cf_menu(app: &mut SheetApp, ui: &mut Ui) {
             }
         }
     });
-    section(ui, lang.tr("Icon Sets"), &t);
+    menu_section(ui, lang.tr("Icon Sets"));
     ui.horizontal(|ui| {
         for (label, set) in ICON_SETS {
             if tile(ui, lang.tr(label), &t, |p, r| paint_icons(p, r, set)).clicked() {
@@ -137,7 +128,7 @@ pub(super) fn cf_menu(app: &mut SheetApp, ui: &mut Ui) {
         ("Manage Rules…", Glyph::Icon(Icon::Settings), Action::Dialog("manageRules", json!({}))),
     ];
     rows(ui, lang, &t, manage, &mut chosen);
-    section(ui, lang.tr("Clear Rules"), &t);
+    menu_section(ui, lang.tr("Clear Rules"));
     let clear: [(&str, Glyph, Action); 2] = [
         ("Selected Cells", Glyph::Icon(Icon::Eraser), Action::Command("home.clearRules", json!({}))),
         ("Entire Sheet", Glyph::Icon(Icon::Eraser), Action::Command("home.clearRules", json!({"sheet": true}))),
@@ -154,12 +145,6 @@ pub(super) fn cf_menu(app: &mut SheetApp, ui: &mut Ui) {
         }
         None => {}
     }
-}
-
-/// A section's name, muted.
-fn section(ui: &mut Ui, text: &str, t: &Tokens) {
-    ui.add_space(4.0);
-    ui.label(egui::RichText::new(text).font(theme::ui_bold(11.5)).color(t.text_dim));
 }
 
 /// A rule across the panel.

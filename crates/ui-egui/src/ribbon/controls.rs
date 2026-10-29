@@ -429,6 +429,35 @@ pub(crate) fn preview_on_hover(app: &mut SheetApp, resp: &egui::Response, id: &s
     }
 }
 
+/// The header every ribbon dropdown opens with (Conditional Formatting's): the button's icon in the
+/// accent, its name, and, when the menu acts on the selection, the selection's range, dimmed; then
+/// a rule.
+pub(super) fn menu_header(app: &SheetApp, ui: &mut Ui, icon: Icon, title: &str, on_selection: bool) {
+    let t = Tokens::get(ui.ctx());
+    let lang = app.ui.language;
+    let range = on_selection
+        .then(|| app.session.active().map(|d| d.selection.ranges.iter().map(|r| r.a1()).collect::<Vec<_>>().join(", ")))
+        .flatten()
+        .filter(|r| !r.is_empty());
+    ui.horizontal(|ui| {
+        let (r, _) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::hover());
+        icons::paint(ui.painter(), r, icon, t.accent);
+        ui.label(egui::RichText::new(lang.tr(title).replace('\n', " ")).font(theme::ui_bold(13.5)).color(t.text));
+        if let Some(range) = range {
+            ui.add_space(10.0);
+            ui.label(egui::RichText::new(range).font(theme::ui_font(11.5)).color(t.text_dim));
+        }
+    });
+    ui.separator();
+}
+
+/// A section's heading inside a ribbon dropdown or gallery: small, bold, muted.
+pub(super) fn menu_section(ui: &mut Ui, text: &str) {
+    let t = Tokens::get(ui.ctx());
+    ui.add_space(4.0);
+    ui.label(egui::RichText::new(text).font(theme::ui_bold(11.5)).color(t.text_dim));
+}
+
 pub(super) fn menu_items(app: &mut SheetApp, ui: &mut Ui, items: &[(&str, &str, serde_json::Value)]) {
     for (label, id, p) in items {
         if *label == "-" {

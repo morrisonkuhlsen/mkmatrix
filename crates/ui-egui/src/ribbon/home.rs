@@ -1,6 +1,6 @@
 use super::cf_menu::cf_menu;
 use super::controls::{
-    ComboResult, Mark, RowExtra, act, active_style, anchor_keytip, control_keytip, invoke, keytip, list_combo, marked_combo, menu_items,
+    ComboResult, Mark, RowExtra, act, active_style, anchor_keytip, control_keytip, invoke, keytip, list_combo, marked_combo, menu_header, menu_items,
     popup_command, sep, stack, theme_colors, tool, wide,
 };
 use super::galleries::{cell_style_gallery, table_gallery};
@@ -62,6 +62,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
         paste_popup = paste_popup.open_memory(egui::SetOpenCommand::Bool(true));
     }
     paste_popup.show(|ui| {
+        menu_header(app, ui, Icon::Paste, "Paste", true);
         menu_items(
             app,
             ui,
@@ -136,6 +137,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
                 act(app, "home.underline", json!({}));
             }
             egui::Popup::menu(&ua).show(|ui| {
+                menu_header(app, ui, Icon::Underline, "Underline", true);
                 menu_items(
                     app,
                     ui,
@@ -157,6 +159,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
             }
             ba.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "Border presets"));
             egui::Popup::menu(&ba).show(|ui| {
+                menu_header(app, ui, Icon::Borders, "Borders", true);
                 for (label, preset) in [
                     ("Bottom Border", "bottom"),
                     ("Top Border", "top"),
@@ -195,6 +198,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
                 .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
                 .open_memory(popup_command(forced, fa.clicked()))
                 .show(|ui| {
+                    menu_header(app, ui, Icon::Fill, "Fill Color", true);
                     if let Some(c) = color_palette(ui, &theme_colors(app), "No Fill") {
                         if c != "none" {
                             app.grid.last_fill = c.clone();
@@ -215,6 +219,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
                 .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
                 .open_memory(popup_command(forced, ca.clicked()))
                 .show(|ui| {
+                    menu_header(app, ui, Icon::FontColor, "Font Color", true);
                     if let Some(c) = color_palette(ui, &theme_colors(app), "Automatic") {
                         if c != "none" {
                             app.grid.last_font_color = c.clone();
@@ -244,6 +249,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
             control_keytip(app, ui, &o, "home.orientation");
             let forced_o = invoke(app, "home.orientation");
             egui::Popup::menu(&o).open_memory(popup_command(forced_o, o.clicked())).show(|ui| {
+                menu_header(app, ui, Icon::Orientation, "Orientation", true);
                 menu_items(
                     app,
                     ui,
@@ -295,6 +301,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
                 act(app, "home.mergeCenter", json!({}));
             }
             egui::Popup::menu(&ma).show(|ui| {
+                menu_header(app, ui, Icon::Merge, "Merge & Center", true);
                 menu_items(
                     app,
                     ui,
@@ -319,6 +326,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
                 act(app, "home.accounting", json!({}));
             }
             egui::Popup::menu(&ca).show(|ui| {
+                menu_header(app, ui, Icon::Currency, "Accounting Number Format", true);
                 let mut items: Vec<_> = ACCOUNTING_SYMBOLS.iter().map(|(label, code)| (*label, "home.numberFormat", json!({"code": code}))).collect();
                 items.push(("-", "", json!(null)));
                 items.push(("More Accounting Formats…", "dialog:formatCells", json!({"tab": "Number"})));
@@ -353,10 +361,16 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
     egui::Popup::menu(&cf).show(|ui| cf_menu(app, ui));
     let ft = tool(ui, Icon::FormatTable, "Format\nas Table", "Format as Table", true);
     anchor_keytip(app, ui, &ft, &["table.style"]);
-    egui::Popup::menu(&ft).show(|ui| table_gallery(app, ui, "home.formatAsTable"));
+    egui::Popup::menu(&ft).show(|ui| {
+        menu_header(app, ui, Icon::FormatTable, "Format as Table", true);
+        table_gallery(app, ui, "home.formatAsTable");
+    });
     let cs = tool(ui, Icon::CellStyles, "Cell\nStyles", "Cell Styles", true);
     anchor_keytip(app, ui, &cs, &["home.newCellStyle"]);
-    egui::Popup::menu(&cs).show(|ui| cell_style_gallery(app, ui));
+    egui::Popup::menu(&cs).show(|ui| {
+        menu_header(app, ui, Icon::CellStyles, "Cell Styles", true);
+        cell_style_gallery(app, ui);
+    });
     sep(ui, "Styles");
     // Cells
     stack(ui, |ui| {
@@ -368,6 +382,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
             keytip(app, ui, sequence, ins.rect.center_bottom());
         }
         egui::Popup::menu(&ins).show(|ui| {
+            menu_header(app, ui, Icon::Insert, "Insert", true);
             menu_items(
                 app,
                 ui,
@@ -387,6 +402,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
             keytip(app, ui, sequence, del.rect.center_bottom());
         }
         egui::Popup::menu(&del).show(|ui| {
+            menu_header(app, ui, Icon::Delete, "Delete", true);
             menu_items(
                 app,
                 ui,
@@ -429,6 +445,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
         }
         let protect_label = if app.active_sheet_protected() { "Unprotect Sheet…" } else { "Protect Sheet…" };
         format_popup.show(|ui| {
+            menu_header(app, ui, Icon::Format, "Format", true);
             menu_items(
                 app,
                 ui,
@@ -465,7 +482,10 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
             if s {
                 act(app, "formulas.autoSum", json!({}));
             }
-            egui::Popup::menu(&sa).show(|ui| autosum_menu(app, ui));
+            egui::Popup::menu(&sa).show(|ui| {
+                menu_header(app, ui, Icon::Sum, "AutoSum", true);
+                autosum_menu(app, ui);
+            });
         });
         let fill = small_button(ui, Icon::FillDown, "", "Fill", true);
         for sequence in keytip_table::group_extension(
@@ -475,6 +495,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
             keytip(app, ui, sequence, fill.rect.center_bottom());
         }
         egui::Popup::menu(&fill).show(|ui| {
+            menu_header(app, ui, Icon::FillDown, "Fill", true);
             menu_items(
                 app,
                 ui,
@@ -496,6 +517,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
             keytip(app, ui, sequence, clear.rect.center_bottom());
         }
         egui::Popup::menu(&clear).show(|ui| {
+            menu_header(app, ui, Icon::Eraser, "Clear", true);
             menu_items(
                 app,
                 ui,
@@ -517,6 +539,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
         keytip(app, ui, sequence, sf.rect.center_bottom());
     }
     egui::Popup::menu(&sf).show(|ui| {
+        menu_header(app, ui, Icon::SortFilter, "Sort & Filter", true);
         menu_items(
             app,
             ui,
@@ -539,6 +562,7 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
         keytip(app, ui, sequence, fs.rect.center_bottom());
     }
     egui::Popup::menu(&fs).show(|ui| {
+        menu_header(app, ui, Icon::Find, "Find & Select", false);
         menu_items(
             app,
             ui,

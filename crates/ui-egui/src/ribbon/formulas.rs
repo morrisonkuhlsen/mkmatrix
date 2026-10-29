@@ -1,4 +1,4 @@
-use super::controls::{act, anchor_keytip, control_keytip, invoke, keytip, menu_items, popup_command, sep};
+use super::controls::{act, anchor_keytip, control_keytip, invoke, keytip, menu_header, menu_items, popup_command, sep};
 use super::home::autosum_menu;
 use super::*;
 
@@ -25,6 +25,7 @@ fn function_menu(app: &mut SheetApp, ui: &mut Ui, icon: Icon, label: &str, cat: 
     control_keytip(app, ui, &r, cid);
     let forced_c = invoke(app, cid);
     egui::Popup::menu(&r).open_memory(popup_command(forced_c, r.clicked())).show(|ui| {
+        menu_header(app, ui, icon, label, false);
         ui.set_max_height(420.0);
         egui::ScrollArea::vertical().show(ui, |ui| {
             for f in mkmatrix_engine::cmd::formulas::function_list() {
@@ -61,7 +62,10 @@ pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
     if s.clicked() {
         act(app, "formulas.autoSum", json!({}));
     }
-    egui::Popup::menu(&sa).show(|ui| autosum_menu(app, ui));
+    egui::Popup::menu(&sa).show(|ui| {
+        menu_header(app, ui, Icon::Sum, "AutoSum", true);
+        autosum_menu(app, ui);
+    });
     // Each category its own icon, so the single row shows them as icons alone.
     for (icon, label, cat, cid) in [
         (Icon::Currency, "Financial", "Financial", "formulas.financial"),
@@ -89,6 +93,7 @@ pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
         let use_in = small_button(ui, Icon::Insert, "Use in Formula", "Use in Formula", true);
         anchor_keytip(app, ui, &use_in, &["dialog:pasteName"]);
         egui::Popup::menu(&use_in).show(|ui| {
+            menu_header(app, ui, Icon::Insert, "Use in Formula", false);
             // The menu lists the names Paste Names lists; clicking one runs `formulas.useInFormula`, which puts it at the caret.
             // Listed when the menu opens, and again only after the workbook changes.
             let cache = egui::Id::unique("mkmatrix.use_in_formula_names");
@@ -153,6 +158,7 @@ pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
             app.open_dialog("errorChecking", json!({}));
         }
         egui::Popup::menu(&ec_arrow).show(|ui| {
+            menu_header(app, ui, Icon::Validation, "Error Checking", false);
             let lang = app.ui.language;
             if ui.button(format!("{}…", lang.tr("Error Checking"))).clicked() {
                 app.open_dialog("errorChecking", json!({}));
@@ -190,6 +196,7 @@ pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
         keytip(app, ui, sequence, co.rect.center_bottom());
     }
     egui::Popup::menu(&co).show(|ui| {
+        menu_header(app, ui, Icon::Calc, "Calculation Options", false);
         menu_items(
             app,
             ui,

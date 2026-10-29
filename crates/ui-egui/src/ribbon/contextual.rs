@@ -1,4 +1,4 @@
-use super::controls::{act, anchor_keytip, control_keytip, keytip, menu_items, sep};
+use super::controls::{act, anchor_keytip, control_keytip, keytip, menu_header, menu_items, sep};
 use super::galleries::{paint_table_swatch, table_gallery};
 use super::*;
 
@@ -104,7 +104,10 @@ fn table_style_strip(app: &mut SheetApp, ui: &mut Ui, tname: &str, current: &str
         }
         let more = icon_button(ui, Icon::Chevron, t.text_dim, "More Table Styles", vec2(18.0, 40.0));
         anchor_keytip(app, ui, &more, &["table.style"]);
-        egui::Popup::menu(&more).show(|ui| table_gallery(app, ui, "table.style"));
+        egui::Popup::menu(&more).show(|ui| {
+            menu_header(app, ui, Icon::FormatTable, "Table Styles", false);
+            table_gallery(app, ui, "table.style");
+        });
     });
 }
 
@@ -115,6 +118,7 @@ pub(super) fn chart_design(app: &mut SheetApp, ui: &mut Ui) {
         keytip(app, ui, sequence, ae.rect.center_bottom());
     }
     egui::Popup::menu(&ae).show(|ui| {
+        menu_header(app, ui, Icon::Chart, "Add Chart Element", false);
         menu_items(
             app,
             ui,
@@ -147,6 +151,7 @@ pub(super) fn chart_design(app: &mut SheetApp, ui: &mut Ui) {
         keytip(app, ui, sequence, ct.rect.center_bottom());
     }
     egui::Popup::menu(&ct).show(|ui| {
+        menu_header(app, ui, Icon::ChartBar, "Change Chart Type", false);
         for (label, k, s) in [
             ("Clustered Column", "column", ""),
             ("Stacked Column", "column", "stacked"),

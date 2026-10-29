@@ -1,10 +1,11 @@
-use super::controls::{act, anchor_keytip, checkbox_on, control_keytip, invoke, keytip, menu_items, sep};
+use super::controls::{act, anchor_keytip, checkbox_on, control_keytip, invoke, keytip, menu_header, menu_items, sep};
 use super::*;
 
 pub(super) fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
     let th = big_button(ui, Icon::Theme, "Themes", "Themes", true);
     anchor_keytip(app, ui, &th, &["pageLayout.theme"]);
     egui::Popup::menu(&th).show(|ui| {
+        menu_header(app, ui, Icon::Theme, "Themes", false);
         for (name, colors) in mkmatrix_engine::cmd::view::themes() {
             ui.horizontal(|ui| {
                 for c in colors.iter().skip(4).take(6) {
@@ -23,6 +24,7 @@ pub(super) fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
         keytip(app, ui, sequence, m.rect.center_bottom());
     }
     egui::Popup::menu(&m).show(|ui| {
+        menu_header(app, ui, Icon::Margins, "Margins", false);
         menu_items(
             app,
             ui,
@@ -37,6 +39,7 @@ pub(super) fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
     let o = big_button(ui, Icon::Orient, "Page Layout|Orientation", "Page Layout|Orientation", true);
     control_keytip(app, ui, &o, "pageLayout.orientation");
     egui::Popup::menu(&o).show(|ui| {
+        menu_header(app, ui, Icon::Orient, "Page Layout|Orientation", false);
         menu_items(
             app,
             ui,
@@ -49,6 +52,7 @@ pub(super) fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
     let s = big_button(ui, Icon::Paper, "Size", "Paper Size", true);
     control_keytip(app, ui, &s, "pageLayout.size");
     egui::Popup::menu(&s).show(|ui| {
+        menu_header(app, ui, Icon::Paper, "Size", false);
         // B4/B5/B6 are the JIS sizes Japanese Excel uses; the ISO ones stay selectable by name.
         for p in [
             "Letter",
@@ -80,6 +84,7 @@ pub(super) fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
     let pa = big_button(ui, Icon::PrintArea, "Print\nArea", "Print Area", true);
     anchor_keytip(app, ui, &pa, &["pageLayout.printArea"]);
     egui::Popup::menu(&pa).show(|ui| {
+        menu_header(app, ui, Icon::PrintArea, "Print Area", true);
         menu_items(
             app,
             ui,
@@ -91,6 +96,7 @@ pub(super) fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
         keytip(app, ui, sequence, br.rect.center_bottom());
     }
     egui::Popup::menu(&br).show(|ui| {
+        menu_header(app, ui, Icon::PageBreak, "Breaks", false);
         menu_items(
             app,
             ui,
