@@ -1,5 +1,5 @@
-//! View › Floating Formula Bar: the bar leaves the top of the window, comes up just above the cell a
-//! click selects, and goes away with Esc; Ctrl pressed twice brings it up and puts it away.
+//! View › Floating Formula Bar: the bar leaves the top of the window; F2 brings it up just above
+//! the active cell to edit in, the edit's end puts it away; Ctrl pressed twice shows or hides it.
 
 use egui::{Event, Modifiers, PointerButton, Pos2, pos2};
 use egui_kittest::kittest::Queryable as _;
@@ -54,20 +54,30 @@ fn bar_shown(h: &Harness) -> bool {
 }
 
 #[test]
-fn a_click_brings_the_bar_up_above_the_cell_and_esc_puts_it_away() {
+fn f2_brings_the_bar_up_above_the_cell_and_the_edit_ending_puts_it_away() {
     let mut h = harness();
-    assert!(!bar_shown(&h), "no docked bar, and the floating one waits for a click");
     click(&mut h, "D8");
+    assert!(!bar_shown(&h), "a click only selects: the bar waits for F2");
+    h.key_press(egui::Key::F2);
+    h.run_steps(3);
     if let Ok(path) = std::env::var("MKMATRIX_FLOATING_BAR_SCREENSHOT") {
         h.render().unwrap().save(path).unwrap();
     }
     let fx = h.get_by_label("Insert Function").rect();
     let cell = cell_center(&h, "D8");
     assert!(fx.bottom() < cell.y, "the bar is above the cell: {fx:?} vs {cell:?}");
-    assert!(h.query_all_by_label("=SUM(1,2)").next().is_some(), "and shows its formula");
-    h.key_press(egui::Key::Escape);
-    h.run_steps(2);
-    assert!(!bar_shown(&h), "Esc puts it away");
+    assert!(h.state().editor.as_ref().is_some_and(|e| e.from_formula_bar), "F2 edits in the bar");
+    // A dialog (the Formula Builder works on the same edit) isn't covered by it.
+    h.state_mut().open_dialog("insertFunction", json!({}));
+    h.run_steps(3);
+    assert!(!bar_shown(&h), "the bar steps aside for a dialog");
+    h.state_mut().dialog = None;
+    h.run_steps(3);
+    assert!(bar_shown(&h), "and comes back while the edit goes on");
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    assert!(h.state().editor.is_none());
+    assert!(!bar_shown(&h), "the edit's end puts it away");
 }
 
 #[test]

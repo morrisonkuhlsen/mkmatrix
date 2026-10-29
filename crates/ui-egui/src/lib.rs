@@ -117,8 +117,9 @@ pub struct UiState {
     /// Square brackets around each named matrix on the sheet (View › Matrix Brackets).
     pub matrix_brackets: bool,
     /// The formula bar floats over the sheet, just above the active cell, instead of sitting under
-    /// the ribbon (View › Floating Formula Bar); the Name Box moves to the sheet tab bar. A click on
-    /// a cell, or Ctrl pressed twice, brings it up; Esc or Ctrl twice puts it away.
+    /// the ribbon (View › Floating Formula Bar); the Name Box moves to the sheet tab bar. F2 brings
+    /// it up to edit in (it goes when the edit ends), Ctrl pressed twice shows or hides it, Esc
+    /// puts it away.
     pub floating_formula_bar: bool,
     /// The Calculation by Hand panel beside the sheet (View › Calculation by Hand).
     pub by_hand: bool,

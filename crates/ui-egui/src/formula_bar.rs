@@ -180,20 +180,24 @@ fn contents(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens, font: &FontId, ro
 }
 
 /// The floating formula bar: over the sheet, just above the active cell (below it when the cell is
-/// near the top), as wide as a comfortable formula. A click on a cell or Ctrl pressed twice brings
-/// it up; Esc (when not typing) or Ctrl twice puts it away. Works with `UiState::floating_formula_bar`.
+/// near the top), as wide as a comfortable formula. F2 brings it up and edits in it, closing it
+/// again when the edit ends; Ctrl pressed twice shows or hides it; Esc puts it away. It steps aside
+/// while a dialog is open (the Formula Builder works on the same edit). Works with
+/// `UiState::floating_formula_bar`.
 pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
     floating_keys(app, ctx);
     let Some(grid) = app.grid.rect else { return };
-    // A click on the sheet brings the bar up over the cell it selects.
-    if ctx.input(|i| i.pointer.primary_clicked() && i.pointer.interact_pos().is_some_and(|p| grid.contains(p))) {
+    // An edit in the bar keeps it up, and its end (Enter, Esc, a click away) puts it away.
+    let typing = app.editor.as_ref().is_some_and(|e| e.from_formula_bar);
+    let was_typing_id = egui::Id::unique("mkmatrix.floating_bar.typing");
+    let was_typing = ctx.data(|d| d.get_temp::<bool>(was_typing_id)).unwrap_or(false);
+    ctx.data_mut(|d| d.insert_temp(was_typing_id, typing));
+    if typing {
         app.floating_bar_open = true;
+    } else if was_typing && app.dialog.is_none() {
+        app.floating_bar_open = false;
     }
-    // Typing in the bar keeps it up.
-    if app.editor.as_ref().is_some_and(|e| e.from_formula_bar) {
-        app.floating_bar_open = true;
-    }
-    if !app.floating_bar_open {
+    if !app.floating_bar_open || app.dialog.is_some() {
         return;
     }
     let Some(cell) = app.session.active().and_then(|d| {
