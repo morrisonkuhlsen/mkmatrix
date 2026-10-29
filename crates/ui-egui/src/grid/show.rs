@@ -312,7 +312,11 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
 /// The command under the pointer, previewed: each cell it would change, tinted, with its new text
 /// in the accent, over the cell's own.
 fn paint_preview(app: &SheetApp, p: &Painter, geo: &Geo, sh: &Sheet, t: &Tokens) {
-    let Some((_, cells)) = &app.preview else { return };
+    let cells: Vec<&(mkmatrix_engine::core::CellRef, String)> =
+        app.preview.iter().flat_map(|(_, c)| c.iter()).chain(app.history_preview.iter().flat_map(|(_, c)| c.iter())).collect();
+    if cells.is_empty() {
+        return;
+    }
     // The sheet's own type size (points to pixels at the zoom), as the cells are drawn.
     let font = egui::FontId::new((11.0 * 4.0 / 3.0 * geo.z).clamp(6.0, 40.0), egui::FontFamily::Name(crate::theme::CELL.into()));
     for (c, text) in cells {

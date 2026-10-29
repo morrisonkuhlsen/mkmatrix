@@ -185,6 +185,11 @@ impl SheetApp {
                 self.ui.numbered_columns = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.numbered_columns);
                 Ok(json!({"on": self.ui.numbered_columns}))
             }
+            "view.history" => {
+                let on = p.get("on").and_then(Json::as_bool).unwrap_or(self.grid.pane.as_deref() != Some("history"));
+                self.grid.pane = on.then(|| "history".to_string());
+                Ok(json!({"on": on}))
+            }
             "view.mathNotation" => {
                 self.ui.math_notation = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.math_notation);
                 Ok(json!({"on": self.ui.math_notation}))

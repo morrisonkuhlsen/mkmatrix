@@ -196,6 +196,11 @@ pub fn handle(app: &mut SheetApp, ctx: &egui::Context, method: &str, p: &Json) -
                 ("view.theme", "Display Theme", ""),
                 ("view.animations", "Animations", "{on?: bool} (toggles without it) → {on}"),
                 (
+                    "view.history",
+                    "History",
+                    "{on?: bool} (toggles without it) → {on}: the History pane, the workbook's timeline (edit.history); choosing a point previews it on the grid, Go Back Here undoes or redoes to it",
+                ),
+                (
                     "view.mathNotation",
                     "Mathematical Notation",
                     "{on?: bool} (toggles without it) → {on}: the formula under the formula field in mathematical notation (fractions, exponents, A⁻¹, Aᵀ, matrices)",

@@ -52,6 +52,7 @@ mod freeze_handles;
 mod go_to_dialog;
 mod header_autofit;
 mod header_column_drag;
+mod history_pane;
 mod host_chrome;
 mod hyperlink_ctrl_click;
 mod in_cell_editor_size;

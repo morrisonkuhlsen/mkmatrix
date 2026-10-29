@@ -338,6 +338,9 @@ pub struct SheetApp {
     /// What it would change on the active sheet ([`mkmatrix_engine::Session::preview`]), for the
     /// grid to draw faded: kept per (command, parameters, workbook, revision, sheet).
     pub(crate) preview: Option<((String, String, u64, u64, usize), Vec<(mkmatrix_engine::core::CellRef, String)>)>,
+    /// The History pane's chosen point when it isn't now: the cells that differ there, with the
+    /// text they had, kept per (position, workbook, revision, sheet) for the grid to draw faded.
+    pub(crate) history_preview: Option<((usize, u64, u64, usize), Vec<(mkmatrix_engine::core::CellRef, String)>)>,
     /// When Ctrl was last tapped alone (pressed and released with nothing else), for Ctrl Ctrl.
     pub(crate) ctrl_tap: Option<f64>,
     /// Transient ribbon keyboard navigation; never saved with UI preferences.

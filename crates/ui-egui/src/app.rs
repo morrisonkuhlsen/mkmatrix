@@ -60,6 +60,7 @@ impl SheetApp {
             floating_bar_open: false,
             preview_hover: None,
             preview: None,
+            history_preview: None,
             ctrl_tap: None,
             keytips: keytips::KeyTips::default(),
             shots: control::Shots::default(),
