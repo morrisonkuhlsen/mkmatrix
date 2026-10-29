@@ -109,6 +109,11 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
         ui.horizontal_centered(|ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
             ui.add_space(8.0);
+            // With the formula bar floating, the Name Box sits here, before the sheet arrows.
+            if app.ui.floating_formula_bar && app.session.prefs.formula_bar {
+                crate::formula_bar::name_box(app, ui, &t, (bar_h - 8.0).min(24.0));
+                ui.add_space(8.0);
+            }
             if crate::widgets::icon_button_mono(ui, Icon::Left, t.text_dim, app.ui.language.tr("Previous sheet"), vec2(24.0, 24.0)).clicked() {
                 app.run_or_alert("sheet.previous", json!({}));
             }

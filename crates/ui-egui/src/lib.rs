@@ -116,6 +116,11 @@ pub struct UiState {
     pub density: Density,
     /// Square brackets around each named matrix on the sheet (View › Matrix Brackets).
     pub matrix_brackets: bool,
+    /// The formula bar floats over the sheet, just above the active cell, instead of sitting under
+    /// the ribbon (View › Floating Formula Bar); the Name Box moves to the sheet tab bar. F2 brings
+    /// it up to edit in (it goes when the edit ends), Ctrl pressed twice shows or hides it, Esc
+    /// puts it away.
+    pub floating_formula_bar: bool,
     /// The Calculation by Hand panel beside the sheet (View › Calculation by Hand).
     pub by_hand: bool,
 }
@@ -202,6 +207,7 @@ impl Default for UiState {
             numbered_columns: true,
             density: Density::Normal,
             matrix_brackets: true,
+            floating_formula_bar: false,
             by_hand: false,
         }
     }
@@ -319,6 +325,10 @@ pub struct SheetApp {
     /// The last answer [`desktop_theme`] gave, so a frame that asks costs nothing.
     desktop_dark: Option<bool>,
     pub name_box: Option<String>,
+    /// The floating formula bar is up (with [`UiState::floating_formula_bar`]).
+    pub(crate) floating_bar_open: bool,
+    /// When Ctrl was last tapped alone (pressed and released with nothing else), for Ctrl Ctrl.
+    pub(crate) ctrl_tap: Option<f64>,
     /// Transient ribbon keyboard navigation; never saved with UI preferences.
     pub keytips: keytips::KeyTips,
     pub(crate) shots: control::Shots,

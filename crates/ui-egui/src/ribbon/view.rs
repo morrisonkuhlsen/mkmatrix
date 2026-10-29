@@ -66,6 +66,16 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
             act(app, "view.matrixBrackets", json!({"on": brackets}));
         }
     });
+    // A fourth: the formula bar floating over the sheet, above the active cell.
+    ui.add_space(6.0);
+    controls::check_column(ui, |ui| {
+        let mut floating = app.ui.floating_formula_bar;
+        let hint =
+            lang.tr("Show the formula bar just above the active cell (F2 to edit in it, or Ctrl twice), with the Name Box in the sheet tab bar");
+        if ui.checkbox(&mut floating, lang.tr("Floating Formula Bar")).on_hover_text(hint).changed() {
+            act(app, "view.floatingFormulaBar", json!({"on": floating}));
+        }
+    });
     sep(ui, "Show");
     let __k = big_button(ui, Icon::Zoom, "Zoom", "Zoom…", false);
     control_keytip(app, ui, &__k, "dialog:zoom");

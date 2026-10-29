@@ -35,6 +35,7 @@ mod fill_options_button;
 mod filter_list_scroll;
 mod filter_menu_enter;
 mod find_dialog_focus;
+mod floating_formula_bar;
 mod floating_pictures;
 mod font_box_filter;
 mod font_size_box;

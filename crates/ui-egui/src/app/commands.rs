@@ -185,6 +185,11 @@ impl SheetApp {
                 self.ui.numbered_columns = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.numbered_columns);
                 Ok(json!({"on": self.ui.numbered_columns}))
             }
+            "view.floatingFormulaBar" => {
+                self.ui.floating_formula_bar = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.floating_formula_bar);
+                self.floating_bar_open = false;
+                Ok(json!({"on": self.ui.floating_formula_bar}))
+            }
             "view.animations" => {
                 self.ui.animations = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.animations);
                 Ok(json!({"on": self.ui.animations}))

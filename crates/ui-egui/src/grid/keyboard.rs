@@ -122,6 +122,11 @@ pub(super) fn keyboard(app: &mut SheetApp, ctx: &egui::Context, resp: &egui::Res
                         }
                     }
                     Key::Tab => app.move_after_enter(0, if shift { -1 } else { 1 }),
+                    // With the formula bar floating, F2 brings it up over the cell and edits there.
+                    Key::F2 if app.ui.floating_formula_bar && app.session.prefs.formula_bar => {
+                        app.floating_bar_open = true;
+                        app.begin_edit(None, true);
+                    }
                     Key::F2 => app.begin_edit(None, false),
                     Key::Delete if delete_selected_object(app, sh) => {}
                     Key::Delete => app.run_or_alert("edit.clearContents", json!({})),
