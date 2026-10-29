@@ -507,6 +507,12 @@ fn palette(ui: &mut Ui, theme_colors: &[u32; 12], none_label: &str, more_colors:
     let mut picked = None;
     const ROWS: usize = 7; // 6 tint rows + 1 standard row
     const COLS: usize = 10;
+    const SWATCH: egui::Vec2 = vec2(21.0, 18.0);
+    const GAP: f32 = 3.0;
+    // The palette is as wide as its ten swatch columns (a popup would otherwise take egui's menu
+    // width and leave the swatches and More Colors… in a strip on its left).
+    let width = COLS as f32 * SWATCH.x + (COLS - 1) as f32 * GAP;
+    ui.set_width(width);
     let pal_id = ui.scope_id().with("__color_palette");
     let mut cur: Option<(usize, usize)> = ui.data_mut(|d| d.get_temp(pal_id)).unwrap_or(None);
     let more_id = pal_id.with("more");
@@ -588,14 +594,14 @@ fn palette(ui: &mut Ui, theme_colors: &[u32; 12], none_label: &str, more_colors:
     ui.label(egui::RichText::new("Theme Colors").small());
     let order = [0usize, 1, 2, 3, 4, 5, 6, 7, 8, 9];
     let tints = [0.0f64, 0.8, 0.6, 0.4, -0.25, -0.5];
-    egui::Grid::new(ui.scope_id().with("theme_grid")).spacing(vec2(2.0, 2.0)).show(ui, |ui| {
+    egui::Grid::new(ui.scope_id().with("theme_grid")).spacing(vec2(GAP, GAP)).min_col_width(SWATCH.x).min_row_height(SWATCH.y).show(ui, |ui| {
         for (row, tint) in tints.iter().enumerate() {
             for (col, &i) in order.iter().enumerate() {
                 let base = theme_colors.get(i).copied().unwrap_or(0);
                 let rgb = [(base >> 16) as u8, (base >> 8) as u8, base as u8];
                 let c = mkmatrix_engine::model::style::apply_tint(rgb, *tint);
                 let col32 = Color32::from_rgb(c[0], c[1], c[2]);
-                let (r, resp) = ui.allocate_exact_size(vec2(16.0, 14.0), Sense::click());
+                let (r, resp) = ui.allocate_exact_size(SWATCH, Sense::click());
                 ui.painter().rect_filled(r, 1.0, col32);
                 ui.painter().rect_stroke(r, 1.0, Stroke::new(1.0, t.separator), StrokeKind::Inside);
                 if resp.hovered() || cur == Some((row, col)) {
@@ -610,13 +616,13 @@ fn palette(ui: &mut Ui, theme_colors: &[u32; 12], none_label: &str, more_colors:
     });
     ui.label(egui::RichText::new("Standard Colors").small());
     ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 2.0;
+        ui.spacing_mut().item_spacing.x = GAP;
         for (col, hex) in std_hex.iter().enumerate() {
             let c = mkmatrix_engine::model::Color::from_hex(hex)
                 .and_then(|c| c.resolve(&Default::default()))
                 .map(theme::color32)
                 .unwrap_or(Color32::BLACK);
-            let (r, resp) = ui.allocate_exact_size(vec2(16.0, 14.0), Sense::click());
+            let (r, resp) = ui.allocate_exact_size(SWATCH, Sense::click());
             ui.painter().rect_filled(r, 1.0, c);
             if resp.hovered() || cur == Some((ROWS - 1, col)) {
                 ui.painter().rect_stroke(r.expand(1.0), 1.0, Stroke::new(1.5, t.cat(Cat::Orange)), StrokeKind::Outside);
@@ -631,10 +637,10 @@ fn palette(ui: &mut Ui, theme_colors: &[u32; 12], none_label: &str, more_colors:
     if !recent.is_empty() {
         ui.label(egui::RichText::new("Recent Colors").small());
         ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 2.0;
+            ui.spacing_mut().item_spacing.x = GAP;
             for hex in &recent {
                 let c = parse_hex(hex).map_or(Color32::BLACK, |c| Color32::from_rgb(c[0], c[1], c[2]));
-                let (r, resp) = ui.allocate_exact_size(vec2(16.0, 14.0), Sense::click());
+                let (r, resp) = ui.allocate_exact_size(SWATCH, Sense::click());
                 ui.painter().rect_filled(r, 1.0, c);
                 ui.painter().rect_stroke(r, 1.0, Stroke::new(1.0, Color32::from_gray(200)), StrokeKind::Inside);
                 if resp.hovered() {
@@ -656,7 +662,8 @@ fn palette(ui: &mut Ui, theme_colors: &[u32; 12], none_label: &str, more_colors:
     if let Some(m) = more.as_mut() {
         let mut done = false;
         // The saturation / value area with its hue bar and egui's red-green-blue boxes, then the hex
-        // box with the new colour beside it.
+        // box with the new colour beside it; the square and bars span the palette's width.
+        ui.spacing_mut().slider_width = width;
         if egui::color_picker::color_picker_hsva_2d(ui, &mut m.hsva, egui::color_picker::Alpha::Opaque) {
             m.hex = hex_of(m.hsva.to_srgb());
         }
