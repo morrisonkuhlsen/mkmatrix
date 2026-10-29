@@ -9,6 +9,7 @@ use super::format_cells::format_cells;
 use super::insert_function::insert_function;
 use super::macros::macros;
 use super::names::{name_manager, paste_name};
+use super::panels::{accessibility, agents, error_checking, evaluate_formula, journal, statistics};
 use super::paste::{paste_special, paste_special_shortcuts};
 use super::spelling::spelling;
 use super::zoom::zoom;
@@ -125,7 +126,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         "sort" => 600.0,
         "pasteName" => 400.0,
         "manageRules" => 600.0,
-        "journal" | "agents" | "macros" => 520.0,
+        "journal" | "agents" | "macros" | "statistics" | "accessibility" | "errorChecking" | "evaluateFormula" => 540.0,
         "recommendedCharts" => 680.0,
         "analysisToolPak" => 460.0,
         "solver" => 540.0,
@@ -155,221 +156,201 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         _ => window,
     };
     window.show(ctx, |ui| {
-            ui.set_min_width(width - 20.0);
-            match d.name.as_str() {
-                "formatCells" => format_cells(app, ui, &mut d, &mut confirm),
-                "dataValidation" => data_validation_form(ui, &mut d, &mut confirm, &mut open),
-                "advancedFilter" => advanced_filter_form(ui, &mut d, &mut confirm, &mut open),
-                "insertFunction" => insert_function(app, ui, &mut d, &mut confirm),
-                "find" => find(app, ui, &mut d, &mut open),
-                "goTo" => go_to(app, ui, &mut d, &mut confirm),
-                "goToSpecial" => go_to_special(app, ui, &mut d, &mut confirm, &mut open),
-                "zoom" => zoom(ui, &mut d, &mut confirm, &mut open),
-                "sort" => sort(app, ui, &mut d, &mut confirm),
-                "textToColumns" => text_to_columns(app, ui, &mut d, &mut confirm, &mut open),
-                "nameManager" => name_manager(app, ui, &mut d, &mut open),
-                "pasteName" => paste_name(app, ui, &mut d, &mut confirm, &mut open),
-                "manageRules" => manage_rules(app, ui, &mut open),
-                "recommendedCharts" => recommended_charts(app, ui, &mut d, &mut confirm, &mut open),
-                "selectData" => select_data(app, ui, &mut d, &mut confirm, &mut open),
-                "commandSearch" => command_search(app, ui, &mut d, &mut confirm),
-                "goalSeek" => goal_seek(app, ui, &mut d, &mut confirm),
-                "pasteSpecial" => paste_special(app, ui, &mut d, &mut confirm, &mut open),
-                "analysisToolPak" => analysis_toolpak(app, ui, &mut d, &mut confirm, &mut open),
-                "solver" => solver(ui, &mut d, &mut confirm, &mut open),
-                "solverResults" => solver_results(app, ui, &mut d, &mut open),
-                "spelling" => spelling(app, ui, &mut d, &mut open),
-                "agents" => {
-                    ui.label("MK Matrix is fully drivable by agents. Every menu item, button and gesture is a command:");
-                    ui.add_space(4.0);
-                    ui.monospace("mkmatrix --control 7979        # JSON-lines control channel\nmkmatrix-cli mcp --connect 7979   # MCP bridged to this window\nmkmatrix-cli mcp                   # headless MCP server");
-                    ui.add_space(4.0);
-                    ui.label(format!("{} engine commands are available. See docs/mcp.md and docs/control-protocol.md.", mkmatrix_engine::command_specs().len()));
-                }
-                "about" => about(ui, &mut d, &mut open),
-                "journal" => {
-                    egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
-                        for (id, p) in app.session.journal.iter().rev().take(500) {
-                            ui.monospace(format!("{id} {p}"));
-                        }
-                    });
-                }
-                "macros" => macros(app, ui, &mut d, &mut open),
-                "statistics" | "accessibility" | "errorChecking" | "evaluateFormula" | "comments" => {
-                    let r = if d.name == "comments" {
-                        app.session.active().and_then(|doc| doc.wb.active().map(|s| json!(s.comments.iter().map(|(c, m)| json!({"cell": c.a1(), "author": m.author, "text": m.text})).collect::<Vec<_>>())))
+        ui.set_min_width(width - 20.0);
+        match d.name.as_str() {
+            "formatCells" => format_cells(app, ui, &mut d, &mut confirm),
+            "dataValidation" => data_validation_form(ui, &mut d, &mut confirm, &mut open),
+            "advancedFilter" => advanced_filter_form(ui, &mut d, &mut confirm, &mut open),
+            "insertFunction" => insert_function(app, ui, &mut d, &mut confirm),
+            "find" => find(app, ui, &mut d, &mut open),
+            "goTo" => go_to(app, ui, &mut d, &mut confirm),
+            "goToSpecial" => go_to_special(app, ui, &mut d, &mut confirm, &mut open),
+            "zoom" => zoom(ui, &mut d, &mut confirm, &mut open),
+            "sort" => sort(app, ui, &mut d, &mut confirm),
+            "textToColumns" => text_to_columns(app, ui, &mut d, &mut confirm, &mut open),
+            "nameManager" => name_manager(app, ui, &mut d, &mut open),
+            "pasteName" => paste_name(app, ui, &mut d, &mut confirm, &mut open),
+            "manageRules" => manage_rules(app, ui, &mut open),
+            "recommendedCharts" => recommended_charts(app, ui, &mut d, &mut confirm, &mut open),
+            "selectData" => select_data(app, ui, &mut d, &mut confirm, &mut open),
+            "commandSearch" => command_search(app, ui, &mut d, &mut confirm),
+            "goalSeek" => goal_seek(app, ui, &mut d, &mut confirm),
+            "pasteSpecial" => paste_special(app, ui, &mut d, &mut confirm, &mut open),
+            "analysisToolPak" => analysis_toolpak(app, ui, &mut d, &mut confirm, &mut open),
+            "solver" => solver(ui, &mut d, &mut confirm, &mut open),
+            "solverResults" => solver_results(app, ui, &mut d, &mut open),
+            "spelling" => spelling(app, ui, &mut d, &mut open),
+            "agents" => agents(ui, &mut open),
+            "about" => about(ui, &mut d, &mut open),
+            "journal" => journal(app, ui, &mut d, &mut open),
+            "macros" => macros(app, ui, &mut d, &mut open),
+            "statistics" => statistics(ui, &d, &mut open),
+            "accessibility" => accessibility(app, ui, &mut d, &mut open),
+            "errorChecking" => error_checking(app, ui, &mut d, &mut open),
+            "evaluateFormula" => evaluate_formula(ui, &d, &mut open),
+            "insertPicture" => {
+                // A private inbox dies with this dialog; late browser results
+                // cannot affect a later picture choice or another workbook.
+                let arrived = d.picture_inbox.as_ref().and_then(|inbox| inbox.lock().unwrap_or_else(std::sync::PoisonError::into_inner).pop());
+                if let Some((name, bytes)) = arrived {
+                    d.picture_inbox = None;
+                    if bytes.len() > 16 * 1024 * 1024 {
+                        app.message = Some((d.title.clone(), "Choose a PNG or JPEG no larger than 16 MB.".into()));
                     } else {
-                        d.result.clone()
-                    };
-                    egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
-                        ui.monospace(serde_json::to_string_pretty(&r.unwrap_or(Json::Null)).unwrap_or_default());
-                    });
-                }
-                "insertPicture" => {
-                    // A private inbox dies with this dialog; late browser results
-                    // cannot affect a later picture choice or another workbook.
-                    let arrived = d.picture_inbox.as_ref().and_then(|inbox| {
-                        inbox.lock().unwrap_or_else(std::sync::PoisonError::into_inner).pop()
-                    });
-                    if let Some((name, bytes)) = arrived {
-                        d.picture_inbox = None;
-                        if bytes.len() > 16 * 1024 * 1024 {
-                            app.message = Some((d.title.clone(), "Choose a PNG or JPEG no larger than 16 MB.".into()));
-                        } else {
-                            d.values.remove("path");
-                            d.values.insert("alt".into(), json!(name));
-                            d.values.insert("base64".into(), json!(mkmatrix_engine::io::base64_encode(&bytes)));
-                        }
-                    }
-                    if app.services.pick_picture_async.is_some() {
-                        let name = d.values.get("alt").and_then(Json::as_str).unwrap_or("No picture selected");
-                        ui.label(name);
-                    } else {
-                        ui.label("Picture file path (PNG or JPEG):");
-                        let mut path = d.values.get("path").and_then(Json::as_str).unwrap_or("").to_string();
-                        if ui.text_edit_singleline(&mut path).changed() {
-                            d.values.remove("base64");
-                            d.values.insert("path".into(), json!(path));
-                        }
-                    }
-                    if (app.services.pick_picture.is_some() || app.services.pick_picture_async.is_some()) && ui.button("Browse…").clicked() {
-                        if let Some(start) = &app.services.pick_picture_async {
-                            let inbox = crate::Inbox::default();
-                            start(inbox.clone());
-                            d.picture_inbox = Some(inbox);
-                        } else if let Some(pick) = &app.services.pick_picture
-                            && let Some(path) = pick()
-                        {
-                            d.values.remove("base64");
-                            let alt = std::path::Path::new(&path).file_name().and_then(std::ffi::OsStr::to_str).unwrap_or("");
-                            d.values.insert("alt".into(), json!(alt));
-                            d.values.insert("path".into(), json!(path));
-                        }
-                    }
-                    ui.label("Description (optional):");
-                    let mut alt = d.values.get("alt").and_then(Json::as_str).unwrap_or("").to_string();
-                    if ui.text_edit_singleline(&mut alt).changed() {
-                        d.values.insert("alt".into(), json!(alt));
-                    }
-                    if d.values.get("placement").and_then(Json::as_str) == Some("cell") {
-                        ui.label(egui::RichText::new("Fits inside the selected cell and moves with its content.").small());
-                    }
-                    ok_cancel(ui, &mut confirm, &mut open);
-                }
-                "pickList" => {
-                    let items: Vec<String> = app
-                        .session
-                        .active()
-                        .and_then(|doc| {
-                            let sh = doc.wb.active()?;
-                            let a = doc.selection.active;
-                            let mut seen = std::collections::BTreeSet::new();
-                            let mut r = a.row;
-                            while r > 0 && !sh.value(mkmatrix_engine::core::CellRef::new(r - 1, a.col)).is_empty() {
-                                r -= 1;
-                                seen.insert(sh.value(mkmatrix_engine::core::CellRef::new(r, a.col)).display());
-                            }
-                            Some(seen.into_iter().collect())
-                        })
-                        .unwrap_or_default();
-                    for it in items {
-                        if ui.button(&it).clicked() {
-                            app.run_or_alert("cell.set", json!({"input": it}));
-                            open = false;
-                        }
+                        d.values.remove("path");
+                        d.values.insert("alt".into(), json!(name));
+                        d.values.insert("base64".into(), json!(mkmatrix_engine::io::base64_encode(&bytes)));
                     }
                 }
-                "saveCopy" => {
-                    let fmt = d.values.get("format").and_then(Json::as_str).unwrap_or("xlsx").to_string();
-                    ui.label(format!("Save a copy as .{fmt}"));
+                if app.services.pick_picture_async.is_some() {
+                    let name = d.values.get("alt").and_then(Json::as_str).unwrap_or("No picture selected");
+                    ui.label(name);
+                } else {
+                    ui.label("Picture file path (PNG or JPEG):");
                     let mut path = d.values.get("path").and_then(Json::as_str).unwrap_or("").to_string();
-                    ui.text_edit_singleline(&mut path);
-                    d.values.insert("path".into(), json!(path.clone()));
-                    ok_cancel(ui, &mut confirm, &mut open);
-                    if confirm {
-                        // A bare name has no folder: written as typed it would land in the
-                        // process's working directory (`/` from the Finder, the install folder on
-                        // Windows), never where the user looks. The picker chooses the folder.
-                        let pick = app.services.pick_save.as_ref();
-                        let target = if path.is_empty() {
-                            pick.and_then(|f| f(&format!("Copy.{fmt}")))
-                        } else if let Some(f) = pick.filter(|_| std::path::Path::new(&path).is_relative()) {
-                            f(&if path.ends_with(&format!(".{fmt}")) { path } else { format!("{path}.{fmt}") })
-                        } else {
-                            Some(path)
-                        };
-                        if let Some(t) = target {
-                            let id = match fmt.as_str() {
-                                "csv" => "file.exportCsv",
-                                "html" => "file.exportHtml",
-                                _ => "file.saveAs",
-                            };
-                            app.run_or_alert(id, json!({"path": t}));
-                        }
+                    if ui.text_edit_singleline(&mut path).changed() {
+                        d.values.remove("base64");
+                        d.values.insert("path".into(), json!(path));
                     }
                 }
-                "saveChanges" => {
-                    let lang = app.ui.language;
-                    let t = crate::theme::Tokens::get(ui.ctx());
-                    let title = d.values.get("title").and_then(Json::as_str).unwrap_or("this workbook");
-                    ui.set_min_width(360.0);
-                    ui.add_space(4.0);
-                    ui.label(lang.tr("Do you want to save the changes you made to {title}?").replace("{title}", title));
-                    ui.add_space(14.0);
-                    let quitting = d.values.get("quit").and_then(Json::as_bool) == Some(true);
-                    // One row on the right, the buttons one width; Save, the default, in the accent.
-                    let mut answer = None;
-                    ui.horizontal(|ui| {
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let size = egui::vec2(104.0, 28.0);
-                            let save = egui::Button::new(egui::RichText::new(lang.tr("Save")).color(t.on_accent)).fill(t.accent);
-                            if ui.add_sized(size, save).clicked() || ui.input(|i| i.key_pressed(Key::Enter)) {
-                                answer = Some(crate::SaveAnswer::Save);
-                            }
-                            if ui.add_sized(size, egui::Button::new(lang.tr("Cancel"))).clicked() {
-                                answer = Some(crate::SaveAnswer::Cancel);
-                            }
-                            if ui.add_sized(size, egui::Button::new(lang.tr("Don't Save"))).clicked() {
-                                answer = Some(crate::SaveAnswer::DontSave);
-                            }
-                        });
-                    });
-                    if let Some(answer) = answer
-                        && app.answer_save_changes(answer, quitting, ui.ctx())
+                if (app.services.pick_picture.is_some() || app.services.pick_picture_async.is_some()) && ui.button("Browse…").clicked() {
+                    if let Some(start) = &app.services.pick_picture_async {
+                        let inbox = crate::Inbox::default();
+                        start(inbox.clone());
+                        d.picture_inbox = Some(inbox);
+                    } else if let Some(pick) = &app.services.pick_picture
+                        && let Some(path) = pick()
                     {
+                        d.values.remove("base64");
+                        let alt = std::path::Path::new(&path).file_name().and_then(std::ffi::OsStr::to_str).unwrap_or("");
+                        d.values.insert("alt".into(), json!(alt));
+                        d.values.insert("path".into(), json!(path));
+                    }
+                }
+                ui.label("Description (optional):");
+                let mut alt = d.values.get("alt").and_then(Json::as_str).unwrap_or("").to_string();
+                if ui.text_edit_singleline(&mut alt).changed() {
+                    d.values.insert("alt".into(), json!(alt));
+                }
+                if d.values.get("placement").and_then(Json::as_str) == Some("cell") {
+                    ui.label(egui::RichText::new("Fits inside the selected cell and moves with its content.").small());
+                }
+                ok_cancel(ui, &mut confirm, &mut open);
+            }
+            "pickList" => {
+                let items: Vec<String> = app
+                    .session
+                    .active()
+                    .and_then(|doc| {
+                        let sh = doc.wb.active()?;
+                        let a = doc.selection.active;
+                        let mut seen = std::collections::BTreeSet::new();
+                        let mut r = a.row;
+                        while r > 0 && !sh.value(mkmatrix_engine::core::CellRef::new(r - 1, a.col)).is_empty() {
+                            r -= 1;
+                            seen.insert(sh.value(mkmatrix_engine::core::CellRef::new(r, a.col)).display());
+                        }
+                        Some(seen.into_iter().collect())
+                    })
+                    .unwrap_or_default();
+                for it in items {
+                    if ui.button(&it).clicked() {
+                        app.run_or_alert("cell.set", json!({"input": it}));
                         open = false;
                     }
                 }
-                "start" => {
-                    ui.heading("Start a new workbook");
-                    ui.horizontal_wrapped(|ui| {
-                        if ui.button("Blank workbook").clicked() {
-                            app.run_or_alert("file.new", json!({}));
-                            open = false;
+            }
+            "saveCopy" => {
+                let fmt = d.values.get("format").and_then(Json::as_str).unwrap_or("xlsx").to_string();
+                ui.label(format!("Save a copy as .{fmt}"));
+                let mut path = d.values.get("path").and_then(Json::as_str).unwrap_or("").to_string();
+                ui.text_edit_singleline(&mut path);
+                d.values.insert("path".into(), json!(path.clone()));
+                ok_cancel(ui, &mut confirm, &mut open);
+                if confirm {
+                    // A bare name has no folder: written as typed it would land in the
+                    // process's working directory (`/` from the Finder, the install folder on
+                    // Windows), never where the user looks. The picker chooses the folder.
+                    let pick = app.services.pick_save.as_ref();
+                    let target = if path.is_empty() {
+                        pick.and_then(|f| f(&format!("Copy.{fmt}")))
+                    } else if let Some(f) = pick.filter(|_| std::path::Path::new(&path).is_relative()) {
+                        f(&if path.ends_with(&format!(".{fmt}")) { path } else { format!("{path}.{fmt}") })
+                    } else {
+                        Some(path)
+                    };
+                    if let Some(t) = target {
+                        let id = match fmt.as_str() {
+                            "csv" => "file.exportCsv",
+                            "html" => "file.exportHtml",
+                            _ => "file.saveAs",
+                        };
+                        app.run_or_alert(id, json!({"path": t}));
+                    }
+                }
+            }
+            "saveChanges" => {
+                let lang = app.ui.language;
+                let t = crate::theme::Tokens::get(ui.ctx());
+                let title = d.values.get("title").and_then(Json::as_str).unwrap_or("this workbook");
+                ui.set_min_width(360.0);
+                ui.add_space(4.0);
+                ui.label(lang.tr("Do you want to save the changes you made to {title}?").replace("{title}", title));
+                ui.add_space(14.0);
+                let quitting = d.values.get("quit").and_then(Json::as_bool) == Some(true);
+                // One row on the right, the buttons one width; Save, the default, in the accent.
+                let mut answer = None;
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let size = egui::vec2(104.0, 28.0);
+                        let save = egui::Button::new(egui::RichText::new(lang.tr("Save")).color(t.on_accent)).fill(t.accent);
+                        if ui.add_sized(size, save).clicked() || ui.input(|i| i.key_pressed(Key::Enter)) {
+                            answer = Some(crate::SaveAnswer::Save);
                         }
-                        for (n, t) in mkmatrix_engine::sample::SAMPLES {
-                            if ui.button(*t).clicked() {
-                                app.run_or_alert("file.new", json!({"sample": n}));
-                                open = false;
-                            }
+                        if ui.add_sized(size, egui::Button::new(lang.tr("Cancel"))).clicked() {
+                            answer = Some(crate::SaveAnswer::Cancel);
+                        }
+                        if ui.add_sized(size, egui::Button::new(lang.tr("Don't Save"))).clicked() {
+                            answer = Some(crate::SaveAnswer::DontSave);
                         }
                     });
-                    ui.separator();
-                    ui.label(egui::RichText::new("Recent").strong());
-                    for path in app.ui.recent.clone() {
-                        if ui.link(&path).clicked() {
-                            app.open_path(&path);
+                });
+                if let Some(answer) = answer
+                    && app.answer_save_changes(answer, quitting, ui.ctx())
+                {
+                    open = false;
+                }
+            }
+            "start" => {
+                ui.heading("Start a new workbook");
+                ui.horizontal_wrapped(|ui| {
+                    if ui.button("Blank workbook").clicked() {
+                        app.run_or_alert("file.new", json!({}));
+                        open = false;
+                    }
+                    for (n, t) in mkmatrix_engine::sample::SAMPLES {
+                        if ui.button(*t).clicked() {
+                            app.run_or_alert("file.new", json!({"sample": n}));
                             open = false;
                         }
                     }
-                    if ui.button("Open…").clicked() {
-                        app.open_dialog("open", json!({}));
+                });
+                ui.separator();
+                ui.label(egui::RichText::new("Recent").strong());
+                for path in app.ui.recent.clone() {
+                    if ui.link(&path).clicked() {
+                        app.open_path(&path);
                         open = false;
                     }
                 }
-                _ => form(ui, &mut d, &mut confirm, &mut open),
+                if ui.button("Open…").clicked() {
+                    app.open_dialog("open", json!({}));
+                    open = false;
+                }
             }
-        });
+            _ => form(ui, &mut d, &mut confirm, &mut open),
+        }
+    });
     // Hyperlinks inside dialogs (About ▸ Contributors) open through the host's `open_url`, since
     // the native shell has no browser integration of its own.
     if let Some(open_url) = &app.services.open_url {
