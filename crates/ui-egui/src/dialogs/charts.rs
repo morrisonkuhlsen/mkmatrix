@@ -81,7 +81,7 @@ pub(super) fn recommended_charts(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut 
                 egui::ScrollArea::vertical().id_salt("chart_choices").auto_shrink([false, false]).show(ui, |ui| {
                     for (i, (kind, _, label)) in choices.iter().enumerate() {
                         let on = i == d.list_index;
-                        let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H + 4.0), Sense::click());
+                        let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click());
                         resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, label.as_str()));
                         let p = ui.painter();
                         if on {
