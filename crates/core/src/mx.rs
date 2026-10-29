@@ -24,6 +24,9 @@ pub const MX_FUNCTIONS: &[(&str, Option<&str>)] = &[
     ("MX.LU", None),
     ("MX.CHOL", None),
     ("MX.POW", None),
+    // Not a matrix function, but MK Matrix's own and array-shaped like them: written as
+    // `_xludf.SQL` and read back as SQL.
+    ("SQL", None),
 ];
 
 /// The MX. name for an Excel function name (upper-case), e.g. `MMULT` → `MX.MUL`.
