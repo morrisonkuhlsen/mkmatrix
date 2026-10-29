@@ -1,6 +1,6 @@
 # UI parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-28 · **Change:** minor (dialogs in one style, Print page, F4 Repeat, grouped sheets) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-29 · **Change:** minor (floating formula bar follows the formula) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
 
 Interaction, controls and feel, against Excel. Part of [target-app-parity.md](target-app-parity.md).
 **UI/UX fidelity: ~55% ready, 50–80 h** (estimated). Ribbon command coverage is measured
@@ -195,6 +195,7 @@ scrollbar bugs 2–4 · pixel/feel pass against observed Excel 7–12.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-29 | minor | The floating formula bar follows the formula: wider as its longest line grows (560 px up to 85 % of the grid, then it wraps), taller as it wraps or breaks (up to half the grid's height, then it scrolls); its bottom edge now stretches it to the grid's full height instead of stopping at five rows, and the chevron gives it that height; its size eases (not under a dragged edge) and it fades in |
 | 2026-10-29 | minor | Beyond Excel: Alt+drag on a typed number scrubs it sideways (a hundredth of its size per 3 px, a tenth of that with Shift), its dependents recalculating live, as one undo step; Esc puts it back. Data › What-If Analysis › Sensitivity… (and the cell menu) ranks the constants a result reads by how far ±5–50 % in each moves it, as a tornado chart (`data.sensitivity`: trials on a copy, the workbook unchanged); a click goes to the input |
 | 2026-10-29 | minor | The AutoFilter menu in the dialogs' style: the column's name and how many values it has; Ascending and Descending side by side (sorting the filter range under its header row, so an all-text header stays put); the search box; check boxes in the accent with a mixed Select All and "3 of 5"; each value with how many rows hold it and a bar of its share (beyond Excel); Clear Filter for any kind of filter on the column, or Clear All Filters when only others are filtered; Apply as the default; translated |
 | 2026-10-29 | minor | The floating formula bar moves and resizes: dragged by the grip at its left end it stays where it is dropped instead of following the active cell (a double-click on the grip sends it back); its right edge sets the width, its bottom edge the rows it shows, the corner both (a double-click puts the size back); position and size persist with the view settings |

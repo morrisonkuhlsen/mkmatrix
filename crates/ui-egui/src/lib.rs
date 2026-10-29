@@ -125,10 +125,11 @@ pub struct UiState {
     /// Where the floating formula bar was dragged to by its grip, from the grid's top-left corner;
     /// `None` keeps it just above the active cell (a double-click on the grip brings it back).
     pub floating_bar_at: Option<[f32; 2]>,
-    /// The floating formula bar's width as its right edge was dragged to (`None`: 560 px).
+    /// The floating formula bar's width as its right edge was dragged to (`None`: as wide as the
+    /// formula's longest line, 560 px at least and most of the grid at most).
     pub floating_bar_width: Option<f32>,
-    /// The rows the floating formula bar shows at least, as its bottom edge was dragged to
-    /// (`None`: as many as the formula takes, up to five).
+    /// The rows the floating formula bar shows at least, as its bottom edge was dragged to, up to
+    /// the grid's height (`None`: as many as the formula takes, up to half the grid's height).
     pub floating_bar_lines: Option<u8>,
     /// The formula under the formula field in mathematical notation: fractions, exponents,
     /// A⁻¹, Aᵀ, matrices (the Σ button at the bar's end).

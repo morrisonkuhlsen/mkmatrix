@@ -194,3 +194,43 @@ fn the_right_and_bottom_edges_resize_the_bar_and_a_double_click_puts_the_size_ba
     double_click(&mut h, right.center());
     assert_eq!((h.state().ui.floating_bar_width, h.state().ui.floating_bar_lines), (None, None));
 }
+
+#[test]
+fn the_bottom_edge_stretches_the_bar_past_five_rows_down_to_the_grid() {
+    let mut h = harness();
+    ctrl_tap(&mut h);
+    ctrl_tap(&mut h);
+    h.run_steps(3);
+    let bottom = h.get_all_by_label("Resize the formula bar").map(|n| n.rect()).max_by(|a, b| a.width().total_cmp(&b.width())).unwrap();
+    drag(&mut h, bottom.center(), bottom.center() + egui::vec2(0.0, 400.0));
+    let lines = h.state().ui.floating_bar_lines.unwrap();
+    assert!(lines > 15, "400 px down gives many more than five rows: {lines}");
+    let grid = h.state().grid.rect.unwrap();
+    assert!(bar_rect(&h).bottom() <= grid.bottom(), "and stays inside the grid");
+    // Dragged far past the grid, it stops at the grid's bottom.
+    let bottom = h.get_all_by_label("Resize the formula bar").map(|n| n.rect()).max_by(|a, b| a.width().total_cmp(&b.width())).unwrap();
+    drag(&mut h, bottom.center(), bottom.center() + egui::vec2(0.0, 3000.0));
+    assert!(bar_rect(&h).bottom() <= grid.bottom(), "{:?} inside {grid:?}", bar_rect(&h));
+}
+
+#[test]
+fn the_bar_follows_a_long_formula_wider_and_taller() {
+    let mut h = harness();
+    let long = format!("=SUM({})", (1..=60).map(|i| i.to_string()).collect::<Vec<_>>().join(","));
+    h.state_mut().session.execute("cell.set", json!({"cell": "D8", "input": long})).unwrap();
+    click(&mut h, "D8");
+    h.key_press(egui::Key::F2);
+    h.run_steps(3);
+    let wide = bar_rect(&h);
+    let field = mkmatrix_ui_egui::formula_bar::BarLayout::get(&h.ctx).field;
+    assert!(field.right() - wide.left() > 600.0, "a long line widens the bar past 560 px: {field:?}");
+    h.key_press(egui::Key::Escape);
+    h.run_steps(3);
+    // A formula long enough to wrap many times takes more than five rows, without touching the edges.
+    let huge = format!("={}", (1000..1600).map(|i| i.to_string()).collect::<Vec<_>>().join("+"));
+    h.state_mut().session.execute("cell.set", json!({"cell": "D8", "input": huge})).unwrap();
+    h.key_press(egui::Key::F2);
+    h.run_steps(3);
+    let layout = mkmatrix_ui_egui::formula_bar::BarLayout::get(&h.ctx);
+    assert!(layout.visible_lines > 10, "the bar grows with the formula: {} rows shown", layout.visible_lines);
+}
