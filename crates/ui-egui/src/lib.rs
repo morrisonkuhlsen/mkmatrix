@@ -332,6 +332,12 @@ pub struct SheetApp {
     pub name_box: Option<String>,
     /// The floating formula bar is up (with [`UiState::floating_formula_bar`]).
     pub(crate) floating_bar_open: bool,
+    /// The previewable command under the pointer this frame (a ribbon button or menu item), set
+    /// while the ribbon draws.
+    pub(crate) preview_hover: Option<(&'static str, serde_json::Value)>,
+    /// What it would change on the active sheet ([`mkmatrix_engine::Session::preview`]), for the
+    /// grid to draw faded: kept per (command, parameters, workbook, revision, sheet).
+    pub(crate) preview: Option<((String, String, u64, u64, usize), Vec<(mkmatrix_engine::core::CellRef, String)>)>,
     /// When Ctrl was last tapped alone (pressed and released with nothing else), for Ctrl Ctrl.
     pub(crate) ctrl_tap: Option<f64>,
     /// Transient ribbon keyboard navigation; never saved with UI preferences.

@@ -429,6 +429,11 @@ pub enum UiRequest {
 /// measure that is never narrower (AutoFit asks for it on columns with many distinct values).
 /// Commands call it while they run, so a front end must not run commands while holding a lock
 /// the measure takes (egui's: see `theme::cell_text_width` in the UI crate).
+/// The most changed cells [`Session::preview`] returns.
+pub const PREVIEW_CELLS: usize = 5_000;
+/// Sheets with more stored cells than this get no preview (copying them on every hover would lag).
+pub const PREVIEW_SHEET_CELLS: usize = 200_000;
+
 pub type TextWidth = Arc<dyn Fn(&str, &model::Font, bool) -> f32 + Send + Sync>;
 
 #[derive(Default)]
@@ -527,6 +532,44 @@ impl Session {
     pub fn doc_mut(&mut self) -> Result<&mut DocState> {
         self.active_mut().ok_or(EngineError::NoDocument)
     }
+    /// What running `id` with `params` would show on the active sheet, without running it here:
+    /// the command runs in a throwaway session on a copy of the active workbook (same selection,
+    /// clipboard and preferences), and the cells whose shown text would change come back, at most
+    /// [`PREVIEW_CELLS`], with their new text. The workbook, undo history, journal and AutoSave are
+    /// untouched. A sheet past [`PREVIEW_SHEET_CELLS`] stored cells, or a command that fails, gives
+    /// nothing to preview (`None`).
+    pub fn preview(&self, id: &str, params: Json) -> Option<Vec<(CellRef, String)>> {
+        let src = self.doc().ok()?;
+        let sheet = src.wb.active_sheet();
+        let before = src.wb.sheet(sheet)?;
+        if before.cells.len() > PREVIEW_SHEET_CELLS {
+            return None;
+        }
+        let mut tmp = Session { prefs: self.prefs.clone(), clipboard: self.clipboard.clone(), ..Default::default() };
+        tmp.add_document(src.clone());
+        tmp.execute(id, params).ok()?;
+        let after_doc = tmp.doc().ok()?;
+        // A command that moved to another sheet (or made one) has nothing to show here.
+        if after_doc.wb.active_sheet() != sheet {
+            return None;
+        }
+        let after = after_doc.wb.sheet(sheet)?;
+        let mut cells: std::collections::BTreeSet<CellRef> = before.cells.iter().map(|(c, _)| c).collect();
+        cells.extend(after.cells.iter().map(|(c, _)| c));
+        let mut out = Vec::new();
+        for c in cells {
+            let old = display::cell_text(&src.wb, before, c);
+            let new = display::cell_text(&after_doc.wb, after, c);
+            if old != new {
+                out.push((c, new));
+                if out.len() >= PREVIEW_CELLS {
+                    break;
+                }
+            }
+        }
+        Some(out)
+    }
+
     /// Opens a workbook in a new window, which becomes the active one.
     pub fn add_document(&mut self, d: DocState) -> usize {
         let uid = d.uid;

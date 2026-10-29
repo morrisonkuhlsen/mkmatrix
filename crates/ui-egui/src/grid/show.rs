@@ -309,6 +309,30 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     }
 }
 
+/// The command under the pointer, previewed: each cell it would change, tinted, with its new text
+/// in the accent, over the cell's own.
+fn paint_preview(app: &SheetApp, p: &Painter, geo: &Geo, sh: &Sheet, t: &Tokens) {
+    let Some((_, cells)) = &app.preview else { return };
+    // The sheet's own type size (points to pixels at the zoom), as the cells are drawn.
+    let font = egui::FontId::new((11.0 * 4.0 / 3.0 * geo.z).clamp(6.0, 40.0), egui::FontFamily::Name(crate::theme::CELL.into()));
+    for (c, text) in cells {
+        let r = geo.cell_rect(sh, *c);
+        if !r.intersects(geo.cells) {
+            continue;
+        }
+        p.rect_filled(r, 0.0, t.grid_bg);
+        p.rect_filled(r, 0.0, t.accent_soft.gamma_multiply(0.8));
+        // Numbers to the right, as General aligns them.
+        let numeric = text.trim().trim_end_matches('%').replace([',', '$'], "").parse::<f64>().is_ok();
+        let (anchor, at) = if numeric {
+            (egui::Align2::RIGHT_CENTER, pos2(r.right() - 3.0 * geo.z, r.center().y))
+        } else {
+            (egui::Align2::LEFT_CENTER, pos2(r.left() + 3.0 * geo.z, r.center().y))
+        };
+        p.with_clip_rect(r.intersect(geo.cells)).text(at, anchor, text, font.clone(), t.accent);
+    }
+}
+
 /// Normal view: up to four panes (frozen rows/columns), each painted with its own clip.
 #[allow(clippy::too_many_arguments)]
 fn paint_panes(
@@ -347,6 +371,7 @@ fn paint_panes(
         paint_quadrant(&p, geo, wb, si, sh, *rows, *cols, cf, t);
         paint_selection(&p, geo, sh, sel, outline, t, app, *rows, *cols);
     }
+    paint_preview(app, &painter.with_clip_rect(geo.cells), geo, sh, t);
     // Freeze lines.
     if geo.fr > 0 {
         painter.line_segment([pos2(geo.cells.left(), split.y), pos2(geo.cells.right(), split.y)], Stroke::new(1.0, Color32::from_gray(150)));
