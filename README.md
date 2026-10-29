@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/splash.png" alt="The splash screen: on dark ink, the bracketed-matrix mark and the name MK Matrix, the motto Numero, pondere et mensura, the tagline, the version, a loading bar and the Morrison Kühlsen wordmark; on the right, a teal 7×7 matrix whose third row and fifth column meet in the cell their product fills" width="680">
+  <img src="docs/images/splash.png" alt="The splash screen: on dark ink, the bracketed-matrix mark and the name MK Matrix, the motto, the tagline, the version, a loading bar and the Morrison Kühlsen wordmark; on the right, the splash picture" width="680">
 </p>
 
 <h1 align="center">MK Matrix</h1>
@@ -18,6 +18,39 @@ It is a fork of [GridCraft](https://github.com/storytold/gridcraft), a clean-roo
 spreadsheet, and inherits its engine, file formats (XLSX in and out), charts, command system,
 CLI, MCP server and WebAssembly build. It runs natively on macOS, Windows, Linux and BSD, and in
 the browser.
+
+## A look around
+
+<p align="center">
+  <img src="docs/images/hero-sales.png" alt="MK Matrix with the sales sample: a table of regions by quarter with data bars and sparklines, a column chart of revenue by region and a pie chart of the annual total" width="900">
+</p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/math-notation.png" alt="The formula MX.INV(J7:K8)@M7:M8+SQRT(J7^2+K7^2)/(1+MX.DET(J7:K8)) drawn in mathematical notation under the formula bar: an inverse, a fraction with a radical and a determinant between bars"></td>
+    <td width="50%"><img src="docs/images/sql.png" alt="An SQL function grouping a sales table by region: the result spills beside it with a header row"></td>
+  </tr>
+  <tr>
+    <td><b>Formulas as mathematics.</b> The Σ button at the formula bar's end draws the formula as maths: fractions, exponents, radicals, A⁻¹, Aᵀ, A⁻¹b for <code>A\b</code>, matrices in brackets.</td>
+    <td><b><code>=SQL()</code> over ranges.</b> <code>SELECT … FROM t1 [JOIN t2] WHERE … GROUP BY … ORDER BY …</code> on the sheet's own tables; the result spills and recalculates.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/explain-formula.png" alt="The Explain Formula dialog: the cell, its formula and value, the evaluation steps, and the tree of cells and ranges it depends on down to the data"></td>
+    <td><img src="docs/images/history.png" alt="The History pane: a slider and the list of steps, each with where it changed cells, from the opened workbook to now"></td>
+  </tr>
+  <tr>
+    <td><b>Explain Formula.</b> Why a cell shows what it does: its evaluation steps, then the tree of everything it reads, down to the data.</td>
+    <td><b>History.</b> The workbook's timeline: choose any step to see how the sheet stood then, and go back to it.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/print.png" alt="The Print page: the Print button, the settings as cards (what to print, orientation, paper, margins, scaling) and a full-height page preview"></td>
+    <td><img src="docs/images/dark-sales.png" alt="The sales sample in dark mode"></td>
+  </tr>
+  <tr>
+    <td><b>Print.</b> Settings as cards beside a full-height preview, acting on the sheet's Page Setup.</td>
+    <td><b>Dark mode</b>, and a floating formula bar (F2, or Ctrl twice) for those who want the sheet to themselves.</td>
+  </tr>
+</table>
 
 ## Where it is going
 
