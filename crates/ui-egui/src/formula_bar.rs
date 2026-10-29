@@ -92,7 +92,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
                 let box_h = one_line(row_h) - squeeze - 2.0 * f32::from(pad);
                 layout.name_box = name_box(app, ui, &t, box_h);
                 ui.add_space(4.0);
-                contents(app, ui, &t, &font, row_h, &mut layout);
+                contents(app, ui, &t, &font, row_h, false, &mut layout);
             });
         });
     ui.ctx().data_mut(|d| d.insert_temp(BarLayout::id(), layout));
@@ -100,8 +100,10 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
 
 /// The bar's working part, after the Name Box: Insert Function, the formula field (editable,
 /// darker under the pointer and while typing, a spill child's formula muted) and the expand
-/// chevron. Shared by the docked bar and the floating one; records the field in `layout`.
-fn contents(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens, font: &FontId, row_h: f32, layout: &mut BarLayout) {
+/// chevron. Shared by the docked bar and the floating one (`floating`, whose chevron also
+/// takes back a size dragged with its edges); records the field in `layout`.
+#[allow(clippy::too_many_arguments)]
+fn contents(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens, font: &FontId, row_h: f32, floating: bool, layout: &mut BarLayout) {
     // No Cancel / Enter buttons: Esc and Enter do that.
     // Insert Function: the fx drawn large, the bar's one label-like button.
     let (fx_rect, fx) = ui.allocate_exact_size(vec2(34.0, 24.0), egui::Sense::click());
@@ -180,9 +182,22 @@ fn contents(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens, font: &FontId, ro
     if math.clicked() {
         app.ui.math_notation = !app.ui.math_notation;
     }
-    let chevron = if app.ui.formula_bar_expanded { Icon::ChevronUp } else { Icon::Chevron };
+    // The floating bar is "expanded" while the chevron or a dragged edge made it bigger than its
+    // formula; the chevron then brings it back to the formula's size.
+    let expanded = if floating {
+        app.floating_bar_expanded || app.ui.floating_bar_lines.is_some() || app.ui.floating_bar_width.is_some()
+    } else {
+        app.ui.formula_bar_expanded
+    };
+    let chevron = if expanded { Icon::ChevronUp } else { Icon::Chevron };
     if crate::widgets::icon_button(ui, chevron, t.text_dim, "Expand formula bar", vec2(20.0, 24.0)).clicked() {
-        app.ui.formula_bar_expanded = !app.ui.formula_bar_expanded;
+        if !floating {
+            app.ui.formula_bar_expanded = !app.ui.formula_bar_expanded;
+        } else if expanded {
+            reset_floating_size(app);
+        } else {
+            app.floating_bar_expanded = true;
+        }
     }
     if app.ui.math_notation && app.dialog.is_none() {
         math_panel(app, ui.ctx(), field, t);
@@ -255,6 +270,15 @@ pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
     } else if was_typing && app.dialog.is_none() {
         app.floating_bar_open = false;
     }
+    // A size made for one cell's formula (the chevron, a dragged edge) doesn't carry over: closed,
+    // or moved to another cell, the bar is sized to the formula it shows.
+    let at = app.session.active().map(|d| (d.uid, d.wb.active_sheet(), d.selection.active.row, d.selection.active.col));
+    let shown_id = egui::Id::unique("mkmatrix.floating_bar.on");
+    let before = ctx.data(|d| d.get_temp::<(bool, Option<(u64, usize, u32, u32)>)>(shown_id));
+    if before.is_some_and(|(was_open, was_at)| was_open && (!app.floating_bar_open || was_at != at)) {
+        reset_floating_size(app);
+    }
+    ctx.data_mut(|d| d.insert_temp(shown_id, (app.floating_bar_open, at)));
     if !app.floating_bar_open || app.dialog.is_some() {
         // Faded out while away, so it fades in when it comes back.
         ctx.animate_bool_with_time(egui::Id::unique(SHOWN), false, EASE_SECONDS);
@@ -279,7 +303,7 @@ pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
     let auto = auto.max(MAX_LINES).min(room);
     let at_least = app.ui.floating_bar_lines.map_or(1, usize::from);
     // The chevron shows the whole formula (five rows at least), as far as there's room.
-    let lines = if app.ui.formula_bar_expanded { last.lines.max(MAX_LINES) } else { last.lines.min(auto) };
+    let lines = if app.floating_bar_expanded { last.lines.max(MAX_LINES) } else { last.lines.min(auto) };
     let lines = lines.max(at_least).clamp(1, room);
     let widest = (area.width() - 16.0).max(FLOATING_MIN_W);
     let w = match app.ui.floating_bar_width {
@@ -330,7 +354,7 @@ pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
                         moved = Some(grip.drag_delta());
                     }
                     reset_at = grip.double_clicked();
-                    contents(app, ui, &t, &font, row_h, &mut layout);
+                    contents(app, ui, &t, &font, row_h, true, &mut layout);
                 });
             });
         resize_edges(app, ui, frame.response.rect, grid.min, w, lines, room, row_h, &t);
@@ -341,6 +365,13 @@ pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
         app.ui.floating_bar_at = Some([x + d.x - grid.left(), y + d.y - grid.top()]);
     }
     ctx.data_mut(|d| d.insert_temp(BarLayout::id(), layout));
+}
+
+/// Back to the formula's own size: no chevron, no dragged width or rows.
+fn reset_floating_size(app: &mut SheetApp) {
+    app.floating_bar_expanded = false;
+    app.ui.floating_bar_width = None;
+    app.ui.floating_bar_lines = None;
 }
 
 /// The floating formula bar's narrowest width.

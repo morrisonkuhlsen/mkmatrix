@@ -257,3 +257,33 @@ fn the_chevron_shows_the_whole_formula_and_the_bar_stays_off_the_headings() {
     let fx = h.get_by_label("Insert Function").rect();
     assert!(fx.bottom() < layout.field.top() + 40.0, "fx on the first line: {fx:?}, field {:?}", layout.field);
 }
+
+#[test]
+fn a_size_made_for_one_cell_doesnt_carry_over_and_the_chevron_takes_it_back() {
+    let mut h = harness();
+    click(&mut h, "B2");
+    h.key_press(egui::Key::F2);
+    h.run_steps(3);
+    let small = bar_rect(&h);
+    let bottom = h.get_all_by_label("Resize the formula bar").map(|n| n.rect()).max_by(|a, b| a.width().total_cmp(&b.width())).unwrap();
+    drag(&mut h, bottom.center(), bottom.center() + egui::vec2(0.0, 400.0));
+    assert!(bar_rect(&h).height() > small.height() + 200.0, "dragged tall");
+    // The chevron, on a bar dragged bigger than its formula, brings it back.
+    h.get_by_label("Expand formula bar").click();
+    h.run_steps(3);
+    assert_eq!(h.state().ui.floating_bar_lines, None);
+    assert!((bar_rect(&h).height() - small.height()).abs() < 1.5, "back to the formula's size: {:?}", bar_rect(&h));
+    // Dragged tall again, then the edit ends: F2 on another empty cell opens it at its own size.
+    let bottom = h.get_all_by_label("Resize the formula bar").map(|n| n.rect()).max_by(|a, b| a.width().total_cmp(&b.width())).unwrap();
+    drag(&mut h, bottom.center(), bottom.center() + egui::vec2(0.0, 400.0));
+    assert!(h.state().ui.floating_bar_lines.is_some());
+    h.key_press(egui::Key::Escape);
+    h.run_steps(3);
+    assert!(!bar_shown(&h));
+    h.key_press(egui::Key::ArrowRight);
+    h.run_steps(2);
+    h.key_press(egui::Key::F2);
+    h.run_steps(3);
+    assert_eq!((h.state().ui.floating_bar_lines, h.state().ui.floating_bar_width, h.state().floating_bar_expanded), (None, None, false));
+    assert!((bar_rect(&h).height() - small.height()).abs() < 1.5, "a fresh bar fits its empty cell: {:?}", bar_rect(&h));
+}

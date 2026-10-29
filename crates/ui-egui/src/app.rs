@@ -58,6 +58,7 @@ impl SheetApp {
             desktop_dark: None,
             name_box: None,
             floating_bar_open: false,
+            floating_bar_expanded: false,
             preview_hover: None,
             preview: None,
             history_preview: None,

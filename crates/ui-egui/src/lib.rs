@@ -126,10 +126,12 @@ pub struct UiState {
     /// `None` keeps it just above the active cell (a double-click on the grip brings it back).
     pub floating_bar_at: Option<[f32; 2]>,
     /// The floating formula bar's width as its right edge was dragged to (`None`: as wide as the
-    /// formula's longest line, 560 px at least and most of the grid at most).
+    /// formula's longest line, 560 px at least and most of the grid at most). It lasts while the
+    /// bar stays up on one cell: the next cell's bar is sized to its own formula.
     pub floating_bar_width: Option<f32>,
     /// The rows the floating formula bar shows at least, as its bottom edge was dragged to, up to
-    /// the grid's height (`None`: as many as the formula takes, up to half the grid's height).
+    /// the cells' height (`None`: as many as the formula takes, up to half the cells' height).
+    /// Like the width, it lasts while the bar stays up on one cell.
     pub floating_bar_lines: Option<u8>,
     /// The formula under the formula field in mathematical notation: fractions, exponents,
     /// A⁻¹, Aᵀ, matrices (the Σ button at the bar's end).
@@ -344,6 +346,9 @@ pub struct SheetApp {
     pub name_box: Option<String>,
     /// The floating formula bar is up (with [`UiState::floating_formula_bar`]).
     pub(crate) floating_bar_open: bool,
+    /// The floating bar's chevron is on: the whole formula shows. Like a size dragged with its
+    /// edges, it lasts while the bar stays up on one cell.
+    pub floating_bar_expanded: bool,
     /// The previewable command under the pointer this frame (a ribbon button or menu item), set
     /// while the ribbon draws.
     pub(crate) preview_hover: Option<(&'static str, serde_json::Value)>,
