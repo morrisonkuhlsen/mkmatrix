@@ -1,7 +1,7 @@
 # MK Matrix app icon
 
-MK Matrix's mark on a full-bleed tile: a matrix's square brackets around a 3×3 of rounded cells,
-the diagonal lit and the rest at 40 %, in MK Matrix teal on Morrison Kühlsen's ink. The splash
+MK Matrix's mark on no background (transparent): a matrix's square brackets around a 3×3 of
+rounded cells, the diagonal lit and the rest at 45 %, in MK Matrix terracotta. The splash
 screen draws the same mark in code (`crates/ui-egui/src/splash.rs`). It is original geometry
 written by hand for this repository.
 
@@ -12,13 +12,13 @@ To change it, edit `mkmatrix.svg` and run `packaging/icons.sh` (it needs `resvg`
 
 | Colour | Hex | Used for |
 |---|---|---|
-| Ink | `#14161c` | The tile (Morrison Kühlsen's ink, as in MK Sigma and MK Perth) |
-| MK Matrix teal (app colour) | `#2ec4a0` | The brackets and cells |
+| MK Matrix terracotta (app colour, `splash::BRAND`) | `#e08a5f` | The brackets and cells |
+| — | transparent | The background: no tile, so the mark sits on the taskbar, Dock or desktop |
 
 ## Geometry
 
-A 512 × 512 viewBox, clipped to a rounded square with `rx=112`. Windows and Linux use the full
-tile. The macOS icons (`.icns`, `mkmatrix-macos-512.png`) sit on Apple's grid: an 824/1024
+A 512 × 512 viewBox; the mark is scaled 1.25× about the centre so it fills the canvas without a
+tile. Windows and Linux use it as is. The macOS icons (`.icns`, `mkmatrix-macos-512.png`) sit on Apple's grid: an 824/1024
 body with a transparent margin.
 
 ## Files
@@ -39,5 +39,6 @@ ID and `packaging/linux/com.morrisonkuhlsen.mkmatrix.desktop`.
 
 ## Regenerate
 
-Edit `mkmatrix.svg`, then run `packaging/icons.sh`. It needs `resvg`, and `iconutil` for the
+Edit `mkmatrix.svg`, then run `packaging/icons.sh`. Every shape is a rounded rectangle, so any
+renderer that antialiases gives the same PNGs. It needs `resvg`, and `iconutil` for the
 `.icns` (macOS only). It packs the `.ico` with `cargo xtask ico`.
