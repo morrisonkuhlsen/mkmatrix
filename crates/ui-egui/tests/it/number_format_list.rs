@@ -3,7 +3,6 @@
 
 use egui_kittest::kittest::Queryable as _;
 use mkmatrix_engine::Session;
-use mkmatrix_ui_egui::SheetApp;
 use serde_json::json;
 
 #[test]
