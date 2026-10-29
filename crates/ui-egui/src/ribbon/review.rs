@@ -1,4 +1,4 @@
-use super::controls::{act, anchor_keytip, control_keytip, menu_items, sep};
+use super::controls::{act, anchor_keytip, control_keytip, menu_header, menu_items, sep};
 use super::*;
 
 pub(super) fn review(app: &mut SheetApp, ui: &mut Ui) {
@@ -52,6 +52,7 @@ pub(super) fn review(app: &mut SheetApp, ui: &mut Ui) {
     let notes = big_button(ui, Icon::Note, "Notes", "Notes", true);
     anchor_keytip(app, ui, &notes, &["review.nextComment"]);
     egui::Popup::menu(&notes).show(|ui| {
+        menu_header(app, ui, Icon::Note, "Notes", false);
         menu_items(
             app,
             ui,
