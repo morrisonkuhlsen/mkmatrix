@@ -107,6 +107,37 @@ pub fn distinct_labels(wb: &Workbook, src: &Source, col: usize, group: PivotDate
     items.into_iter().take(limit).map(|i| i.label).collect()
 }
 
+/// A report filter's dropdown list: each item of `field` in the PivotTable's source (labelled and
+/// sorted like the field list), whether the filter shows it, and how many source records hold it.
+pub fn report_filter_items(wb: &Workbook, pt: &PivotTable, pivot_sheet: usize, field: &str) -> Result<Vec<(String, bool, usize)>, String> {
+    let src = read_source(wb, &pt.source, pivot_sheet)?;
+    let col = src.col(field).ok_or_else(|| format!("The source has no field named `{field}`."))?;
+    let selected = pt.filters.iter().find(|f| f.source_col.eq_ignore_ascii_case(field)).and_then(|f| f.selected.as_ref());
+    let fmt = src.formats.get(col).map(String::as_str).unwrap_or("General");
+    let mut fi = FieldItems::default();
+    let mut counts: Vec<usize> = Vec::new();
+    for (i, r) in src.rows.iter().enumerate() {
+        let k = fi.intern(wb, r.get(col).unwrap_or(&Value::Empty), PivotDateGroup::None, fmt, i) as usize;
+        if let Some(n) = counts.get_mut(k) {
+            *n += 1;
+        } else {
+            counts.push(1);
+        }
+        if fi.items.len() > 100_000 {
+            break;
+        }
+    }
+    let mut items: Vec<(Item, usize)> = fi.items.into_iter().zip(counts).collect();
+    items.sort_by(|a, b| cmp_items(&a.0, &b.0));
+    Ok(items
+        .into_iter()
+        .map(|(it, n)| {
+            let on = selected.is_none_or(|sel| sel.iter().any(|s| s.eq_ignore_ascii_case(&it.label)));
+            (it.label, on, n)
+        })
+        .collect())
+}
+
 // ---------------------------------------------------------------- aggregation
 
 #[derive(Clone, Debug, Default)]

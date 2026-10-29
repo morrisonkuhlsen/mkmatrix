@@ -1,6 +1,6 @@
 # UI parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-29 · **Change:** minor (floating formula bar follows the formula) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-29 · **Change:** minor (PivotTable report filter dropdown) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
 
 Interaction, controls and feel, against Excel. Part of [target-app-parity.md](target-app-parity.md).
 **UI/UX fidelity: ~55% ready, 50–80 h** (estimated). Ribbon command coverage is measured
@@ -195,6 +195,8 @@ scrollbar bugs 2–4 · pixel/feel pass against observed Excel 7–12.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-29 | minor | A PivotTable's report filter (a field in the Filters area) has the filter dropdown on its value cell, drawn as filtering while it shows only some items; a click or Alt+Down opens the AutoFilter's menu with the field's items and how many source records hold each (no sort buttons), and Apply or Clear Filter re-run the report through `pivot.filter` (#85) |
+| 2026-10-29 | minor | Save Changes? and the warning/error message box use the dialogs' footer: a rule, Don't Save on the left, Cancel and Save on the right (OK alone in the message box), buttons sized by their label, the default in the accent; the message lines up with the buttons' left edge |
 | 2026-10-29 | minor | More of the floating formula bar: the bracket at the caret and its partner highlighted in the accent, a closing bracket too many in red (any formula editor; quotes, quoted sheet names, table columns and the `'` transpose understood); F2 while editing takes the edit from the bar into the cell and back; a bar dropped away from its cell draws a thin line to it and outlines it; it moves off a range being pointed at; it fades to 55 % while it waits (pointer away, nothing typed, or a range being dragged out); each sheet keeps where the bar was dropped on it; Esc closes the completion list before it cancels the edit (tested) |
 | 2026-10-29 | minor | Beyond Excel, the floating formula bar's footer: the cell being edited (with its sheet when pointing took the edit elsewhere) and the formula's value as typed, in the cell's number format (errors in red, an array as its first value and size); Alt+Shift+F (or the footer's button) lays a long formula out with one argument per line, indented by nesting, LET's names beside their values, and back on one line (`formula::pretty`: whitespace only, the cell keeps the same formula); Ctrl+Shift+U expands the floating bar while it is up |
 | 2026-10-29 | minor | The floating formula bar follows the formula: wider as its longest line grows (560 px up to 85 % of the grid, then it wraps), taller as it wraps or breaks (up to half the grid's height, then it scrolls); its bottom edge now stretches it to the bottom of the cells instead of stopping at five rows, and the chevron shows the whole formula (five rows at least); it stays over the cells, clear of the headings, with its controls on its first line; a size made with the chevron or the edges lasts while the bar stays up on one cell (the next F2 sizes it to that cell's formula), and on a bar made bigger than its formula the chevron brings it back; its size eases (not under a dragged edge) and it fades in |

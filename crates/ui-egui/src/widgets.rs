@@ -722,9 +722,12 @@ pub fn message_box(app: &mut SheetApp, ctx: &egui::Context) {
                 ui.add(egui::Label::new(msg).wrap());
             });
         });
-        ui.add_space(8.0);
+        // The dialogs' footer: a rule, then OK (the default, in the accent) on the right.
+        crate::dialogs::kit::rule(ui);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("  OK  ").clicked() || ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Escape)) {
+            if crate::dialogs::kit::button(ui, "OK", true).clicked()
+                || ui.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Escape))
+            {
                 close = true;
             }
         });

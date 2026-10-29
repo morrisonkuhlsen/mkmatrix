@@ -27,7 +27,7 @@ use charts::rebind_charts;
 pub use charts::{chart_link, chart_series, clear_output, links_to, parse_chart_link};
 use compute::compute_from;
 pub use compute::{NOT_A_VALUE_CELL, detail_cells, detail_records};
-pub use items::{distinct_labels, func_caption, item_label};
+pub use items::{distinct_labels, func_caption, item_label, report_filter_items};
 #[cfg(test)]
 use output::data_cols_exceed_sheet;
 pub use output::{CellKind, OutCell, Output, RowKind};
