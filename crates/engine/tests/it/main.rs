@@ -25,6 +25,7 @@ mod pivotchart_link;
 mod preview;
 mod range_fill_formats;
 mod row_autofit;
+mod sensitivity;
 mod sheet_name_quoting;
 mod sparse_clear_invalidation;
 mod spill_reads_its_own_area;

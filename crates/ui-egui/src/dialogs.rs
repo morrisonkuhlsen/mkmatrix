@@ -976,6 +976,16 @@ impl Dialog {
                 }
                 d
             }
+            "sensitivity" => {
+                let mut d = Dialog::custom("sensitivity", "Sensitivity", json!({}));
+                match app.session.run("data.sensitivity", json!({})) {
+                    Ok(r) => d.result = Some(r),
+                    Err(e) => {
+                        d.values.insert("error".into(), json!(crate::clean_error(&e)));
+                    }
+                }
+                d
+            }
             "evaluateFormula" => {
                 let mut d = Dialog::custom("evaluateFormula", "Evaluate Formula", json!({}));
                 d.result = app.session.run("formulas.evaluateFormula", json!({})).ok();

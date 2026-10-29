@@ -89,6 +89,7 @@ mod ribbon_layout;
 mod right_to_left;
 mod scroll_position;
 mod scrollbar_column_fill;
+mod scrub_sensitivity;
 mod selection;
 mod selection_fill;
 mod selection_glide;

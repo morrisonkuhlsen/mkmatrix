@@ -435,6 +435,16 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
         if app.editor.is_some() && !app.commit_edit(0, 0, false, false) {
             return;
         }
+        // Alt on a typed number scrubs it (Option on macOS).
+        if mods.alt
+            && !mods.command
+            && !mods.shift
+            && let Some(orig) = scrub_value(wb, sh, c)
+        {
+            let _ = app.session.run("selection.set", json!({"cell": c.a1()}));
+            app.grid.drag = Drag::Scrub { cell: c, start: p.x, orig, last: orig };
+            return;
+        }
         // A named matrix's bracket: a click selects the whole matrix, a drag moves it (its name
         // follows, see the drop below).
         if app.ui.matrix_brackets
@@ -606,6 +616,24 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
             Drag::Freeze { cols, .. } => {
                 app.grid.drag = Drag::Freeze { cols, to: Some(freeze_boundary(geo, sh, p, cols)) };
             }
+            Drag::Scrub { cell, start, orig, last } => {
+                let v = scrubbed(orig, p.x - start, mods.shift);
+                if v != last {
+                    if app.run("range.setValues", json!({"range": cell.a1(), "values": [[v]]})).is_err() {
+                        // A protected cell, say: the drag stops where it is.
+                        app.grid.drag = Drag::None;
+                        return;
+                    }
+                    if last != orig {
+                        coalesce_last_undo(app);
+                    }
+                    app.grid.drag = Drag::Scrub { cell, start, orig, last: v };
+                    let shown = app.session.active().and_then(|d| d.wb.active().map(|sh| mkmatrix_engine::display::cell_text(&d.wb, sh, cell)));
+                    let pct = if orig == 0.0 { String::new() } else { format!("   {:+.1}%", (v - orig) / orig.abs() * 100.0) };
+                    let pct = pct.replace('.', &app.ui.language.formula_locale().decimal_separator().to_string());
+                    app.toast = Some((format!("{} = {}{pct}", cell.a1(), shown.unwrap_or_default()), crate::now_ms()));
+                }
+            }
             Drag::Fill { menu, .. } => {
                 let src = sel.current();
                 let target = fill_target(src, pc);
@@ -707,6 +735,16 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
                 if let Err(e) = app.run("sheet.moveColumns", json!({"cols": source.a1(), "before": before})) {
                     app.message = Some(("MK Matrix".into(), crate::clean_error(&e)));
                 }
+            }
+            Drag::Scrub { orig, last, .. } => {
+                if last != orig && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+                    // The drag's one undo step brings the number back, and is spent.
+                    let _ = app.run("edit.undo", json!({}));
+                    if let Some(d) = app.session.active_mut() {
+                        d.redo.pop();
+                    }
+                }
+                app.toast = None;
             }
             _ => {}
         }
@@ -843,6 +881,35 @@ fn coalesce_last_undo(app: &mut SheetApp) {
             d.undo.remove(n - 1);
         }
     }
+}
+
+/// The number an Alt+drag can scrub in `c`: one typed in (not a formula's), and not a date or a
+/// time (a few pixels would jump days).
+pub(super) fn scrub_value(wb: &Workbook, sh: &Sheet, c: CellRef) -> Option<f64> {
+    let cell = sh.cell(c).filter(|cell| cell.formula.is_none())?;
+    let mkmatrix_engine::core::Value::Number(n) = cell.value else { return None };
+    let date = mkmatrix_engine::numfmt::NumberFormat::parse_cached(wb.styles.get(cell.style).num_fmt.as_str()).is_date();
+    (n.is_finite() && !date).then_some(n)
+}
+
+/// Pixels of sideways movement per step of a scrub.
+const SCRUB_PX: f32 = 3.0;
+
+/// The number a scrub from `orig` shows `dx` pixels sideways: steps of a power of ten about a
+/// hundredth of its size (1 for 100, 0.001 for 0.25, 1 from zero), a tenth of that with Shift,
+/// rounded to the digits the step and the number need, so no float noise is written.
+pub(super) fn scrubbed(orig: f64, dx: f32, fine: bool) -> f64 {
+    let mag = if orig == 0.0 { 2 } else { orig.abs().log10().floor().clamp(-300.0, 300.0) as i32 };
+    let step_exp = mag - 2 - i32::from(fine);
+    let steps = (f64::from(dx) / f64::from(SCRUB_PX)).round();
+    let v = orig + steps * 10f64.powi(step_exp);
+    // The decimals of the step, and of the number as typed (at most 10).
+    let own = (0..=10).find(|&d| {
+        let k = 10f64.powi(d);
+        ((orig * k).round() - orig * k).abs() <= 1e-9 * (orig * k).abs().max(1.0)
+    });
+    let decimals = (-step_exp).max(own.unwrap_or(10)).clamp(0, 15) as usize;
+    format!("{v:.decimals$}").parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(orig)
 }
 
 fn scroll_by(app: &mut SheetApp, d: egui::Vec2) {

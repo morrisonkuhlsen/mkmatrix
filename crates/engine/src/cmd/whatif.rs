@@ -19,6 +19,7 @@ use super::*;
 mod advanced_filter;
 mod consolidate;
 mod scenarios;
+mod sensitivity;
 
 use advanced_filter::advanced_filter;
 #[cfg(test)]
@@ -27,6 +28,7 @@ use consolidate::consolidate;
 #[cfg(test)]
 pub(crate) use scenarios::{SCENARIO_NAME, load_scenarios};
 use scenarios::{scenario_add, scenario_delete, scenario_list, scenario_show, scenario_summary};
+use sensitivity::sensitivity;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -76,6 +78,15 @@ pub fn specs() -> Vec<CommandSpec> {
             "{range: \"D2:E10\", rowInput?: \"B1\", columnInput?: \"B2\"} one-variable (values down the first column with columnInput, or across the top row with rowInput; formulas in the other edge) or two-variable (formula in the top-left corner). Computes every result by substitution and writes static values (a snapshot, not a live {=TABLE()}); ≤100,000 cells.",
             has_doc,
             data_table
+        ),
+        cmd!(
+            query "data.sensitivity",
+            "Sensitivity…",
+            ["Data", "Forecast", "What-If Analysis"],
+            None,
+            "{cell?: formula cell (default the active cell), change?: 0.1 (±10%)} → {sheet, cell, value, change, inputs: [{sheet, cell, value, low, high, lowResult, highResult, swing}], more}: the number constants the result reads (directly or through other formulas, dates left out, at most 40), each tried at ±change (a zero at ±change itself) with the result recalculated, widest swing first (inputs that make it an error last). The workbook is unchanged: the data for a tornado chart.",
+            has_doc,
+            sensitivity
         ),
         cmd!(
             "data.advancedFilter",

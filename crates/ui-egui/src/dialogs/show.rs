@@ -9,7 +9,7 @@ use super::format_cells::format_cells;
 use super::insert_function::insert_function;
 use super::macros::macros;
 use super::names::{name_manager, paste_name};
-use super::panels::{accessibility, agents, error_checking, evaluate_formula, explain_formula, journal, statistics};
+use super::panels::{accessibility, agents, error_checking, evaluate_formula, explain_formula, journal, sensitivity, statistics};
 use super::paste::{paste_special, paste_special_shortcuts};
 use super::spelling::spelling;
 use super::zoom::zoom;
@@ -127,7 +127,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         "pasteName" => 400.0,
         "manageRules" => 600.0,
         "journal" | "agents" | "macros" | "statistics" | "accessibility" | "errorChecking" | "evaluateFormula" => 540.0,
-        "explainFormula" => 640.0,
+        "explainFormula" | "sensitivity" => 640.0,
         "recommendedCharts" => 680.0,
         "analysisToolPak" => 460.0,
         "solver" => 540.0,
@@ -190,6 +190,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
             "errorChecking" => error_checking(app, ui, &mut d, &mut open),
             "evaluateFormula" => evaluate_formula(ui, &d, &mut open),
             "explainFormula" => explain_formula(app, ui, &mut d, &mut open),
+            "sensitivity" => sensitivity(app, ui, &mut d, &mut open),
             "insertPicture" => {
                 // A private inbox dies with this dialog; late browser results
                 // cannot affect a later picture choice or another workbook.
