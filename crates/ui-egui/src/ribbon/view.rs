@@ -1,7 +1,7 @@
 use super::controls::{act, checkbox_on, control_keytip, invoke, keytip, menu_items, popup_command, sep};
 use super::*;
 
-/// Draws the View tab: view modes, ruler/gridlines/formula-bar/headings toggles, zoom, freeze panes, theme, animations, interface size and language.
+/// Draws the View tab: view modes, ruler/gridlines/formula-bar/headings toggles, zoom, freeze panes, theme, animations and interface size (the language is in File › Options).
 pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let _ = t;
