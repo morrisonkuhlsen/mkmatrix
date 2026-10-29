@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::cell::{Cell, CellPicture};
 use crate::features::{
-    AutoFilter, Chart, Comment, CondFormat, Hyperlink, Image, LineInfo, PivotTable, PrintSettings, Shape, SheetProtection, Slicer, Sparkline, Table,
-    Validation,
+    AutoFilter, Chart, Comment, CondFormat, Hyperlink, Image, LineInfo, PivotFilter, PivotTable, PrintSettings, Shape, SheetProtection, Slicer,
+    Sparkline, Table, Validation,
 };
 use crate::store::CellStore;
 use crate::style::{Color, StyleId};
@@ -292,10 +292,21 @@ impl Sheet {
 
     // ---- geometry
 
-    /// Whether this cell has a table or ordinary AutoFilter dropdown.
+    /// Whether this cell has a table, ordinary AutoFilter or PivotTable report filter dropdown.
     pub fn has_filter_button(&self, c: CellRef) -> bool {
         self.autofilter.as_ref().is_some_and(|af| af.range.start.row == c.row && af.range.contains(c))
             || self.tables.iter().any(|t| t.filter_button && t.header_row && t.range.start.row == c.row && t.range.contains(c))
+            || self.pivot_filter_at(c).is_some()
+    }
+
+    /// The PivotTable (its index) and report filter whose dropdown cell is `c`. The field's name
+    /// must still sit beside it: a report whose source lost the column leaves that filter's row out.
+    pub fn pivot_filter_at(&self, c: CellRef) -> Option<(usize, &PivotFilter)> {
+        self.pivots.iter().enumerate().find_map(|(i, pt)| {
+            let f = pt.report_filter_at(c)?;
+            let name = self.value_ref(CellRef::new(c.row, c.col.checked_sub(1)?))?;
+            matches!(name, Value::Text(t) if t.eq_ignore_ascii_case(&f.source_col)).then_some((i, f))
+        })
     }
 
     /// Horizontal header space in unzoomed grid units (96 units per inch).

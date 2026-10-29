@@ -82,6 +82,7 @@ mod paste_names;
 mod paste_special_dialog;
 mod pivot_fields_drag;
 mod pivot_pane;
+mod pivot_report_filter;
 mod pivot_show_details;
 mod pivot_show_details_menu;
 mod popup_dismissal;
