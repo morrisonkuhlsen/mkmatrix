@@ -92,87 +92,185 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
                 let box_h = one_line(row_h) - squeeze - 2.0 * f32::from(pad);
                 layout.name_box = name_box(app, ui, &t, box_h);
                 ui.add_space(4.0);
-                // No Cancel / Enter buttons: Esc and Enter do that.
-                // Insert Function: the fx drawn large, the bar's one label-like button.
-                let (fx_rect, fx) = ui.allocate_exact_size(vec2(34.0, 24.0), egui::Sense::click());
-                if fx.hovered() {
-                    ui.painter().rect_filled(fx_rect, 0.0, t.hover);
-                }
-                icons::paint(ui.painter(), egui::Rect::from_center_size(fx_rect.center(), vec2(24.0, 24.0)), Icon::Fx, t.text);
-                let fx = fx.on_hover_text(app.ui.language.tr("Insert Function"));
-                fx.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Insert Function"));
-                if fx.clicked() {
-                    app.open_dialog("insertFunction", json!({}));
-                }
-                layout.buttons = fx.rect;
-                ui.add_space(4.0);
-                // The formula field fills the rest, as tall as the bar.
-                let avail = ui.available_width() - 24.0;
-                let field = Rect::from_min_size(ui.cursor().min, vec2(avail, ui.available_height()));
-                // Darker under the pointer, and darker again while typing in it.
-                let typing_here = app.editor.as_ref().is_some_and(|e| e.from_formula_bar);
-                let fill = if typing_here {
-                    t.field_active
-                } else if ui.rect_contains_pointer(field) {
-                    t.field_hover
-                } else {
-                    t.window
-                };
-                ui.painter().rect_filled(field, 0.0, fill);
-                // The shape the formula will have, or why its matrices don't fit, at the field's end.
-                let verdict = app.editing_shape();
-                let mut inner = field.shrink2(vec2(6.0, 3.0));
-                if let Some(v) = &verdict {
-                    let (text, color) = match v {
-                        crate::shapes::Verdict::Fits((r, c)) => (format!("→ {r}×{c}"), t.accent),
-                        crate::shapes::Verdict::Mismatch(why) => (why.clone(), t.danger),
-                    };
-                    let galley = ui.painter().layout_no_wrap(text, theme::ui_font(12.0), color);
-                    let w = galley.size().x.min(field.width() * 0.6);
-                    let at = egui::pos2(field.right() - 8.0 - w, field.top() + (one_line(row_h).min(field.height()) - galley.size().y) / 2.0);
-                    ui.painter().with_clip_rect(field).galley(at, galley, color);
-                    inner.max.x -= w + 12.0;
-                }
-                // The formula reads from the field's top, whatever the row's centring.
-                let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));
-                let id = egui::Id::unique("mkmatrix.formula_bar");
-                // A spill child shows its anchor's formula muted and read-only.
-                let read_only = active_spill_anchor(app).is_some();
-                let info = if app.editor.is_some() {
-                    editor_widget(app, &mut child, id, font.clone(), true, inner.width(), inner.height())
-                } else {
-                    // Show the active cell's content; clicking starts editing in the bar.
-                    let text = active_input(app);
-                    let color = if read_only { t.text_disabled } else { t.text };
-                    let galley = child.painter().layout(text, font.clone(), color, inner.width());
-                    let lines = galley.rows.len();
-                    // Each cell's view starts at its top: the offset is kept per cell, not per bar.
-                    let shown = app.session.active().map(|d| (d.uid, d.wb.active_sheet(), d.selection.active.row, d.selection.active.col));
-                    egui::ScrollArea::vertical().id_salt(id.with(("view", shown))).max_height(inner.height()).auto_shrink([false, true]).show(
-                        &mut child,
-                        |ui| {
-                            if ui.add(egui::Label::new(galley).sense(Sense::click())).clicked() && !read_only {
-                                app.begin_edit(None, true);
-                            }
-                        },
-                    );
-                    if !read_only && ui.interact(field, id.with("click"), Sense::click()).clicked() {
-                        app.begin_edit(None, true);
-                    }
-                    EditorInfo { lines, caret: None }
-                };
-                layout.field = field;
-                layout.lines = info.lines.max(1);
-                layout.visible_lines = ((inner.height() / row_h).floor() as usize).max(1);
-                layout.caret = info.caret;
-                ui.allocate_space(vec2(avail, field.height()));
-                let chevron = if app.ui.formula_bar_expanded { Icon::ChevronUp } else { Icon::Chevron };
-                if crate::widgets::icon_button(ui, chevron, t.text_dim, "Expand formula bar", vec2(20.0, 24.0)).clicked() {
-                    app.ui.formula_bar_expanded = !app.ui.formula_bar_expanded;
-                }
+                contents(app, ui, &t, &font, row_h, &mut layout);
             });
         });
     ui.ctx().data_mut(|d| d.insert_temp(BarLayout::id(), layout));
+}
+
+/// The bar's working part, after the Name Box: Insert Function, the formula field (editable,
+/// darker under the pointer and while typing, a spill child's formula muted) and the expand
+/// chevron. Shared by the docked bar and the floating one; records the field in `layout`.
+fn contents(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens, font: &FontId, row_h: f32, layout: &mut BarLayout) {
+    // No Cancel / Enter buttons: Esc and Enter do that.
+    // Insert Function: the fx drawn large, the bar's one label-like button.
+    let (fx_rect, fx) = ui.allocate_exact_size(vec2(34.0, 24.0), egui::Sense::click());
+    if fx.hovered() {
+        ui.painter().rect_filled(fx_rect, 0.0, t.hover);
+    }
+    icons::paint(ui.painter(), egui::Rect::from_center_size(fx_rect.center(), vec2(24.0, 24.0)), Icon::Fx, t.text);
+    let fx = fx.on_hover_text(app.ui.language.tr("Insert Function"));
+    fx.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Insert Function"));
+    if fx.clicked() {
+        app.open_dialog("insertFunction", json!({}));
+    }
+    layout.buttons = fx.rect;
+    ui.add_space(4.0);
+    // The formula field fills the rest, as tall as the bar.
+    let avail = ui.available_width() - 24.0;
+    let field = Rect::from_min_size(ui.cursor().min, vec2(avail, ui.available_height()));
+    // Darker under the pointer, and darker again while typing in it.
+    let typing_here = app.editor.as_ref().is_some_and(|e| e.from_formula_bar);
+    let fill = if typing_here {
+        t.field_active
+    } else if ui.rect_contains_pointer(field) {
+        t.field_hover
+    } else {
+        t.window
+    };
+    ui.painter().rect_filled(field, 0.0, fill);
+    // The shape the formula will have, or why its matrices don't fit, at the field's end.
+    let verdict = app.editing_shape();
+    let mut inner = field.shrink2(vec2(6.0, 3.0));
+    if let Some(v) = &verdict {
+        let (text, color) = match v {
+            crate::shapes::Verdict::Fits((r, c)) => (format!("→ {r}×{c}"), t.accent),
+            crate::shapes::Verdict::Mismatch(why) => (why.clone(), t.danger),
+        };
+        let galley = ui.painter().layout_no_wrap(text, theme::ui_font(12.0), color);
+        let w = galley.size().x.min(field.width() * 0.6);
+        let at = egui::pos2(field.right() - 8.0 - w, field.top() + (one_line(row_h).min(field.height()) - galley.size().y) / 2.0);
+        ui.painter().with_clip_rect(field).galley(at, galley, color);
+        inner.max.x -= w + 12.0;
+    }
+    // The formula reads from the field's top, whatever the row's centring.
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));
+    let id = egui::Id::unique("mkmatrix.formula_bar");
+    // A spill child shows its anchor's formula muted and read-only.
+    let read_only = active_spill_anchor(app).is_some();
+    let info = if app.editor.is_some() {
+        editor_widget(app, &mut child, id, font.clone(), true, inner.width(), inner.height())
+    } else {
+        // Show the active cell's content; clicking starts editing in the bar.
+        let text = active_input(app);
+        let color = if read_only { t.text_disabled } else { t.text };
+        let galley = child.painter().layout(text, font.clone(), color, inner.width());
+        let lines = galley.rows.len();
+        // Each cell's view starts at its top: the offset is kept per cell, not per bar.
+        let shown = app.session.active().map(|d| (d.uid, d.wb.active_sheet(), d.selection.active.row, d.selection.active.col));
+        egui::ScrollArea::vertical().id_salt(id.with(("view", shown))).max_height(inner.height()).auto_shrink([false, true]).show(&mut child, |ui| {
+            if ui.add(egui::Label::new(galley).sense(Sense::click())).clicked() && !read_only {
+                app.begin_edit(None, true);
+            }
+        });
+        if !read_only && ui.interact(field, id.with("click"), Sense::click()).clicked() {
+            app.begin_edit(None, true);
+        }
+        EditorInfo { lines, caret: None }
+    };
+    layout.field = field;
+    layout.lines = info.lines.max(1);
+    layout.visible_lines = ((inner.height() / row_h).floor() as usize).max(1);
+    layout.caret = info.caret;
+    ui.allocate_space(vec2(avail, field.height()));
+    let chevron = if app.ui.formula_bar_expanded { Icon::ChevronUp } else { Icon::Chevron };
+    if crate::widgets::icon_button(ui, chevron, t.text_dim, "Expand formula bar", vec2(20.0, 24.0)).clicked() {
+        app.ui.formula_bar_expanded = !app.ui.formula_bar_expanded;
+    }
+}
+
+/// The floating formula bar: over the sheet, just above the active cell (below it when the cell is
+/// near the top), as wide as a comfortable formula. A click on a cell or Ctrl pressed twice brings
+/// it up; Esc (when not typing) or Ctrl twice puts it away. Works with `UiState::floating_formula_bar`.
+pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
+    floating_keys(app, ctx);
+    let Some(grid) = app.grid.rect else { return };
+    // A click on the sheet brings the bar up over the cell it selects.
+    if ctx.input(|i| i.pointer.primary_clicked() && i.pointer.interact_pos().is_some_and(|p| grid.contains(p))) {
+        app.floating_bar_open = true;
+    }
+    // Typing in the bar keeps it up.
+    if app.editor.as_ref().is_some_and(|e| e.from_formula_bar) {
+        app.floating_bar_open = true;
+    }
+    if !app.floating_bar_open {
+        return;
+    }
+    let Some(cell) = app.session.active().and_then(|d| {
+        let sh = d.wb.active()?;
+        Some(crate::grid::Geo::new(sh, grid, app.view().scroll).cell_rect(sh, d.selection.active))
+    }) else {
+        return;
+    };
+    let t = Tokens::get(ctx);
+    let font = theme::ui_font(13.0);
+    let row_h = ctx.fonts_mut(|f| f.row_height(&font));
+    let last = BarLayout::get(ctx);
+    let lines = if app.ui.formula_bar_expanded { MAX_LINES } else { last.lines.clamp(1, MAX_LINES) };
+    let h = one_line(row_h) + (lines - 1) as f32 * row_h;
+    let w = 560.0_f32.min(grid.width() - 16.0).max(240.0);
+    // Above the cell, its left edge on the cell's, kept inside the grid.
+    let gap = 6.0;
+    let x = cell.left().clamp(grid.left() + 8.0, (grid.right() - w - 8.0).max(grid.left() + 8.0));
+    let above = cell.top() - gap - h - 4.0;
+    let y = if above >= grid.top() + 4.0 { above } else { cell.bottom() + gap };
+    let mut layout = BarLayout { height: h, ..Default::default() };
+    egui::Area::new(egui::Id::unique("mkmatrix.floating_formula_bar")).order(egui::Order::Foreground).fixed_pos(pos2(x, y)).show(ctx, |ui| {
+        egui::Frame::new()
+            .fill(t.window)
+            .stroke(egui::Stroke::new(1.0, t.input_border))
+            .corner_radius(6.0)
+            .inner_margin(egui::Margin::symmetric(4, 2))
+            .shadow(egui::epaint::Shadow { offset: [0, 3], blur: 12, spread: 0, color: egui::Color32::from_black_alpha(48) })
+            .show(ui, |ui| {
+                ui.set_width(w);
+                ui.set_height(h);
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    contents(app, ui, &t, &font, row_h, &mut layout);
+                });
+            });
+    });
+    ctx.data_mut(|d| d.insert_temp(BarLayout::id(), layout));
+}
+
+/// Ctrl pressed twice in a row (alone, each tap within 400 ms of the last) toggles the floating
+/// bar; Esc puts it away when nothing is being typed. A tap is Ctrl going up with no other key or
+/// click while it was down.
+fn floating_keys(app: &mut SheetApp, ctx: &egui::Context) {
+    // Read the input first: egui's memory can't be touched inside `input`.
+    let (ctrl, other, esc) = ctx.input(|i| {
+        let other = i.events.iter().any(|e| match e {
+            egui::Event::Key { key, pressed: true, .. } => *key != egui::Key::Escape,
+            egui::Event::PointerButton { pressed: true, .. } | egui::Event::Text(_) => true,
+            _ => false,
+        });
+        (i.modifiers.ctrl || i.modifiers.command, other, i.key_pressed(egui::Key::Escape))
+    });
+    let id = egui::Id::unique("mkmatrix.floating_bar.ctrl");
+    // (Ctrl down last frame, something else happened while it was down)
+    let (was, dirty) = ctx.data(|d| d.get_temp::<(bool, bool)>(id)).unwrap_or_default();
+    let dirty = (dirty && was) || (other && (ctrl || was));
+    if was && !ctrl {
+        if dirty {
+            app.ctrl_tap = None;
+        } else {
+            let now = crate::now_ms();
+            match app.ctrl_tap {
+                Some(t0) if now - t0 <= 400.0 => {
+                    app.floating_bar_open = !app.floating_bar_open;
+                    app.ctrl_tap = None;
+                }
+                _ => app.ctrl_tap = Some(now),
+            }
+        }
+    } else if other && !ctrl {
+        app.ctrl_tap = None;
+    }
+    ctx.data_mut(|d| d.insert_temp(id, (ctrl, ctrl && dirty)));
+    if esc && app.editor.is_none() {
+        app.floating_bar_open = false;
+    }
 }
 
 /// Resolve ownership on every frame; never cache a spill range in presentation state.
@@ -215,7 +313,7 @@ fn active_input(app: &SheetApp) -> String {
 }
 
 /// Draws the Name Box and its name dropdown; Enter jumps to a reference or known name (or defines a new name) and is consumed so the grid does not move down.
-fn name_box(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens, height: f32) -> Rect {
+pub(crate) fn name_box(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens, height: f32) -> Rect {
     let id = egui::Id::unique("mkmatrix.name_box");
     let shown = app.name_box_text();
     let mut text = app.name_box.clone().unwrap_or(shown.clone());

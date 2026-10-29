@@ -195,6 +195,11 @@ pub fn handle(app: &mut SheetApp, ctx: &egui::Context, method: &str, p: &Json) -
                 ("view.darkMode", "Dark Mode", ""),
                 ("view.theme", "Display Theme", ""),
                 ("view.animations", "Animations", "{on?: bool} (toggles without it) → {on}"),
+                (
+                    "view.floatingFormulaBar",
+                    "Floating Formula Bar",
+                    "{on?: bool} (toggles without it) → {on}: the formula bar floats above the active cell (a click on a cell or Ctrl twice shows it) and the Name Box moves to the sheet tab bar",
+                ),
                 ("view.numberedColumns", "Numbered Columns", "{on?: bool} (toggles without it) → {on}"),
                 ("view.byHand", "Calculation by Hand", "{on?: bool} (toggles without it) → {on}"),
                 ("view.matrixBrackets", "Matrix Brackets", "{on?: bool} (toggles without it) → {on}"),

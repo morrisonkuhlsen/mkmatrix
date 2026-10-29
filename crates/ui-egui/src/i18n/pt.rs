@@ -10,6 +10,10 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Paste Formatting" => "Colar Formatação",
         "Transpose" => "Transpor",
         "Paste Link" => "Colar Vínculo",
+        "Floating Formula Bar" => "Barra de Fórmulas Flutuante",
+        "Show the formula bar just above the active cell (a click on a cell, or Ctrl twice), with the Name Box in the sheet tab bar" => {
+            "Mostrar a barra de fórmulas logo acima da célula ativa (um clique na célula, ou Ctrl duas vezes), com a Caixa de Nome na barra das planilhas"
+        }
         "Printer" => "Impressora",
         "Only print the active sheets" => "Imprimir somente as planilhas ativas",
         "Print every sheet in the workbook" => "Imprimir todas as planilhas da pasta de trabalho",

@@ -55,6 +55,8 @@ impl SheetApp {
             desktop_theme: desktop_theme::DesktopTheme::default(),
             desktop_dark: None,
             name_box: None,
+            floating_bar_open: false,
+            ctrl_tap: None,
             keytips: keytips::KeyTips::default(),
             shots: control::Shots::default(),
             capture_epoch: 0,
@@ -211,7 +213,7 @@ impl SheetApp {
         } else {
             ribbon::show(self, ui);
             widgets::notice_bar(self, ui);
-            if self.session.prefs.formula_bar {
+            if self.session.prefs.formula_bar && !self.ui.floating_formula_bar {
                 formula_bar::show(self, ui);
             }
             if self.ui.status_bar && self.ui.density != crate::Density::Minimal {
@@ -226,6 +228,9 @@ impl SheetApp {
                 grid::show(self, ui);
                 self.perf.grid_ms = now_ms() - g0;
             });
+            if self.session.prefs.formula_bar && self.ui.floating_formula_bar {
+                formula_bar::floating(self, &ctx);
+            }
         }
         dialogs::show(self, &ctx);
         widgets::message_box(self, &ctx);
