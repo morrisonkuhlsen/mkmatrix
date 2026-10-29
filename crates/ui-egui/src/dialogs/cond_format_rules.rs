@@ -34,6 +34,7 @@ pub(super) fn manage_rules(app: &mut SheetApp, ui: &mut egui::Ui, open: &mut boo
         egui::ScrollArea::vertical().id_salt("manageRules.list").auto_shrink([false, false]).show(ui, |ui| {
             for (i, r) in rules.iter().enumerate() {
                 let kind = r["rule"].as_object().and_then(|o| o.keys().next().cloned()).unwrap_or_default();
+                let kind = lang.tr(rule_name(&kind));
                 let ranges = r["ranges"].as_array().map(|a| a.iter().filter_map(|x| x.as_str()).collect::<Vec<_>>().join(", ")).unwrap_or_default();
                 let (row, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), egui::Sense::hover());
                 if resp.hovered() {
@@ -86,4 +87,29 @@ pub(super) fn manage_rules(app: &mut SheetApp, ui: &mut egui::Ui, open: &mut boo
             }
         });
     });
+}
+
+/// A rule's kind (its variant, as the engine serializes it) in Excel's words.
+fn rule_name(kind: &str) -> &str {
+    match kind {
+        "CellIs" => "Cell Value",
+        "Expression" => "Formula",
+        "ContainsText" => "Cell Contains",
+        "NotContainsText" => "Does Not Contain",
+        "BeginsWith" => "Begins With",
+        "EndsWith" => "Ends With",
+        "Blanks" => "Blanks",
+        "NoBlanks" => "No Blanks",
+        "Errors" => "Errors",
+        "NoErrors" => "No Errors",
+        "Duplicate" => "Duplicate Values",
+        "Unique" => "Unique Values",
+        "Top10" => "Top/Bottom",
+        "AboveAverage" => "Above/Below Average",
+        "TimePeriod" => "A Date Occurring",
+        "ColorScale" => "Color Scale",
+        "DataBar" => "Data Bar",
+        "IconSet" => "Icon Set",
+        other => other,
+    }
 }

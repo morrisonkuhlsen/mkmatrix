@@ -162,7 +162,9 @@ Since 10-28 every dialog shares one look, Format Cells': a navigation rail of se
 dialog has several (Format Cells, Find and Replace, Data Validation, About), fields under small
 muted labels, choices as round options or joined buttons, lists in framed panels with the chosen
 row tinted, and Cancel / OK under a rule. Text to Columns previews the split; Sort lays its levels
-out as a table (Column, Sort On, Order).
+out as a table (Column, Sort On, Order). Workbook Statistics, Accessibility, Error Checking (a click goes to the
+cell), Evaluate Formula (numbered steps), the Action Journal (with a filter) and Agent Control read as
+figures and lists instead of JSON.
 Go To lists the named ranges of every sheet (a name scoped to another sheet as `Sheet2!Name`) and
 the references entered before; a double-click goes to one. Its Reference box takes several names
 or references separated by commas (`Price, Type`, `B14:C22,F19:G30`) and selects them all.
@@ -193,6 +195,7 @@ scrollbar bugs 2–4 · pixel/feel pass against observed Excel 7–12.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-28 | minor | The report dialogs (Workbook Statistics, Accessibility, Error Checking, Evaluate Formula, Action Journal, Agent Control) show figures, framed lists and steps instead of JSON; Error Checking goes to the cell clicked, the journal filters. Manage Rules names each rule as Excel does (Icon Set, Data Bar…); the Print page has its own Portrait and Landscape icons |
 | 2026-10-28 | minor | Every dialog in Format Cells' style (navigation rails sized to their longest name, muted labels, round options, framed lists, footer under a rule); Text to Columns gets a split preview, Sort a table of levels. File › Print lays its settings out as cards (what to print, orientation, paper, margins, scaling) acting on the sheet's Page Setup, beside a full-height preview. F4 outside editing repeats the last action. Ctrl/Shift-click selects several sheet tabs and edits apply to all of them ([Group] in the title). Text boxes resize from every handle. The toolbar spaces labels and items by one rule; the interface language moved to File › Options. Title bar and File view icons in one colour |
 | 2026-10-25 | minor | AutoSum (Alt+=, Home › AutoSum) over a selected row puts its total to the right of the row, or in its last cell when that is empty, as in Excel; it wrote a one-cell total under each cell. A selection's empty last column takes each row's total and its empty last row each column's, with the block's total in the corner when both are empty |
 | 2026-10-25 | minor | Paste Name lays out only the names in view, so a workbook with thousands of names opens it at once; the arrow keys still scroll the chosen name into view. Go To matches a `Sheet2!Name` reference and hides a workbook name behind the active sheet's own name in any case and script (`Größe` = `GRÖSSE`), as formulas do. The two Page Layout view rows are one; the 0.7 in side margin used when Align with Page Margins is off is marked unverified |
