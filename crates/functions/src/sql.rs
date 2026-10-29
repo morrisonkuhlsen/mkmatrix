@@ -480,9 +480,8 @@ impl<'a> Parser<'a> {
         let expr = self.expr()?;
         let end = self.toks.get(self.i.wrapping_sub(1)).map_or(start, |(_, _, e)| *e);
         let text = self.src.get(start..end).unwrap_or("").trim().to_string();
-        let alias = if self.kw("AS") {
-            Some(self.name()?)
-        } else if matches!(self.peek(), Some(Tok::Ident(s, q)) if *q || !KEYWORDS.iter().any(|k| k.eq_ignore_ascii_case(s))) {
+        // `AS name`, or a bare name straight after the expression.
+        let alias = if self.kw("AS") || matches!(self.peek(), Some(Tok::Ident(s, q)) if *q || !KEYWORDS.iter().any(|k| k.eq_ignore_ascii_case(s))) {
             Some(self.name()?)
         } else {
             None
@@ -934,7 +933,8 @@ fn num(v: &Value) -> R<Option<f64>> {
         Value::Empty => Ok(None),
         Value::Number(n) => Ok(Some(*n)),
         Value::Bool(b) => Ok(Some(if *b { 1.0 } else { 0.0 })),
-        Value::Text(t) => t.trim().parse::<f64>().map(Some).map_err(|_| CellError::Value),
+        // `inf` and `NaN` parse in Rust but aren't numbers in a sheet.
+        Value::Text(t) => t.trim().parse::<f64>().ok().filter(|n| n.is_finite()).map(Some).ok_or(CellError::Value),
         Value::Error(e) => Err(*e),
         Value::Array(_) => Err(CellError::Value),
     }
@@ -1178,7 +1178,8 @@ fn call(name: &str, args: &[Expr], distinct: bool, star: bool, s: &Scope) -> R<V
         }
         ("SUBSTR" | "SUBSTRING", 2 | 3) => {
             let Some(t) = text_of(0)? else { return Ok(Value::Empty) };
-            let start = num_of(1)?.unwrap_or(1.0).max(1.0).min(1e9) as usize - 1;
+            let from = num_of(1)?.unwrap_or(1.0);
+            let start = if from.is_finite() { from.clamp(1.0, 1e9) as usize } else { 1 }.saturating_sub(1);
             let len = num_of(2)?.map_or(usize::MAX, |n| n.clamp(0.0, 1e9) as usize);
             Value::text(t.chars().skip(start).take(len).collect::<String>())
         }
@@ -1296,6 +1297,14 @@ mod tests {
         is_err(ev("SQL", vec![t(&negs), rf(sales())]), CellError::Value);
         // An ambiguous column needs its table.
         is_err(ev("SQL", vec![t("SELECT Region FROM t1 a JOIN t2 b ON a.Total = b.Total"), rf(sales()), rf(sales())]), CellError::Value);
+    }
+
+    #[test]
+    fn hostile_numbers_are_errors_not_panics() {
+        let odd = arr(vec![vec![tv("s"), tv("n")], vec![tv("abc"), tv("NaN")], vec![tv("abc"), tv("inf")]]);
+        // Text that reads as NaN or infinity isn't a number: #VALUE!, never a panic.
+        is_err(ev("SQL", vec![t("SELECT SUBSTR(s, n) FROM t1"), rf(odd.clone())]), CellError::Value);
+        is_err(ev("SQL", vec![t("SELECT n + 1 FROM t1"), rf(odd)]), CellError::Value);
     }
 
     #[test]
