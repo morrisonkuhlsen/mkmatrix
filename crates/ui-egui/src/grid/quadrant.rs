@@ -492,6 +492,20 @@ pub(crate) fn paint_quadrant(
             }
         }
     }
+    // PivotTable report filters: the dropdown on each filter's value cell, shown as filtering
+    // while it lets only some items through.
+    for pt in &sh.pivots {
+        if let Some(r) = pt.last_range
+            && let Some(col) = r.start.col.checked_add(1)
+        {
+            for (i, f) in pt.report_filters().enumerate() {
+                let c = CellRef::new(r.start.row.saturating_add(i as u32), col);
+                if sh.pivot_filter_at(c).is_some() {
+                    buttons.push((c, f.selected.is_some()));
+                }
+            }
+        }
+    }
     for (c, active) in buttons {
         if !range.contains(c) {
             continue;

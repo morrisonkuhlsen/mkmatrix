@@ -169,6 +169,29 @@ fn filters_and_report_filter_rows() {
 }
 
 #[test]
+fn report_filter_cells_and_their_items() {
+    let mut s = sales();
+    s.execute("insert.pivotTable", json!({"rows": ["Product"], "values": ["Sales"], "filters": ["Region"]})).unwrap();
+    s.execute("pivot.filter", json!({"field": "Product", "selected": ["Apples", "Pears"]})).unwrap();
+    let wb = &s.doc().unwrap().wb;
+    let si = wb.active_sheet();
+    let sh = wb.active().unwrap();
+    // Product is also in Rows, so it hides items instead: Region's is the only filter row.
+    let at = |a: &str| sh.pivot_filter_at(CellRef::parse(a).unwrap()).map(|(_, f)| f.source_col.clone());
+    assert_eq!(at("B1"), Some("Region".into()));
+    assert_eq!((at("A1"), at("B2"), at("B3")), (None, None, None));
+    assert!(sh.has_filter_button(CellRef::parse("B1").unwrap()));
+    let items = crate::pivot::report_filter_items(wb, &sh.pivots[0], si, "Region").unwrap();
+    assert_eq!(items, vec![("East".into(), true, 5), ("North".into(), true, 3), ("West".into(), true, 4)]);
+
+    s.execute("pivot.filter", json!({"field": "Region", "selected": ["north"]})).unwrap();
+    let wb = &s.doc().unwrap().wb;
+    let items = crate::pivot::report_filter_items(wb, &wb.active().unwrap().pivots[0], si, "Region").unwrap();
+    assert_eq!(items.iter().map(|(l, on, _)| (l.as_str(), *on)).collect::<Vec<_>>(), [("East", false), ("North", true), ("West", false)]);
+    assert!(crate::pivot::report_filter_items(wb, &wb.active().unwrap().pivots[0], si, "Nope").is_err());
+}
+
+#[test]
 fn show_values_as() {
     let mut s = sales();
     s.execute("insert.pivotTable", json!({"rows": ["Region"], "values": ["Sales"]})).unwrap();
