@@ -349,3 +349,90 @@ fn ctrl_shift_u_expands_the_floating_bar() {
     h.run_steps(3);
     assert!((bar_rect(&h).height() - small.height()).abs() < 1.5);
 }
+
+#[test]
+fn f2_takes_the_edit_from_the_bar_into_the_cell_and_back() {
+    let mut h = harness();
+    click(&mut h, "D8");
+    h.key_press(egui::Key::F2);
+    h.run_steps(3);
+    assert!(h.state().editor.as_ref().is_some_and(|e| e.from_formula_bar));
+    h.key_press(egui::Key::F2);
+    h.run_steps(3);
+    assert!(h.state().editor.as_ref().is_some_and(|e| !e.from_formula_bar), "into the cell");
+    assert!(!bar_shown(&h), "the bar steps away");
+    h.key_press(egui::Key::F2);
+    h.run_steps(3);
+    assert!(h.state().editor.as_ref().is_some_and(|e| e.from_formula_bar), "and back to the bar");
+    assert!(bar_shown(&h));
+}
+
+#[test]
+fn esc_first_closes_the_completion_list_then_cancels() {
+    let mut h = harness();
+    click(&mut h, "B2");
+    h.key_press(egui::Key::F2);
+    h.run_steps(3);
+    h.state_mut().editor.as_mut().unwrap().autocomplete = vec!["SUM".into(), "SUMIF".into()];
+    h.run_steps(1);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    let ed = h.state().editor.as_ref().expect("the first Esc keeps the edit");
+    assert!(ed.autocomplete.is_empty(), "and closes the list");
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    assert!(h.state().editor.is_none(), "the second cancels it");
+}
+
+#[test]
+fn each_sheet_keeps_where_the_bar_was_dropped() {
+    let mut h = harness();
+    h.state_mut().session.execute("home.insertSheet", json!({})).unwrap();
+    h.state_mut().session.execute("sheet.activate", json!({"index": 0})).ok();
+    h.run_steps(3);
+    let first = h.state().session.active().unwrap().wb.active_sheet();
+    ctrl_tap(&mut h);
+    ctrl_tap(&mut h);
+    h.run_steps(3);
+    let grip = h.get_by_role_and_label(egui::accesskit::Role::Button, "Move the formula bar").rect().center();
+    drag(&mut h, grip, grip + egui::vec2(200.0, 250.0));
+    let dropped = h.state().ui.floating_bar_at;
+    assert!(dropped.is_some());
+    // Another sheet hasn't had the bar dropped: it follows the cell there.
+    let other = if first == 0 { 1 } else { 0 };
+    h.state_mut().session.active_mut().unwrap().wb.set_active_sheet(other);
+    h.run_steps(3);
+    assert_eq!(h.state().ui.floating_bar_at, None, "the other sheet has no place of its own");
+    h.state_mut().session.active_mut().unwrap().wb.set_active_sheet(first);
+    h.run_steps(3);
+    assert_eq!(h.state().ui.floating_bar_at, dropped, "back on the first sheet, its place comes back");
+}
+
+#[test]
+fn the_bar_moves_off_the_range_being_pointed_at() {
+    let mut h = harness();
+    click(&mut h, "D8");
+    h.key_press(egui::Key::F2);
+    h.run_steps(3);
+    // Point at the cells the bar sits over (it is just above D8): it moves off them.
+    let bar = bar_rect(&h);
+    let under = {
+        let app = h.state();
+        let sheet = app.session.active().unwrap().wb.active().unwrap();
+        let geo = Geo::new(sheet, app.grid.rect.unwrap(), app.view().scroll);
+        geo.cell_at(sheet, bar.center())
+    };
+    {
+        let ed = h.state_mut().editor.as_mut().unwrap();
+        ed.text = format!("={}", under.a1());
+        ed.point = Some((1, ed.text.len()));
+        ed.point_cell = Some(under);
+    }
+    h.run_steps(3);
+    let cell = {
+        let app = h.state();
+        let sheet = app.session.active().unwrap().wb.active().unwrap();
+        Geo::new(sheet, app.grid.rect.unwrap(), app.view().scroll).cell_rect(sheet, under)
+    };
+    assert!(!bar_rect(&h).intersects(cell), "{:?} clear of {cell:?}", bar_rect(&h));
+}

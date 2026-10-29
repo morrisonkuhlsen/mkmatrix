@@ -126,6 +126,8 @@ pub(super) fn keyboard(app: &mut SheetApp, ctx: &egui::Context, resp: &egui::Res
                     Key::F2 if app.ui.floating_formula_bar && app.session.prefs.formula_bar => {
                         app.floating_bar_open = true;
                         app.begin_edit(None, true);
+                        // Taken here: the edit it starts would read it as F2 in the bar (back to the cell).
+                        ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::F2));
                     }
                     Key::F2 => app.begin_edit(None, false),
                     Key::Delete if delete_selected_object(app, sh) => {}

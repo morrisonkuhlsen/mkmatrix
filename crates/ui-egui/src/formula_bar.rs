@@ -296,11 +296,27 @@ pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
         ctx.animate_bool_with_time(egui::Id::unique(SHOWN), false, EASE_SECONDS);
         return;
     }
-    // The active cell, and the cells' area (the grid without its headings), which the bar stays in.
-    let Some((cell, area)) = app.session.active().and_then(|d| {
+    // Each sheet keeps where the bar was dropped on it: another sheet brings its own place.
+    let sheet_name = app.session.active().and_then(|d| d.wb.active()).map(|sh| sh.name.clone()).unwrap_or_default();
+    let sheet_id = egui::Id::unique("mkmatrix.floating_bar.sheet");
+    if ctx.data(|d| d.get_temp::<String>(sheet_id)).is_some_and(|was| was != sheet_name) {
+        app.ui.floating_bar_at = app.ui.floating_bar_at_sheets.get(&sheet_name).copied();
+    }
+    ctx.data_mut(|d| d.insert_temp(sheet_id, sheet_name.clone()));
+    // The cell being edited (the active one without an edit), the range being pointed at while a
+    // formula is typed, and the cells' area (the grid without its headings), which the bar stays in.
+    let Some((cell, pointed, area)) = app.session.active().and_then(|d| {
         let sh = d.wb.active()?;
+        let si = d.wb.active_sheet();
         let geo = crate::grid::Geo::new(sh, grid, app.view().scroll);
-        Some((geo.cell_rect(sh, d.selection.active), geo.cells))
+        let editing = app.editor.as_ref().filter(|e| e.sheet == si).map_or(d.selection.active, |e| e.cell);
+        let pointed = app.editor.as_ref().filter(|e| e.point.is_some()).and_then(|e| {
+            let to = e.point_cell?;
+            let from = e.point_anchor.filter(|(s, _)| *s == si).map_or(to, |(_, c)| c);
+            let r = mkmatrix_engine::core::RangeRef::new(from, to);
+            Some(geo.cell_rect(sh, r.start).union(geo.cell_rect(sh, r.end)))
+        });
+        Some((geo.cell_rect(sh, editing), pointed, geo.cells))
     }) else {
         return;
     };
@@ -343,11 +359,46 @@ pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
     };
     let x = x.clamp(area.left() + 4.0, (area.right() - w - 8.0).max(area.left() + 4.0));
     let y = y.clamp(area.top() + 4.0, (area.bottom() - h - FOOTER_H - 8.0).max(area.top() + 4.0));
+    // Out of the way of the range being pointed at: below it, or else above it.
+    let total = h + FOOTER_H + 4.0;
+    let y = match pointed {
+        Some(r) if Rect::from_min_size(pos2(x, y), vec2(w + 8.0, total)).intersects(r.expand(2.0)) => {
+            if r.bottom() + gap + total <= area.bottom() - 8.0 {
+                r.bottom() + gap
+            } else if r.top() - gap - total >= area.top() + 4.0 {
+                r.top() - gap - total
+            } else {
+                y
+            }
+        }
+        _ => y,
+    };
+    // Fainter while it waits: away from the pointer, with nothing typed in it or a range being
+    // dragged out on the sheet.
+    let last_rect = ctx.data(|d| d.get_temp::<Rect>(egui::Id::unique("mkmatrix.floating_bar.rect")));
+    let (hover, down) = ctx.input(|i| (i.pointer.hover_pos(), i.pointer.primary_down()));
+    let over = hover.is_some_and(|p| last_rect.is_some_and(|r| r.expand(6.0).contains(p)));
+    let waiting = !over && (!typing || (down && pointed.is_some()));
+    let solid = ctx.animate_value_with_time(egui::Id::unique("mkmatrix.floating_bar.solid"), if waiting { FAINT } else { 1.0 }, EASE_SECONDS);
+    // A bar dropped away from its cell points at it: a thin line to the cell, outlined.
+    if app.ui.floating_bar_at.is_some() {
+        let bar = Rect::from_min_size(pos2(x, y), vec2(w + 8.0, total));
+        if !bar.expand(gap + 2.0).intersects(cell) {
+            // From the bar's edge nearest the cell to the cell's edge nearest the bar.
+            let clamp = |r: Rect, q: egui::Pos2| pos2(q.x.clamp(r.left(), r.right()), q.y.clamp(r.top(), r.bottom()));
+            let from = clamp(bar.shrink(6.0), cell.center());
+            let near = clamp(cell, from);
+            let p = ctx.layer_painter(egui::LayerId::new(egui::Order::Middle, egui::Id::unique("mkmatrix.floating_bar.link"))).with_clip_rect(area);
+            let ink = t.accent.gamma_multiply(0.7 * shown);
+            p.line_segment([from, near], egui::Stroke::new(1.0, ink));
+            p.rect_stroke(cell, 0.0, egui::Stroke::new(1.5, ink), egui::StrokeKind::Inside);
+        }
+    }
     let mut layout = BarLayout { height: h, ..Default::default() };
     let mut moved: Option<egui::Vec2> = None;
     let mut reset_at = false;
     egui::Area::new(egui::Id::unique("mkmatrix.floating_formula_bar")).order(egui::Order::Foreground).fixed_pos(pos2(x, y)).show(ctx, |ui| {
-        ui.multiply_opacity(shown);
+        ui.multiply_opacity(shown * solid);
         let frame = egui::Frame::new()
             .fill(t.window)
             .stroke(egui::Stroke::new(1.0, t.input_border))
@@ -372,14 +423,21 @@ pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
                 footer(app, ui, layout.field, &t);
             });
         resize_edges(app, ui, frame.response.rect, grid.min, w, lines, room, row_h, &t);
+        ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("mkmatrix.floating_bar.rect"), frame.response.rect));
     });
     if reset_at {
         app.ui.floating_bar_at = None;
+        app.ui.floating_bar_at_sheets.remove(&sheet_name);
     } else if let Some(d) = moved {
-        app.ui.floating_bar_at = Some([x + d.x - grid.left(), y + d.y - grid.top()]);
+        let at = [x + d.x - grid.left(), y + d.y - grid.top()];
+        app.ui.floating_bar_at = Some(at);
+        app.ui.floating_bar_at_sheets.insert(sheet_name.clone(), at);
     }
     ctx.data_mut(|d| d.insert_temp(BarLayout::id(), layout));
 }
+
+/// The floating bar's opacity while it waits (see [`floating`]).
+const FAINT: f32 = 0.55;
 
 /// The strip under the floating bar's field.
 const FOOTER_H: f32 = 20.0;
@@ -952,6 +1010,15 @@ pub fn editor_widget(app: &mut SheetApp, ui: &mut egui::Ui, id: egui::Id, font: 
                 state.store(ui.ctx(), id);
             }
         }
+        // With the formula bar floating, F2 takes the edit from the bar into the cell and back.
+        if app.ui.floating_formula_bar && app.session.prefs.formula_bar && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::F2)) {
+            ed.from_formula_bar = !ed.from_formula_bar;
+            ed.request_focus = true;
+            ed.sync_caret = true;
+            if ed.from_formula_bar {
+                app.floating_bar_open = true;
+            }
+        }
         // Ctrl+Shift+U (Control+Shift+U on a Mac) expands or collapses the formula bar while editing too.
         if ui.input_mut(|i| i.consume_key(egui::Modifiers::CTRL | egui::Modifiers::SHIFT, Key::U)) {
             app.run_or_alert("view.expandFormulaBar", json!({}));
@@ -959,6 +1026,9 @@ pub fn editor_widget(app: &mut SheetApp, ui: &mut egui::Ui, id: egui::Id, font: 
     }
     // The text widget.
     let refs = formula_refs(&ed.text);
+    // The bracket at the caret (just before or after it) and its partner, and any bracket left
+    // without one.
+    let (matched, unmatched) = if ed.is_formula() { brackets(&ed.text, ed.caret) } else { (None, Vec::new()) };
     let t = Tokens::get(ui.ctx());
     let on_sheet = id == egui::Id::unique("mkmatrix.cell_editor");
     let cell_text_color = if on_sheet { t.cell_text } else { t.text };
@@ -967,14 +1037,25 @@ pub fn editor_widget(app: &mut SheetApp, ui: &mut egui::Ui, id: egui::Id, font: 
         let s = buf.as_str();
         let mut job = egui::text::LayoutJob::default();
         let mut pos = 0usize;
-        let mut spans: Vec<(usize, usize, usize)> = refs.iter().filter(|r| r.1 <= s.len()).map(|r| (r.0, r.1, r.4)).collect();
-        spans.sort();
-        for (a, b, idx) in spans {
-            if a < pos || !s.is_char_boundary(a) || !s.is_char_boundary(b) {
+        // (start, end, colour, background): references in their colours, the matched brackets
+        // in the accent on a tint, an unmatched one in the danger colour.
+        let mut spans: Vec<(usize, usize, egui::Color32, egui::Color32)> =
+            refs.iter().filter(|r| r.1 <= s.len()).map(|r| (r.0, r.1, t.ref_color(r.4, on_sheet), egui::Color32::TRANSPARENT)).collect();
+        for at in matched.iter().flat_map(|(a, b)| [*a, *b]) {
+            spans.push((at, at + 1, t.accent, t.accent.gamma_multiply(0.18)));
+        }
+        for at in &unmatched {
+            spans.push((*at, at + 1, t.danger, egui::Color32::TRANSPARENT));
+        }
+        spans.sort_by_key(|x| (x.0, x.1));
+        for (a, b, color, bg) in spans {
+            if a < pos || b > s.len() || !s.is_char_boundary(a) || !s.is_char_boundary(b) {
                 continue;
             }
             job.append(s.get(pos..a).unwrap_or(""), 0.0, egui::TextFormat::simple(font2.clone(), cell_text_color));
-            job.append(s.get(a..b).unwrap_or(""), 0.0, egui::TextFormat::simple(font2.clone(), t.ref_color(idx, on_sheet)));
+            let mut format = egui::TextFormat::simple(font2.clone(), color);
+            format.background = bg;
+            job.append(s.get(a..b).unwrap_or(""), 0.0, format);
             pos = b;
         }
         job.append(s.get(pos..).unwrap_or(""), 0.0, egui::TextFormat::simple(font2.clone(), cell_text_color));
@@ -1205,6 +1286,55 @@ fn cycle_anchor(ed: &mut crate::editor::EditState) {
     }
 }
 
+/// The brackets of formula text, outside text in quotes, quoted sheet names and structured
+/// references: the pair at char index `caret` (the bracket just before it, else the one after it)
+/// as byte offsets, and the byte offsets of closing brackets with no partner (an opening one
+/// is only not closed yet). A `'` after an operand is MK Matrix's transpose, not a sheet's quote.
+fn brackets(text: &str, caret: usize) -> (Option<(usize, usize)>, Vec<usize>) {
+    let mut open: Vec<(usize, char)> = Vec::new();
+    let mut pairs: Vec<(usize, usize)> = Vec::new();
+    let mut unmatched = Vec::new();
+    let (mut quote, mut sheet, mut square) = (false, false, 0usize);
+    // The last character outside quotes and spaces: after an operand's end a `'` transposes.
+    let mut last = ' ';
+    for (b, c) in text.char_indices() {
+        let operand_end = last.is_alphanumeric() || matches!(last, ')' | ']' | '}' | '%' | '\'' | '$');
+        if !quote && !sheet && !c.is_whitespace() && c != '"' && !(c == '\'' && !operand_end) {
+            last = c;
+        }
+        match c {
+            '"' if !sheet && square == 0 => quote = !quote,
+            '\'' if !quote && square == 0 && (sheet || !operand_end) => {
+                sheet = !sheet;
+                if !sheet {
+                    last = 'a';
+                }
+            }
+            _ if quote || sheet => {}
+            '[' => square += 1,
+            ']' => square = square.saturating_sub(1),
+            _ if square > 0 => {}
+            '(' | '{' => open.push((b, c)),
+            ')' | '}' => {
+                let want = if c == ')' { '(' } else { '{' };
+                match open.last() {
+                    Some(&(o, oc)) if oc == want => {
+                        open.pop();
+                        pairs.push((o, b));
+                    }
+                    _ => unmatched.push(b),
+                }
+            }
+            _ => {}
+        }
+    }
+    let byte = |i: usize| text.char_indices().nth(i).map(|(b, _)| b);
+    let before = caret.checked_sub(1).and_then(byte);
+    let after = byte(caret);
+    let pair_at = |at: Option<usize>| at.and_then(|at| pairs.iter().copied().find(|(a, b)| *a == at || *b == at));
+    (pair_at(before).or_else(|| pair_at(after)), unmatched)
+}
+
 fn function_names() -> Vec<String> {
     static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
     NAMES
@@ -1414,6 +1544,26 @@ mod spill_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn brackets_pair_up_outside_text_sheet_names_and_table_columns() {
+        let f = "=IF(SUM(A1:A3)>0,\"(\",'My (sheet)'!B1)+T[(x)]";
+        // The caret after SUM's ")" (char 14) pairs it with SUM's "(".
+        let sum_open = f.find("SUM(").unwrap() + 3;
+        let sum_close = f.find(")>").unwrap();
+        assert_eq!(brackets(f, sum_close + 1).0, Some((sum_open, sum_close)));
+        // Before IF's "(" (the caret right after "=IF") it pairs with the last ")".
+        let if_close = f.rfind(")+").unwrap();
+        assert_eq!(brackets(f, 3).0, Some((3, if_close)));
+        assert!(brackets(f, 0).1.is_empty(), "nothing unmatched");
+        // A closer too many is flagged; an opener still being typed isn't.
+        assert_eq!(brackets("=1+2)", 0).1, vec![4]);
+        assert!(brackets("=SUM(1,2", 0).1.is_empty());
+        // A' transposes: the next brackets still pair.
+        let t = "=(A'*B)'+(1)";
+        assert_eq!(brackets(t, t.len()).0, Some((9, 11)));
+        assert!(brackets(t, 0).1.is_empty());
+    }
 
     fn press(key: Key) -> egui::RawInput {
         let mut raw = egui::RawInput::default();

@@ -125,6 +125,9 @@ pub struct UiState {
     /// Where the floating formula bar was dragged to by its grip, from the grid's top-left corner;
     /// `None` keeps it just above the active cell (a double-click on the grip brings it back).
     pub floating_bar_at: Option<[f32; 2]>,
+    /// Where the floating formula bar was dropped on each sheet (by name), as
+    /// `floating_bar_at`: each sheet keeps its own, since their layouts differ.
+    pub floating_bar_at_sheets: std::collections::BTreeMap<String, [f32; 2]>,
     /// The floating formula bar's width as its right edge was dragged to (`None`: as wide as the
     /// formula's longest line, 560 px at least and most of the grid at most). It lasts while the
     /// bar stays up on one cell: the next cell's bar is sized to its own formula.
@@ -224,6 +227,7 @@ impl Default for UiState {
             matrix_brackets: true,
             floating_formula_bar: false,
             floating_bar_at: None,
+            floating_bar_at_sheets: Default::default(),
             floating_bar_width: None,
             floating_bar_lines: None,
             math_notation: false,
