@@ -256,6 +256,9 @@ impl SheetApp {
             self.synthetic_pending = false;
             self.synthetic_injected_at_pass = None;
         }
+        if self.chrome.window_controls && self.chrome.title_bar {
+            ribbon::resize_edges(&ctx);
+        }
     }
 
     /// Current selection's top-left cell text as A1 (for the Name Box).

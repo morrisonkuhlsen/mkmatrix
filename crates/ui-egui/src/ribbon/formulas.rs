@@ -19,9 +19,38 @@ fn circular_references(app: &SheetApp) -> Vec<(usize, String, String)> {
         .collect()
 }
 
+/// A function-category button and its menu of functions (`cat` is a `formulas.functions` category).
+fn function_menu(app: &mut SheetApp, ui: &mut Ui, icon: Icon, label: &str, cat: &str, cid: &'static str) {
+    let r = big_button(ui, icon, label, label, true);
+    control_keytip(app, ui, &r, cid);
+    let forced_c = invoke(app, cid);
+    egui::Popup::menu(&r).open_memory(popup_command(forced_c, r.clicked())).show(|ui| {
+        ui.set_max_height(420.0);
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for f in mkmatrix_engine::cmd::formulas::function_list() {
+                let Some(n) = f["name"].as_str() else { continue };
+                let listed =
+                    if cat == "LinearAlgebra" { mkmatrix_engine::cmd::formulas::is_linear_algebra(n) } else { f["category"].as_str() == Some(cat) };
+                if !listed {
+                    continue;
+                }
+                let locale = app.ui.language.formula_locale();
+                let name = app.session.active().map(|d| crate::formula_locale::completion_name(n, locale, &d.wb, d.wb.active_sheet())).unwrap_or(n);
+                let desc = crate::formula_locale::description(n, locale, app.ui.language).unwrap_or_default();
+                if ui.button(name).on_hover_text(desc).clicked() {
+                    app.run_or_alert("formulas.insertFunction", json!({"name": n}));
+                    ui.close();
+                }
+            }
+        });
+    });
+}
+
 /// The Formulas tab: Insert Function, AutoSum, the function-category menus (names in the formula
 /// language, descriptions in the interface language), defined names, auditing and calculation.
 pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
+    // MK Matrix's own category leads: the matrix functions.
+    function_menu(app, ui, Icon::Lambda, "Linear\nAlgebra", "LinearAlgebra", "formulas.linearAlgebra");
     let __k = big_button(ui, Icon::Function, "Insert\nFunction", "Insert Function (⇧F3)", false);
     control_keytip(app, ui, &__k, "dialog:insertFunction");
     if __k.clicked() {
@@ -33,37 +62,17 @@ pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
         act(app, "formulas.autoSum", json!({}));
     }
     egui::Popup::menu(&sa).show(|ui| autosum_menu(app, ui));
-    for (label, cat, cid) in [
-        ("Financial", "Financial", "formulas.financial"),
-        ("Logical", "Logical", "formulas.logical"),
-        ("Text", "Text", "formulas.text"),
-        ("Date &\nTime", "DateTime", "formulas.dateTime"),
-        ("Lookup &\nReference", "Lookup", "formulas.lookup"),
-        ("Math &\nTrig", "MathTrig", "formulas.mathTrig"),
-        ("More\nFunctions", "Statistical", "formulas.moreFunctions"),
+    // Each category its own icon, so the single row shows them as icons alone.
+    for (icon, label, cat, cid) in [
+        (Icon::Currency, "Financial", "Financial", "formulas.financial"),
+        (Icon::Check, "Logical", "Logical", "formulas.logical"),
+        (Icon::TextBox, "Text", "Text", "formulas.text"),
+        (Icon::Calendar, "Date &\nTime", "DateTime", "formulas.dateTime"),
+        (Icon::Find, "Lookup &\nReference", "Lookup", "formulas.lookup"),
+        (Icon::Pi, "Math &\nTrig", "MathTrig", "formulas.mathTrig"),
+        (Icon::More, "More\nFunctions", "Statistical", "formulas.moreFunctions"),
     ] {
-        let r = big_button(ui, Icon::Book, label, label, true);
-        control_keytip(app, ui, &r, cid);
-        let forced_c = invoke(app, cid);
-        egui::Popup::menu(&r).open_memory(popup_command(forced_c, r.clicked())).show(|ui| {
-            ui.set_max_height(420.0);
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                for f in mkmatrix_engine::cmd::formulas::function_list() {
-                    if f["category"].as_str() == Some(cat)
-                        && let Some(n) = f["name"].as_str()
-                    {
-                        let locale = app.ui.language.formula_locale();
-                        let name =
-                            app.session.active().map(|d| crate::formula_locale::completion_name(n, locale, &d.wb, d.wb.active_sheet())).unwrap_or(n);
-                        let desc = crate::formula_locale::description(n, locale, app.ui.language).unwrap_or_default();
-                        if ui.button(name).on_hover_text(desc).clicked() {
-                            app.run_or_alert("formulas.insertFunction", json!({"name": n}));
-                            ui.close();
-                        }
-                    }
-                }
-            });
-        });
+        function_menu(app, ui, icon, label, cat, cid);
     }
     sep(ui, "Function Library");
     let __k = big_button(ui, Icon::Name, "Name\nManager", "Name Manager", false);
@@ -71,13 +80,13 @@ pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
     if __k.clicked() {
         app.open_dialog("nameManager", json!({}));
     }
-    ui.vertical(|ui| {
+    controls::stack(ui, |ui| {
         let __k = small_button(ui, Icon::Name, "Define Name", "Define Name", false);
         control_keytip(app, ui, &__k, "dialog:defineName");
         if __k.clicked() {
             app.open_dialog("defineName", json!({}));
         }
-        let use_in = small_button(ui, Icon::Function, "Use in Formula", "Use in Formula", true);
+        let use_in = small_button(ui, Icon::Insert, "Use in Formula", "Use in Formula", true);
         anchor_keytip(app, ui, &use_in, &["dialog:pasteName"]);
         egui::Popup::menu(&use_in).show(|ui| {
             // The menu lists the names Paste Names lists; clicking one runs `formulas.useInFormula`, which puts it at the caret.
@@ -117,7 +126,7 @@ pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
         }
     });
     sep(ui, "Defined Names");
-    ui.vertical(|ui| {
+    controls::stack(ui, |ui| {
         if small_button(ui, Icon::Trace, "Trace Precedents", "Trace Precedents", false).clicked()
             && let Ok(r) = app.run("formulas.tracePrecedents", json!({}))
         {
@@ -132,7 +141,7 @@ pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
             app.grid.trace = None;
         }
     });
-    ui.vertical(|ui| {
+    controls::stack(ui, |ui| {
         let __k = small_button(ui, Icon::Fx, "Show Formulas", "Show Formulas", false);
         control_keytip(app, ui, &__k, "formulas.showFormulas");
         if __k.clicked() {
@@ -187,7 +196,7 @@ pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
             ],
         );
     });
-    ui.vertical(|ui| {
+    controls::stack(ui, |ui| {
         let __k = small_button(ui, Icon::Calc, "Calculate Now", "Calculate Now (F9)", false);
         control_keytip(app, ui, &__k, "formulas.calculateNow");
         if __k.clicked() {

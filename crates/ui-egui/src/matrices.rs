@@ -4,7 +4,7 @@
 //! beside them, lit while the pointer is over either.
 
 use egui::{Align2, Color32, FontFamily, FontId, Painter, Rect, Stroke, pos2, vec2};
-use mkmatrix_engine::core::{CellRef, RangeRef};
+use mkmatrix_engine::core::{CellRef, RangeRef, Value};
 use mkmatrix_engine::model::{Sheet, Workbook};
 
 use crate::grid::Geo;
@@ -82,15 +82,44 @@ const NAME_SIZE: f32 = 18.0;
 /// The gap between the name and the bracket.
 const NAME_GAP: f32 = 7.0;
 
+/// The estimated width of a matrix's name at zoom `z`.
+fn name_width(name: &str, z: f32) -> f32 {
+    name.chars().count() as f32 * NAME_SIZE * z * 0.62 + 2.0
+}
+
+/// The width (in pixels at 100%) the column left of matrix `name` needs beyond its contents to
+/// show the name beside them: what AutoFit adds to that column.
+pub fn name_room(name: &str) -> f32 {
+    (name_width(name, 1.0) + NAME_GAP + 3.0 + 4.0).ceil()
+}
+
+/// The room AutoFit leaves in column `col` of sheet `si` for the names of the matrices that start
+/// just right of it.
+pub fn room_left_of(wb: &Workbook, si: usize, col: u32) -> f32 {
+    on_sheet(wb, si).iter().filter(|(_, r)| r.start.col == col.saturating_add(1)).map(|(n, _)| name_room(n)).fold(0.0, f32::max)
+}
+
 /// Where a matrix's name sits: left of the left bracket, centred on its height; above the
-/// bracket's top when the sheet's edge leaves no room on the left. The width is estimated, so
-/// hit-testing needs no fonts; the name is drawn right-aligned inside it.
-fn name_rect(geo: &Geo, r: Rect, name: &str) -> Rect {
+/// bracket's top when the sheet's edge leaves no room on the left. Numbers in the column beside
+/// the bracket hug it, so over them the name moves to that column's left edge when the column
+/// has room for both (AutoFit's double click leaves it, [`name_room`]). The width is estimated,
+/// so hit-testing needs no fonts; the name is drawn right-aligned inside it.
+fn name_rect(geo: &Geo, sh: &Sheet, range: RangeRef, r: Rect, name: &str) -> Rect {
     let size = NAME_SIZE * geo.z;
-    let w = name.chars().count() as f32 * size * 0.62 + 2.0;
+    let w = name_width(name, geo.z);
     let right = r.left() - 3.0 - NAME_GAP * geo.z;
+    let (top, bottom) = (r.center().y - size * 0.7, r.center().y + size * 0.7);
+    if range.start.col > 0 {
+        let col = range.start.col - 1;
+        let left = geo.cell_rect(sh, CellRef::new(range.start.row, col)).left() + 4.0 * geo.z;
+        let (first, last) = (geo.row_at(sh, top).max(range.start.row), geo.row_at(sh, bottom).min(range.end.row));
+        let hugging = (first..=last).any(|row| matches!(sh.value(CellRef::new(row, col)), Value::Number(_) | Value::Bool(_) | Value::Error(_)));
+        if hugging && left >= geo.cells.left() && left + w <= right {
+            return Rect::from_min_max(pos2(left, top), pos2(left + w, bottom));
+        }
+    }
     if right - w >= geo.cells.left() {
-        Rect::from_min_max(pos2(right - w, r.center().y - size * 0.7), pos2(right, r.center().y + size * 0.7))
+        Rect::from_min_max(pos2(right - w, top), pos2(right, bottom))
     } else {
         let bottom = r.top() - 4.0;
         Rect::from_min_max(pos2(r.left() - 3.0, bottom - size * 1.4), pos2(r.left() - 3.0 + w, bottom))
@@ -105,7 +134,7 @@ pub fn bracket_at(geo: &Geo, sh: &Sheet, matrices: &[(String, RangeRef)], p: egu
         .find(|(name, range)| {
             let r = geo.range_rect(sh, *range);
             let on_upright = (p.x - (r.left() - 3.0)).abs() <= 4.0 || (p.x - (r.right() + 3.0)).abs() <= 4.0;
-            (on_upright && p.y >= r.top() - 3.0 && p.y <= r.bottom() + 3.0) || name_rect(geo, r, name).expand(2.0).contains(p)
+            (on_upright && p.y >= r.top() - 3.0 && p.y <= r.bottom() + 3.0) || name_rect(geo, sh, *range, r, name).expand(2.0).contains(p)
         })
         .cloned()
 }
@@ -117,7 +146,7 @@ pub fn paint_brackets(p: &Painter, geo: &Geo, sh: &Sheet, matrices: &[(String, R
     let font = FontId::new(NAME_SIZE * geo.z, FontFamily::Name(crate::theme::CELL_ITALIC.into()));
     for (name, range) in matrices {
         let r = geo.range_rect(sh, *range);
-        let label = name_rect(geo, r, name);
+        let label = name_rect(geo, sh, *range, r, name);
         if !r.is_positive() || !(r.intersects(p.clip_rect()) || label.intersects(p.clip_rect())) {
             continue;
         }

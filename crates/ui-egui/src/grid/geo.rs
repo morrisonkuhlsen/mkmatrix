@@ -34,7 +34,7 @@ pub struct Geo {
 impl Geo {
     pub fn new(sh: &Sheet, rect: Rect, scroll: egui::Vec2) -> Geo {
         let zoom = (sh.zoom as f32 / 100.0).clamp(0.1, 4.0);
-        let z = zoom * DISPLAY_SCALE;
+        let z = zoom * display_scale();
         let header_h = if sh.show_headings { (COL_HEADER_H * zoom.max(0.75)).round() } else { 0.0 };
         let ri = std::sync::Arc::new(LineIndex::new(&sh.rows, sh.default_row_height, MAX_ROWS));
         let ci = std::sync::Arc::new(LineIndex::new(&sh.cols, sh.default_col_width, MAX_COLS));
@@ -92,7 +92,7 @@ impl Geo {
     pub fn paged(sh: &Sheet, rect: Rect, scroll: egui::Vec2, grid: Arc<mkmatrix_engine::paper::PageGrid>) -> Geo {
         let mut g = Geo::new(sh, rect, scroll);
         let zoom = (sh.zoom as f32 / 100.0).clamp(0.1, 4.0);
-        g.z = zoom * DISPLAY_SCALE * grid.scale.clamp(0.1, 4.0);
+        g.z = zoom * display_scale() * grid.scale.clamp(0.1, 4.0);
         (g.fr, g.fc, g.frozen_w, g.frozen_h) = (0, 0, 0.0, 0.0);
         g.paper = Some(grid);
         g

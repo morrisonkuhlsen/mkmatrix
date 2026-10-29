@@ -22,6 +22,7 @@ mod data;
 mod find;
 mod format_cells;
 mod insert_function;
+pub(crate) mod kit;
 mod macros;
 mod names;
 mod paste;

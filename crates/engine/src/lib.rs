@@ -189,6 +189,9 @@ pub struct DocState {
     pub title: String,
     /// Per-sheet selection memory.
     pub sheet_selections: Vec<Selection>,
+    /// The sheets selected together with Ctrl+ or Shift+click on their tabs (Excel's [Group]),
+    /// sorted; empty when one sheet is selected. Edits to cells then go to every sheet in it.
+    pub sheet_group: Vec<usize>,
     /// Allow Edit Ranges unlocked with their password in this session: (sheet name, title).
     pub unlocked_ranges: Vec<(String, String)>,
     /// The format `path`'s content was recognised as when its extension doesn't name one (an
@@ -300,6 +303,7 @@ impl DocState {
             uid: NEXT_UID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             title,
             sheet_selections: vec![],
+            sheet_group: vec![],
             unlocked_ranges: vec![],
             content_kind: None,
             scripts_trusted,
@@ -632,7 +636,7 @@ impl Session {
         let marked = doc_uid.zip(start).map(|(uid, (_, len))| (uid, len));
         self.marks.extend(marked);
         self.depth = self.depth.saturating_add(1);
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (spec.run)(self, &params)));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.run_spec(spec, id, &params)));
         self.depth = self.depth.saturating_sub(1);
         if marked.is_some() {
             self.marks.pop();
@@ -793,6 +797,74 @@ impl Session {
                 std::panic::resume_unwind(panic)
             }
         }
+    }
+
+    /// Runs a command's body: once, or, for a top-level edit while sheets are selected together,
+    /// on every sheet in the group (`cmd::sheet::fan_out`). It is one call to `execute`, so one
+    /// undo step; when it fails on any sheet the workbook and selection come back as they were.
+    fn run_spec(&mut self, spec: &CommandSpec, id: &str, params: &Json) -> Result<Json> {
+        let plan = if self.depth == 1 && spec.undoable { cmd::sheet::fan_out(self, id, params) } else { None };
+        let Some(plan) = plan else { return (spec.run)(self, params) };
+        let d = self.doc()?;
+        let (wb, active, selection) = (d.wb.clone(), d.wb.active_sheet(), d.selection.clone());
+        let restore = |s: &mut Session| {
+            if let Ok(d) = s.doc_mut() {
+                d.wb = wb.clone();
+                d.wb.set_active_sheet(active);
+                d.selection = selection.clone();
+                d.calc.rebuild(&d.wb);
+            }
+        };
+        let mut last = Json::Null;
+        match plan {
+            cmd::sheet::GroupFanOut::Cells(group) => {
+                let mut after = selection.clone();
+                for i in group {
+                    let d = self.doc_mut()?;
+                    d.wb.set_active_sheet(i);
+                    d.selection = selection.clone();
+                    match (spec.run)(self, params) {
+                        Ok(r) => last = r,
+                        Err(e) => {
+                            restore(self);
+                            return Err(e);
+                        }
+                    }
+                    if i == active {
+                        after = self.doc()?.selection.clone();
+                    }
+                }
+                let d = self.doc_mut()?;
+                d.wb.set_active_sheet(active);
+                d.selection = after;
+            }
+            cmd::sheet::GroupFanOut::Sheets(mut group) => {
+                let d = self.doc()?;
+                let visible = d.wb.sheets.iter().filter(|s| s.visibility == mkmatrix_model::Visibility::Visible).count();
+                if id != "sheet.tabColor" && group.len() >= visible {
+                    return Err(EngineError::Other("A workbook must contain at least one visible worksheet.".into()));
+                }
+                // From the last sheet back, so deleting one doesn't move the others' indices.
+                group.sort_unstable_by(|a, b| b.cmp(a));
+                for i in group {
+                    let mut p = params.clone();
+                    if let Some(m) = p.as_object_mut() {
+                        m.insert("sheet".into(), serde_json::json!(i));
+                    }
+                    match (spec.run)(self, &p) {
+                        Ok(r) => last = r,
+                        Err(e) => {
+                            restore(self);
+                            return Err(e);
+                        }
+                    }
+                }
+                if id != "sheet.tabColor" {
+                    self.doc_mut()?.sheet_group.clear();
+                }
+            }
+        }
+        Ok(last)
     }
 
     /// Opens an undo group on the active document that can span several calls (for example a

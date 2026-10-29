@@ -30,6 +30,28 @@ fn transpose_writes_the_formula_past_the_block() {
 }
 
 #[test]
+fn transpose_never_writes_over_cells_in_use() {
+    // #19: the formula went to E2 whatever was there.
+    let mut s = block();
+    s.execute("range.setValues", json!({"range": "E2", "values": [[73]]})).unwrap();
+    let mut h = harness(s, 4);
+    h.get_by_label("Transpose").click();
+    h.run_steps(3);
+    let d = h.state().session.active().unwrap();
+    let e2 = d.wb.active().unwrap().value(mkmatrix_engine::core::CellRef::parse("E2").unwrap());
+    assert_eq!(e2.display(), "73", "E2 kept");
+    assert_eq!(formula(&h, "F2").as_deref(), Some("B2:C3'"), "the first free spot right of it");
+    // A result that would run into a used cell below its top moves on too.
+    let mut s = block();
+    s.execute("range.setValues", json!({"range": "E3", "values": [[1]]})).unwrap();
+    let mut h = harness(s, 4);
+    h.get_by_label("Transpose").click();
+    h.run_steps(3);
+    assert_eq!(formula(&h, "E2"), None);
+    assert_eq!(formula(&h, "F2").as_deref(), Some("B2:C3'"));
+}
+
+#[test]
 fn multiply_starts_a_formula_to_point_the_second_matrix() {
     let mut h = harness(block(), 4);
     h.get_by_label("Multiply by… (point at the second matrix)").click();

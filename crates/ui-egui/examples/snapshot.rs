@@ -2,7 +2,7 @@
 //!
 //! `cargo run --release -p mkmatrix-ui-egui --example snapshot -- [--sample sales] [--in file.xlsx]
 //!  [--size 1440x900] [--scale 2] [--cmd 'id={json}']... [--tab Insert] [--dark] [--language en|es|zh|ja|ko|ru|pt|de|cs|fr|tr]
-//!  [--dialog 'name={json}'] [--hf-edit header|footer] [--splash] [--backstage] [--density normal|compact|minimal] [--ui 'id={json}']... [--pointer x,y] [--edit '=formula'] out.png`
+//!  [--dialog 'name={json}'] [--hf-edit header|footer] [--splash] [--backstage [page]] [--density normal|compact|minimal] [--ui 'id={json}']... [--pointer x,y] [--edit '=formula'] out.png`
 //!
 //! `--splash` renders the splash screen alone, at its own size.
 
@@ -26,6 +26,7 @@ fn main() {
     let mut hf_edit: Option<String> = None;
     let mut splash = false;
     let mut backstage = false;
+    let mut backstage_page = mkmatrix_ui_egui::backstage::Page::Home;
     let mut density: Option<String> = None;
     let mut ui_cmds: Vec<String> = vec![];
     let mut pointer: Option<egui::Pos2> = None;
@@ -84,7 +85,14 @@ fn main() {
                 language = args.get(i).cloned();
             }
             "--splash" => splash = true,
-            "--backstage" => backstage = true,
+            "--backstage" => {
+                backstage = true;
+                // An optional page id (`print`, `options`…) right after the flag.
+                if let Some(page) = args.get(i + 1).and_then(|id| mkmatrix_ui_egui::backstage::Page::ALL.into_iter().find(|p| p.id() == id)) {
+                    backstage_page = page;
+                    i += 1;
+                }
+            }
             "--edit" => {
                 i += 1;
                 edit = args.get(i).cloned();
@@ -175,7 +183,7 @@ fn main() {
                     let _ = app.run("view.density", json!({"mode": d}));
                 }
                 if backstage {
-                    app.open_backstage(mkmatrix_ui_egui::backstage::Page::Home);
+                    app.open_backstage(backstage_page);
                 }
                 app.grid.pane = pane;
                 app.selected_chart = chart;

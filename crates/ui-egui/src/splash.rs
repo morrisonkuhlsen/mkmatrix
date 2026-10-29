@@ -1,9 +1,10 @@
 //! The splash screen: a small window of its own, without decorations, before the main one, as
 //! MK Sigma and MK Perth have. In two halves: on Morrison Kühlsen's ink, MK Matrix's mark, name,
 //! motto and version, a bar that fills while it shows with the program's parts named in turn,
-//! and the house's wordmark; beside them, artwork drawn in code in MK Matrix's teal: a bracketed
-//! matrix, a row of it meeting a column in the cell their product fills. It closes by itself
-//! after a moment; a click or Esc closes it sooner.
+//! and the house's wordmark; beside them, a picture of linear algebra's identities on a dark
+//! field (`assets/splash/`). Without the picture, artwork drawn
+//! in code takes its place: a bracketed matrix, a row of it meeting a column in the cell their
+//! product fills. It closes by itself after a moment; a click or Esc closes it sooner.
 
 use egui::epaint::{Mesh, Vertex};
 use egui::{Align2, Color32, CornerRadius, FontId, Rect, Sense, Stroke, StrokeKind, TextureHandle, TextureOptions, pos2, vec2};
@@ -18,17 +19,21 @@ const LAYOUT_HEIGHT: f32 = 400.0;
 const HOLD: f64 = 5.0;
 /// The Morrison Kühlsen wordmark, white on clear (a brand asset: `docs/brand/`).
 const MORRISON_KUHLSEN: &[u8] = include_bytes!("../../../docs/brand/morrison-kuhlsen.png");
+/// The picture beside the words (original artwork, CC0: see ATTRIBUTION.md).
+const ART: &[u8] = include_bytes!("../../../assets/splash/splash.jpg");
+/// The part of the picture shown, across: its left side, where the matrix and `Ax = λx` are.
+const ART_LEFT: f32 = 0.03;
 /// The largest image side decoded, against a corrupt header.
 const MAX_SIDE: u32 = 4096;
 /// Morrison Kühlsen's ink, and the text on it.
 pub(crate) const INK: Color32 = Color32::from_rgb(0x14, 0x16, 0x1C);
 pub(crate) const ON_INK: Color32 = Color32::from_rgb(0xFF, 0xFF, 0xFF);
 pub(crate) const ON_INK_SOFT: Color32 = Color32::from_rgba_premultiplied(184, 184, 184, 184);
-/// MK Matrix's colour: teal.
-pub const BRAND: Color32 = Color32::from_rgb(0x2E, 0xC4, 0xA0);
-/// The artwork's lighter and deeper teals.
-const TEAL_LIGHT: Color32 = Color32::from_rgb(0xB8, 0xF2, 0xE2);
-const TEAL_DEEP: Color32 = Color32::from_rgb(0x12, 0x5E, 0x52);
+/// MK Matrix's colour: terracotta.
+pub const BRAND: Color32 = Color32::from_rgb(0xE0, 0x8A, 0x5F);
+/// The artwork's lighter and deeper terracottas.
+const TERRA_LIGHT: Color32 = Color32::from_rgb(0xF6, 0xD9, 0xC6);
+const TERRA_DEEP: Color32 = Color32::from_rgb(0x6E, 0x34, 0x1A);
 pub const NAME: &str = "MK Matrix";
 /// "By number, weight and measure" (Wisdom 11:20).
 pub const MOTTO: &str = "Numero, pondere et mensura";
@@ -95,7 +100,10 @@ fn paint(painter: &egui::Painter, ctx: &egui::Context, rect: Rect, progress: f32
     let words = Rect::from_min_max(rect.min, pos2(half, rect.bottom()));
     let art = Rect::from_min_max(pos2(half, rect.top()), rect.max);
     painter.rect_filled(rect, 0.0, INK);
-    artwork(&painter.with_clip_rect(art), art, k);
+    match art_texture(ctx) {
+        Some(texture) => picture(&painter.with_clip_rect(art), art, &texture),
+        None => artwork(&painter.with_clip_rect(art), art, k),
+    }
 
     let left = words.left() + 36.0 * k;
     let width = words.width() - 72.0 * k;
@@ -219,22 +227,22 @@ pub(crate) fn artwork(painter: &egui::Painter, art: Rect, k: f32) {
             // A correlation-like shade: 1 on the diagonal, fading with the distance from it.
             let distance = row.abs_diff(col) as f32;
             let strength = 0.88_f32.powf(distance * distance);
-            let fill = lerp(TEAL_DEEP, BRAND, strength).gamma_multiply(0.55 + 0.45 * strength);
+            let fill = lerp(TERRA_DEEP, BRAND, strength).gamma_multiply(0.55 + 0.45 * strength);
             painter.rect_filled(at(row, col), CornerRadius::same((4.0 * k) as u8), fill);
         }
     }
-    let outline = Stroke::new(1.6 * k, TEAL_LIGHT.gamma_multiply(0.8));
+    let outline = Stroke::new(1.6 * k, TERRA_LIGHT.gamma_multiply(0.8));
     let pad = 3.0 * k;
     let row_band = at(pick_row, 0).union(at(pick_row, N - 1)).expand(pad);
     let col_band = at(0, pick_col).union(at(N - 1, pick_col)).expand(pad);
     painter.rect_stroke(row_band, CornerRadius::same((6.0 * k) as u8), outline, StrokeKind::Outside);
     painter.rect_stroke(col_band, CornerRadius::same((6.0 * k) as u8), outline, StrokeKind::Outside);
     let product = at(pick_row, pick_col);
-    painter.rect_filled(product, CornerRadius::same((4.0 * k) as u8), TEAL_LIGHT);
-    painter.text(product.center(), Align2::CENTER_CENTER, "Σ", FontId::proportional(18.0 * k), TEAL_DEEP);
+    painter.rect_filled(product, CornerRadius::same((4.0 * k) as u8), TERRA_LIGHT);
+    painter.text(product.center(), Align2::CENTER_CENTER, "Σ", FontId::proportional(18.0 * k), TERRA_DEEP);
 
     // The brackets.
-    let stroke = Stroke::new(2.4 * k, TEAL_LIGHT.gamma_multiply(0.9));
+    let stroke = Stroke::new(2.4 * k, TERRA_LIGHT.gamma_multiply(0.9));
     let (top, bottom) = (origin.y - 12.0 * k, origin.y + side + 12.0 * k);
     let serif = 14.0 * k;
     for (x, dir) in [(origin.x - 16.0 * k, 1.0), (origin.x + side + 16.0 * k, -1.0)] {
@@ -248,7 +256,7 @@ pub(crate) fn artwork(painter: &egui::Painter, art: Rect, k: f32) {
         Align2::CENTER_CENTER,
         "c(3,5) = Σ a(3,k) · b(k,5)",
         FontId::proportional(15.0 * k),
-        TEAL_LIGHT.gamma_multiply(0.85),
+        TERRA_LIGHT.gamma_multiply(0.85),
     );
 }
 
@@ -257,6 +265,28 @@ fn lerp(a: Color32, b: Color32, t: f32) -> Color32 {
     let t = t.clamp(0.0, 1.0);
     let mix = |x: u8, y: u8| (f32::from(x) + (f32::from(y) - f32::from(x)) * t).round().clamp(0.0, 255.0) as u8;
     Color32::from_rgb(mix(a.r(), b.r()), mix(a.g(), b.g()), mix(a.b(), b.b()))
+}
+
+/// The picture filling `art` (cropped, never stretched).
+fn picture(painter: &egui::Painter, art: Rect, texture: &TextureHandle) {
+    let [w, h] = texture.size_vec2().into();
+    // The share of the picture's width that fills `art` at the picture's full height.
+    let across = ((art.width() / art.height()) / (w / h.max(1.0))).clamp(0.05, 1.0);
+    let left = ART_LEFT.min(1.0 - across);
+    let uv = Rect::from_min_max(pos2(left, 0.0), pos2(left + across, 1.0));
+    painter.image(texture.id(), art, uv, Color32::WHITE);
+}
+
+/// The splash picture as a texture, loaded once per context.
+fn art_texture(ctx: &egui::Context) -> Option<TextureHandle> {
+    let id = egui::Id::unique("splash-art");
+    if let Some(texture) = ctx.data(|d| d.get_temp::<TextureHandle>(id)) {
+        return Some(texture);
+    }
+    let image = decode(ART, image::ImageFormat::Jpeg).ok()?;
+    let texture = ctx.load_texture("splash-art", image, TextureOptions::LINEAR);
+    ctx.data_mut(|d| d.insert_temp(id, texture.clone()));
+    Some(texture)
 }
 
 /// The Morrison Kühlsen wordmark, white on clear, as a texture, loaded once per context.
@@ -273,12 +303,17 @@ pub(crate) fn wordmark(ctx: &egui::Context) -> Option<TextureHandle> {
 
 /// A PNG as an egui image (RGBA), refusing absurd sizes.
 fn decode_png(bytes: &[u8]) -> Result<egui::ColorImage, String> {
-    let reader = image::ImageReader::with_format(std::io::Cursor::new(bytes), image::ImageFormat::Png);
+    decode(bytes, image::ImageFormat::Png)
+}
+
+/// An image in `format` as an egui image (RGBA), refusing absurd sizes.
+fn decode(bytes: &[u8], format: image::ImageFormat) -> Result<egui::ColorImage, String> {
+    let reader = image::ImageReader::with_format(std::io::Cursor::new(bytes), format);
     let (w, h) = reader.into_dimensions().map_err(|e| e.to_string())?;
     if w > MAX_SIDE || h > MAX_SIDE {
         return Err(format!("{w}×{h} is too large"));
     }
-    let rgba = image::load_from_memory_with_format(bytes, image::ImageFormat::Png).map_err(|e| e.to_string())?.to_rgba8();
+    let rgba = image::load_from_memory_with_format(bytes, format).map_err(|e| e.to_string())?.to_rgba8();
     let size = [usize::try_from(rgba.width()).map_err(|e| e.to_string())?, usize::try_from(rgba.height()).map_err(|e| e.to_string())?];
     Ok(egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw()))
 }
@@ -294,7 +329,15 @@ mod tests {
     }
 
     #[test]
+    fn the_picture_decodes() {
+        let art = decode(ART, image::ImageFormat::Jpeg).unwrap();
+        assert!(art.size[0] > art.size[1], "a wide picture");
+    }
+
+    #[test]
     fn hostile_images_never_panic() {
+        // A truncated JPEG may decode in part or fail; either way, no panic.
+        let _ = decode(ART.get(..ART.len() / 3).unwrap(), image::ImageFormat::Jpeg);
         assert!(decode_png(&[]).is_err());
         for cut in [2, 60, MORRISON_KUHLSEN.len() / 2] {
             let _ = decode_png(MORRISON_KUHLSEN.get(..cut).unwrap());

@@ -135,6 +135,10 @@ pub enum Icon {
     OpenFolder,
     Info,
     Print,
+    /// Formulas › Linear Algebra: λ, the eigenvalue.
+    Lambda,
+    /// Formulas › Math & Trig: π.
+    Pi,
 }
 
 impl Icon {
@@ -261,6 +265,8 @@ impl Icon {
         Icon::OpenFolder,
         Icon::Info,
         Icon::Print,
+        Icon::Lambda,
+        Icon::Pi,
     ];
 }
 
@@ -367,11 +373,51 @@ impl G<'_> {
 struct Palette {
     accent: Color32,
     paper: Color32,
+    dark: bool,
+    /// The action part in the main colour too: one colour throughout.
+    mono: bool,
 }
 
 impl Palette {
     fn of(t: &Tokens) -> Palette {
-        Palette { accent: t.accent, paper: t.paper }
+        Palette { accent: t.accent, paper: t.paper, dark: t.dark, mono: false }
+    }
+}
+
+/// The vintage inks the icons' action parts are drawn in, one per family of commands, as
+/// (light theme, dark theme).
+mod ink {
+    use egui::Color32;
+    pub(super) const TERRACOTTA: (Color32, Color32) = (Color32::from_rgb(0xA0, 0x52, 0x2D), Color32::from_rgb(0xE0, 0x8A, 0x5F));
+    pub(super) const SLATE: (Color32, Color32) = (Color32::from_rgb(0x3E, 0x5C, 0x76), Color32::from_rgb(0x8F, 0xB0, 0xCC));
+    pub(super) const MUSTARD: (Color32, Color32) = (Color32::from_rgb(0x9A, 0x6B, 0x12), Color32::from_rgb(0xE0, 0xB0, 0x4F));
+    pub(super) const OLIVE: (Color32, Color32) = (Color32::from_rgb(0x6B, 0x7A, 0x3A), Color32::from_rgb(0xAE, 0xBB, 0x7A));
+    pub(super) const OXBLOOD: (Color32, Color32) = (Color32::from_rgb(0x7B, 0x2D, 0x35), Color32::from_rgb(0xD9, 0x82, 0x8B));
+}
+
+impl Icon {
+    /// The vintage ink of this icon's family: clipboard and file in terracotta, type, alignment,
+    /// borders, view and page in slate blue, number, styles and data in mustard, insert and
+    /// review in olive, formulas and matrices in oxblood. `None` for interface chrome (arrows,
+    /// close, check, plus), which keeps the theme's accent.
+    fn ink(self, dark: bool) -> Option<Color32> {
+        use Icon::*;
+        let (light, night) = match self {
+            Paste | Cut | Copy | Brush | Undo | Redo | Save | Eraser | FillDown | Find | Search | NewFile | OpenFolder | Print | Share | Folder
+            | Book | Home | Info => ink::TERRACOTTA,
+            Bold | Italic | Underline | Strike | Borders | BorderAll | BorderNone | BorderOutside | BorderThick | Fill | FontColor | AlignTop
+            | AlignMiddle | AlignBottom | AlignLeft | AlignCenter | AlignRight | Orientation | IndentDec | IndentInc | Wrap | Merge | Freeze
+            | Zoom | Gridlines | Normal | PageLayout | PageBreak | Margins | Orient | SheetRtl | Paper | PrintArea | Header | Footer | Theme => {
+                ink::SLATE
+            }
+            Currency | Percent | Comma | DecInc | DecDec | CondFormat | FormatTable | CellStyles | Insert | Delete | Format | SortFilter | Filter
+            | SortAsc | SortDesc | Duplicates | TextColumns | Validation | Group | Ungroup | Subtotal => ink::MUSTARD,
+            Table | PivotTable | Chart | ChartBar | ChartLine | ChartPie | ChartScatter | Picture | Shapes | Link | Comment | Note | TextBox
+            | Symbol | Sparkline | Checkbox | Spell | Lock | Pen | Script | Calendar | Clock | PageNumber | PageCount | FileName => ink::OLIVE,
+            Sum | Fx | Function | Name | Trace | Calc => ink::OXBLOOD,
+            _ => return None,
+        };
+        Some(if dark { night } else { light })
     }
 }
 
@@ -391,6 +437,11 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, c: Color32) {
     paint_with(p, rect, icon, c, &Palette::of(&Tokens::get(p.ctx())));
 }
 
+/// Draws `icon` in colour `c` alone, its action part included (the title bar's icons).
+pub fn paint_mono(p: &Painter, rect: Rect, icon: Icon, c: Color32) {
+    paint_with(p, rect, icon, c, &Palette { mono: true, ..Palette::of(&Tokens::get(p.ctx())) });
+}
+
 /// Draws `icon` on the sheet, which stays white in both themes, so with the light palette.
 pub fn paint_on_sheet(p: &Painter, rect: Rect, icon: Icon, c: Color32) {
     paint_with(p, rect, icon, c, &Palette::of(&Tokens::light()));
@@ -408,7 +459,7 @@ fn paint_with(p: &Painter, rect: Rect, icon: Icon, c: Color32, pal: &Palette) {
     let r = Rect::from_center_size(rect.center(), vec2(side, side));
     let g = G { p, r, s: side / 16.0 };
     let muted = c.gamma_multiply(0.45);
-    let a = pal.accent;
+    let a = if pal.mono { c } else { icon.ink(pal.dark).unwrap_or(pal.accent) };
     let wash = a.gamma_multiply(0.35);
     let (down, up, left, right) = (FRAC_PI_2, -FRAC_PI_2, PI, 0.0);
     // A page with a folded corner, the shape documents share.
@@ -885,14 +936,19 @@ fn paint_with(p: &Painter, rect: Rect, icon: Icon, c: Color32, pal: &Palette) {
             g.ring(8.0, 8.0, 1.75, a);
         }
         Icon::Appearance => {
-            g.ring(8.0, 8.0, 6.0, c);
-            let half: Vec<(f32, f32)> = (0..=16)
-                .map(|i| {
-                    let t = PI * (i as f32 / 16.0 - 0.5);
-                    (8.0 + 6.0 * t.cos(), 8.0 + 6.0 * t.sin())
+            // A crescent moon in line art, and a four-pointed star in the bite it leaves: the
+            // outer circle's arc from one horn round to the other, and the bite's arc between them.
+            let (outer, bite) = (((7.0, 9.0), 6.0), ((10.6, 5.6), 4.9));
+            let arc = |((cx, cy), r): ((f32, f32), f32), a0: f32, a1: f32| {
+                (0..=24).map(move |i| {
+                    let t = a0 + (a1 - a0) * i as f32 / 24.0;
+                    (cx + r * t.cos(), cy + r * t.sin())
                 })
-                .collect();
-            g.poly(&half, c);
+            };
+            // Two open strokes meeting at the horns: a closed path would mitre the sharp tips out.
+            g.stroke(&arc(outer, 0.1523, 4.6172).collect::<Vec<_>>(), c);
+            g.stroke(&arc(bite, 3.6944, 1.0751).collect::<Vec<_>>(), c);
+            g.poly(&[(13.0, 0.75), (13.55, 2.25), (15.0, 2.8), (13.55, 3.35), (13.0, 4.85), (12.45, 3.35), (11.0, 2.8), (12.45, 2.25)], a);
         }
         Icon::Book => {
             g.block(1.5, 1.5, 14.5, 5.0, a);
@@ -960,6 +1016,15 @@ fn paint_with(p: &Painter, rect: Rect, icon: Icon, c: Color32, pal: &Palette) {
             g.line(&[(8.0, 7.0), (8.0, 11.5)], c, 1.3);
             g.dot(8.0, 4.75, 0.9, a);
         }
+        Icon::Lambda => {
+            g.stroke(&[(3.5, 1.5), (5.5, 1.5), (12.5, 14.5)], c);
+            g.stroke(&[(8.25, 6.75), (3.5, 14.5)], a);
+        }
+        Icon::Pi => {
+            g.stroke(&[(2.0, 4.0), (14.0, 4.0)], a);
+            g.stroke(&[(5.75, 4.0), (5.0, 14.5)], c);
+            g.stroke(&[(10.5, 4.0), (10.5, 13.0), (12.5, 14.5)], c);
+        }
         Icon::Print => {
             g.stroke(&[(4.5, 5.5), (4.5, 1.5), (11.5, 1.5), (11.5, 5.5)], c);
             g.stroke(&[(4.5, 11.5), (1.5, 11.5), (1.5, 5.5), (14.5, 5.5), (14.5, 11.5), (11.5, 11.5)], c);
@@ -1001,8 +1066,44 @@ pub const LIBRARY: &[(&str, Icon)] = &[
     ("text", Icon::TextBox),
     ("trace", Icon::Trace),
     ("validation", Icon::Validation),
+    ("lambda", Icon::Lambda),
+    ("pi", Icon::Pi),
 ];
 
 pub fn from_name(name: &str) -> Option<Icon> {
     LIBRARY.iter().find(|(n, _)| n.eq_ignore_ascii_case(name)).map(|(_, i)| *i)
+}
+
+#[cfg(test)]
+mod mono_tests {
+    use super::*;
+
+    /// Every shape `draw` paints, as its debug text (colours included), and the theme's accent.
+    fn painted(draw: impl Fn(&Painter)) -> (String, String) {
+        let mut fonts_ready = false;
+        let mut h = egui_kittest::Harness::new_ui(move |ui| {
+            if !fonts_ready {
+                ui.ctx().set_fonts(crate::theme::font_definitions());
+                fonts_ready = true;
+                return;
+            }
+            draw(ui.painter());
+        });
+        h.run_steps(2);
+        (format!("{:?}", h.output().shapes), format!("{:?}", Tokens::get(&h.ctx).accent))
+    }
+
+    #[test]
+    /// The title bar's icons are one colour: `paint_mono` never draws the accent, where `paint`
+    /// does for an icon whose action part is accented.
+    fn paint_mono_draws_in_one_colour() {
+        let ink = Color32::from_rgb(0x55, 0x55, 0x55);
+        let rect = Rect::from_min_size(egui::pos2(0.0, 0.0), vec2(16.0, 16.0));
+        let (shapes, accent) = painted(|p| paint(p, rect, Icon::Save, ink));
+        assert!(shapes.contains(&accent));
+        for &icon in Icon::ALL {
+            let (shapes, accent) = painted(|p| paint_mono(p, rect, icon, ink));
+            assert!(!shapes.contains(&accent), "{icon:?}");
+        }
+    }
 }

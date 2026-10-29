@@ -9,6 +9,131 @@ use crate::i18n;
 use crate::icons::{self, Icon};
 use crate::theme::{self, Cat, Tokens};
 
+fn single_row_id() -> egui::Id {
+    egui::Id::unique("ribbon_single_row")
+}
+
+fn row_icons_id() -> egui::Id {
+    egui::Id::unique("ribbon_single_row_icons")
+}
+
+/// The icons the single row draws this frame, and those it drew more than once last frame.
+#[derive(Clone, Default)]
+struct RowIcons {
+    seen: Vec<Icon>,
+    shared: Vec<Icon>,
+}
+
+/// Whether this frame lays the ribbon's controls out as MK Matrix's single-row toolbar. Turning
+/// it off ends the row: when its repeated icons differ from last frame's, the frame is drawn again
+/// so their buttons get their names at once.
+pub(crate) fn set_single_row(ui: &Ui, on: bool) {
+    ui.ctx().data_mut(|d| d.insert_temp(single_row_id(), on));
+    if on {
+        return;
+    }
+    let changed = ui.ctx().data_mut(|d| {
+        let icons = d.get_temp_mut_or_default::<RowIcons>(row_icons_id());
+        let mut shared = Vec::new();
+        for (i, icon) in icons.seen.iter().enumerate() {
+            if icons.seen.get(i + 1..).is_some_and(|rest| rest.contains(icon)) && !shared.contains(icon) {
+                shared.push(*icon);
+            }
+        }
+        icons.seen.clear();
+        let changed = shared != icons.shared;
+        icons.shared = shared;
+        changed
+    });
+    if changed {
+        ui.ctx().request_discard("a toolbar icon is shared by several buttons");
+    }
+}
+
+/// The name a single-row button shows beside its icon: none, unless another button in the row
+/// has the same icon (Formulas' function categories), as the icon alone can't tell them apart.
+fn row_label(ui: &Ui, icon: Icon, label: &str, tip: &str) -> String {
+    let shared = ui.ctx().data_mut(|d| {
+        let icons = d.get_temp_mut_or_default::<RowIcons>(row_icons_id());
+        icons.seen.push(icon);
+        icons.shared.contains(&icon)
+    });
+    if !shared {
+        return String::new();
+    }
+    tr(ui, if label.is_empty() { tip } else { label }).replace('\n', " ")
+}
+
+/// In the single row, buttons are icons of one size and their names live in the tooltips (which
+/// also name them for accessibility); an icon several buttons share also shows its name.
+pub(crate) fn single_row(ui: &Ui) -> bool {
+    ui.ctx().data(|d| d.get_temp::<bool>(single_row_id())).unwrap_or(false)
+}
+
+/// The toolbar's spacing, one rule for every control in the bar: a label sits `LABEL_GAP` before
+/// the control it names, and one item (a stack, a labelled control, a checkbox after a combo) sits
+/// `ITEM_GAP` from the next.
+pub(crate) const LABEL_GAP: f32 = 6.0;
+/// See [`LABEL_GAP`].
+pub(crate) const ITEM_GAP: f32 = 14.0;
+/// The row's own spacing, which every gap includes.
+const ROW_SPACING: f32 = 2.0;
+
+/// A group's rows of controls: stacked in the ribbon, side by side in the single row, there with
+/// half an `ITEM_GAP` on each side, so two stacks in a row sit one `ITEM_GAP` apart.
+pub(crate) fn stack<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> egui::InnerResponse<R> {
+    if !single_row(ui) {
+        return ui.vertical(add);
+    }
+    let margin = (ITEM_GAP - ROW_SPACING) / 2.0;
+    ui.add_space(margin);
+    let r = ui.horizontal(add);
+    ui.add_space(margin);
+    r
+}
+
+/// The gap between two items inside one stack (a combo and the checkbox after it): `ITEM_GAP` in
+/// the single row; nothing in the ribbon, where they are on rows of their own.
+pub(crate) fn item_gap(ui: &mut Ui) {
+    if single_row(ui) {
+        ui.add_space(ITEM_GAP - ROW_SPACING);
+    }
+}
+
+/// A control's name, muted and small, as every labelled control in the bar has it; in the single
+/// row followed by `LABEL_GAP` before the control. Its id names the control for screen readers.
+pub(crate) fn field_label(ui: &mut Ui, text: &str) -> egui::Id {
+    let dim = Tokens::get(ui.ctx()).text_dim;
+    let id = ui.label(egui::RichText::new(text).font(theme::ui_font(11.5)).color(dim)).id;
+    if single_row(ui) {
+        ui.add_space(LABEL_GAP - ROW_SPACING);
+    }
+    id
+}
+
+/// A column of checkboxes (View › Show): stacked in the ribbon, and in the single row too, two
+/// compact rows filling its height, so the boxes line up under each other instead of trailing off
+/// in one line. Spaced like a [`stack`].
+pub(crate) fn check_column<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> egui::InnerResponse<R> {
+    if !single_row(ui) {
+        return ui.vertical(add);
+    }
+    let margin = (ITEM_GAP - ROW_SPACING) / 2.0;
+    ui.add_space(margin);
+    let r = ui.vertical(|ui| {
+        let s = ui.spacing_mut();
+        s.item_spacing.y = 1.0;
+        s.interact_size.y = 14.0;
+        s.icon_width = 12.0;
+        s.icon_width_inner = 6.0;
+        s.icon_spacing = 4.0;
+        ui.style_mut().override_font_id = Some(theme::ui_font(12.0));
+        add(ui)
+    });
+    ui.add_space(margin);
+    r
+}
+
 /// Translates a label or tooltip for the language of the frame being drawn (English if untranslated).
 /// Ribbon chrome all flows through these widgets, so translating here localises it in one place.
 fn tr<'a>(ui: &Ui, text: &'a str) -> &'a str {
@@ -57,6 +182,22 @@ fn tip_text(ui: &Ui, tip: &str) -> String {
 
 /// A flat square icon button with hover highlight and tooltip.
 pub fn icon_button(ui: &mut Ui, icon: Icon, color: Color32, tip: &str, size: egui::Vec2) -> Response {
+    icon_button_with(ui, icon, color, tip, size, icons::paint)
+}
+
+/// An [`icon_button`] whose icon is drawn in `color` alone, its action part included.
+pub fn icon_button_mono(ui: &mut Ui, icon: Icon, color: Color32, tip: &str, size: egui::Vec2) -> Response {
+    icon_button_with(ui, icon, color, tip, size, icons::paint_mono)
+}
+
+fn icon_button_with(
+    ui: &mut Ui,
+    icon: Icon,
+    color: Color32,
+    tip: &str,
+    size: egui::Vec2,
+    paint: fn(&egui::Painter, Rect, Icon, Color32),
+) -> Response {
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
     let t = Tokens::get(ui.ctx());
     if resp.is_pointer_button_down_on() {
@@ -64,7 +205,7 @@ pub fn icon_button(ui: &mut Ui, icon: Icon, color: Color32, tip: &str, size: egu
     } else if resp.hovered() {
         ui.painter().rect_filled(rect, 0.0, t.hover);
     }
-    icons::paint(ui.painter(), Rect::from_center_size(rect.center(), vec2(16.0, 16.0)), icon, color);
+    paint(ui.painter(), Rect::from_center_size(rect.center(), vec2(16.0, 16.0)), icon, color);
     resp.on_hover_text(tip_text(ui, tip))
 }
 
@@ -98,6 +239,9 @@ pub fn toggle_button(ui: &mut Ui, icon: Icon, on: bool, tip: &str) -> Response {
 
 /// Large ribbon button: 32px icon over a one- or two-line label.
 pub fn big_button(ui: &mut Ui, icon: Icon, label: &str, tip: &str, dropdown: bool) -> Response {
+    if single_row(ui) {
+        return small_button(ui, icon, label, tip, dropdown);
+    }
     let t = Tokens::get(ui.ctx());
     let label = tr(ui, label);
     let (lines, w) = big_label(ui, label, dropdown);
@@ -116,6 +260,9 @@ pub fn big_button(ui: &mut Ui, icon: Icon, label: &str, tip: &str, dropdown: boo
 /// arrow open the menu. Returns the (main, arrow) responses; their accessible names are the label
 /// and "<label> options".
 pub fn big_split_button(ui: &mut Ui, icon: Icon, label: &str, tip: &str) -> (Response, Response) {
+    if single_row(ui) {
+        return small_split_button(ui, icon, label, tip);
+    }
     let t = Tokens::get(ui.ctx());
     let label = tr(ui, label);
     let (lines, w) = big_label(ui, label, true);
@@ -182,8 +329,8 @@ fn paint_big_label(ui: &Ui, rect: Rect, lines: &[std::sync::Arc<egui::Galley>], 
 pub fn small_button(ui: &mut Ui, icon: Icon, label: &str, tip: &str, dropdown: bool) -> Response {
     let t = Tokens::get(ui.ctx());
     let font = theme::ui_font(12.5);
-    let label = tr(ui, label);
-    let tw = if label.is_empty() { 0.0 } else { ui.painter().layout_no_wrap(label.to_string(), font.clone(), t.text).size().x + 6.0 };
+    let label = if single_row(ui) { row_label(ui, icon, label, tip) } else { tr(ui, label).to_string() };
+    let tw = if label.is_empty() { 0.0 } else { ui.painter().layout_no_wrap(label.clone(), font.clone(), t.text).size().x + 6.0 };
     let w = 24.0 + tw + if dropdown { 12.0 } else { 0.0 };
     let (rect, resp) = ui.allocate_exact_size(vec2(w, 23.0), Sense::click());
     if resp.is_pointer_button_down_on() {
@@ -233,7 +380,9 @@ pub fn small_split_button(ui: &mut Ui, icon: Icon, label: &str, tip: &str) -> (R
     let t = Tokens::get(ui.ctx());
     let font = theme::ui_font(12.5);
     let label = tr(ui, label);
-    let tw = ui.painter().layout_no_wrap(label.to_string(), font.clone(), t.text).size().x + 6.0;
+    // The single row shows the icon only; the label still names the buttons.
+    let shown = if single_row(ui) { row_label(ui, icon, label, tip) } else { label.to_string() };
+    let tw = if shown.is_empty() { 0.0 } else { ui.painter().layout_no_wrap(shown.clone(), font.clone(), t.text).size().x + 6.0 };
     let (rect, _) = ui.allocate_exact_size(vec2(24.0 + tw + 14.0, 23.0), Sense::hover());
     let main = Rect::from_min_size(rect.min, vec2(24.0 + tw, rect.height()));
     let arrow = Rect::from_min_max(pos2(main.right(), rect.top()), rect.max);
@@ -253,7 +402,7 @@ pub fn small_split_button(ui: &mut Ui, icon: Icon, label: &str, tip: &str) -> (R
         ui.painter().line_segment([pos2(main.right(), rect.top() + 3.0), pos2(main.right(), rect.bottom() - 3.0)], Stroke::new(1.0, t.separator));
     }
     icons::paint(ui.painter(), Rect::from_center_size(pos2(rect.left() + 12.0, rect.center().y), vec2(16.0, 16.0)), icon, t.text);
-    ui.painter().text(pos2(rect.left() + 24.0, rect.center().y), Align2::LEFT_CENTER, label, font, t.text);
+    ui.painter().text(pos2(rect.left() + 24.0, rect.center().y), Align2::LEFT_CENTER, shown, font, t.text);
     icons::paint(
         ui.painter(),
         Rect::from_center_size(pos2(arrow.center().x, rect.center().y + 1.0), vec2(8.0, 8.0)),

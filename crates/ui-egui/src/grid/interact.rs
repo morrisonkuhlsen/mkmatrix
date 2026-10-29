@@ -8,8 +8,79 @@ use super::*;
 
 // ------------------------------------------------------------------ interaction
 
-/// How close (in points) a press must be to an object's bottom-right corner to resize it instead of moving it.
+/// How close (in points) a press must be to one of a selected object's sizing handles to resize
+/// it instead of moving it.
 pub(super) const OBJECT_RESIZE_RADIUS: f32 = 10.0;
+
+/// The eight sizing handles of an object drawn at `r`: each one's point and the sides it moves.
+fn sizing_handles(r: egui::Rect) -> [(Pos2, (i8, i8)); 8] {
+    [
+        (r.left_top(), (-1, -1)),
+        (r.center_top(), (0, -1)),
+        (r.right_top(), (1, -1)),
+        (r.left_center(), (-1, 0)),
+        (r.right_center(), (1, 0)),
+        (r.left_bottom(), (-1, 1)),
+        (r.center_bottom(), (0, 1)),
+        (r.right_bottom(), (1, 1)),
+    ]
+}
+
+/// The selected object's sizing handle under `p`, if any: (kind, id, the sides it moves). The
+/// handles sit on the object's edge, half outside it, so this is asked before the object's own hit.
+pub(super) fn object_handle_at(app: &SheetApp, geo: &Geo, sh: &Sheet, p: Pos2) -> Option<(&'static str, u32, (i8, i8))> {
+    let id = app.selected_chart?;
+    if !geo.cells.contains(p) {
+        return None;
+    }
+    let kind = if sh.charts.iter().any(|o| o.id == id) {
+        "chart"
+    } else if sh.images.iter().any(|o| o.id == id) {
+        "image"
+    } else if sh.slicers.iter().any(|o| o.id == id) {
+        "slicer"
+    } else if sh.shapes.iter().any(|o| o.id == id) {
+        "shape"
+    } else {
+        return None;
+    };
+    let rect = crate::chartview::anchor_rect(geo, sh, &object_anchor(sh, kind, id)?);
+    sizing_handles(rect).into_iter().find(|(at, _)| (p - *at).length() < OBJECT_RESIZE_RADIUS).map(|(_, sides)| (kind, id, sides))
+}
+
+/// The cursor a sizing handle shows: diagonal at the corners, across at the sides.
+pub(super) fn handle_cursor((sx, sy): (i8, i8)) -> egui::CursorIcon {
+    match (sx, sy) {
+        (0, _) => egui::CursorIcon::ResizeVertical,
+        (_, 0) => egui::CursorIcon::ResizeHorizontal,
+        _ if sx == sy => egui::CursorIcon::ResizeNwSe,
+        _ => egui::CursorIcon::ResizeNeSw,
+    }
+}
+
+/// An object's new place and size after its handle `sides` moved by `d` (sheet units): the sides
+/// held follow the pointer, the opposite ones stay, and it never gets smaller than 20 units.
+pub(super) fn resized(x0: f32, y0: f32, w: f32, h: f32, (sx, sy): (i8, i8), d: egui::Vec2) -> (f32, f32, f32, f32) {
+    const MIN: f32 = 20.0;
+    let (mut x, mut y, mut nw, mut nh) = (x0, y0, w, h);
+    match sx {
+        1 => nw = (w + d.x).max(MIN),
+        -1 => {
+            nw = (w - d.x).max(MIN);
+            x = x0 + (w - nw);
+        }
+        _ => {}
+    }
+    match sy {
+        1 => nh = (h + d.y).max(MIN),
+        -1 => {
+            nh = (h - d.y).max(MIN);
+            y = y0 + (h - nh);
+        }
+        _ => {}
+    }
+    (x.max(0.0), y.max(0.0), nw, nh)
+}
 
 pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Response, geo: &Geo, sh: &Sheet, wb: &Workbook) {
     // Text selection and editing must not also move the object or edit worksheet cells.
@@ -107,8 +178,17 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
     if primary_drag || primary_clicked {
         // A drag is recognised only after the pointer has moved, so grab the object where the press began.
         let at = if primary_drag { pointer.press_origin().or(pos) } else { pos };
+        // A sizing handle of the selected object, on its edge, resizes it from that side.
+        if primary_drag
+            && let Some(p) = at
+            && let Some((kind, id, sides)) = object_handle_at(app, geo, sh, p)
+            && let Some(a) = object_anchor(sh, kind, id)
+        {
+            app.grid.drag = Drag::Object { kind, id, start: p, orig: (a.cell, a.dx, a.dy, a.width, a.height), resize: Some(sides) };
+            return;
+        }
         if let Some(p) = at
-            && let Some((kind, id, rect)) = crate::chartview::hit(app, geo, sh, p)
+            && let Some((kind, id, _)) = crate::chartview::hit(app, geo, sh, p)
         {
             app.selected_chart = Some(id);
             if kind == "shape"
@@ -121,12 +201,8 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
             if kind == "chart" && resp.double_clicked() {
                 app.grid.pane = Some("formatChart".into());
             }
-            if primary_drag {
-                let a = object_anchor(sh, kind, id);
-                let resize = (p - rect.right_bottom()).length() < OBJECT_RESIZE_RADIUS;
-                if let Some(a) = a {
-                    app.grid.drag = Drag::Object { kind, id, start: p, orig: (a.cell, a.dx, a.dy, a.width, a.height), resize };
-                }
+            if primary_drag && let Some(a) = object_anchor(sh, kind, id) {
+                app.grid.drag = Drag::Object { kind, id, start: p, orig: (a.cell, a.dx, a.dy, a.width, a.height), resize: None };
             }
             return;
         }
@@ -160,7 +236,18 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
         } else if in_col_header {
             col_edge(geo, sh, p.x).map(|(col, _)| {
                 let selected = sel.ranges.iter().any(|r| r.is_full_cols() && col >= r.start.col && col <= r.end.col);
-                ("home.autofitColumnWidth", if selected { json!({}) } else { json!({"cols": RangeRef::cols(col, col).a1()}) })
+                // Beside a named matrix the column also makes room for its name.
+                let room = if app.ui.matrix_brackets {
+                    app.session.active().map_or(0.0, |d| crate::matrices::room_left_of(&d.wb, d.wb.active_sheet(), col))
+                } else {
+                    0.0
+                };
+                let params = match (selected, room > 0.0) {
+                    (true, _) => json!({}),
+                    (false, false) => json!({"cols": RangeRef::cols(col, col).a1()}),
+                    (false, true) => json!({"cols": RangeRef::cols(col, col).a1(), "extra": room}),
+                };
+                ("home.autofitColumnWidth", params)
             })
         } else if in_row_header {
             row_edge(geo, sh, p.y).map(|(row, _)| {
@@ -221,7 +308,10 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
             return;
         }
         // The + on a column heading's edge inserts a column there (a drag from it still resizes).
+        // It isn't drawn while a cell is being edited, so it doesn't answer then either: a click
+        // there points at the column, and an insert would leave the edit on a cell that moved.
         if primary_clicked
+            && app.editor.is_none()
             && let Some(col) = on_insert_col_button(geo, sh, p)
             && let Some(next) = col.checked_add(1).filter(|&n| n < mkmatrix_engine::core::MAX_COLS)
         {
@@ -229,6 +319,7 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
             return;
         }
         if primary_clicked
+            && app.editor.is_none()
             && let Some(row) = on_insert_row_button(geo, sh, p)
             && let Some(next) = row.checked_add(1).filter(|&n| n < mkmatrix_engine::core::MAX_ROWS)
         {
@@ -531,8 +622,12 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
             Drag::Object { kind, id, start, orig, resize } => {
                 let d = (p - start) / geo.z;
                 let (cell, dx, dy, w, h) = orig;
-                let params = if resize {
-                    json!({"kind": kind, "id": id, "width": (w + d.x).max(20.0), "height": (h + d.y).max(20.0)})
+                let params = if let Some(sides) = resize {
+                    let (x, y) = (sh.col_left(cell.col) as f32 + dx, sh.row_top(cell.row) as f32 + dy);
+                    let (nx, ny, nw, nh) = resized(x, y, w, h, sides, d);
+                    // A left or top handle moves the object's corner too: re-anchor it there.
+                    let nc = CellRef::new(sh.row_at(ny as f64), sh.col_at(nx as f64));
+                    json!({"kind": kind, "id": id, "at": nc.a1(), "dx": nx - sh.col_left(nc.col) as f32, "dy": ny - sh.row_top(nc.row) as f32, "width": nw, "height": nh})
                 } else {
                     // Re-anchor at the cell under the new top-left.
                     let x0 = sh.col_left(cell.col) as f32 + dx + d.x;
@@ -841,9 +936,13 @@ pub(super) fn paint_freeze_handles(p: &Painter, geo: &Geo, sh: &Sheet, drag: &Dr
 
 /// Radius of the insert-column button on a column heading's edge.
 pub(super) const INSERT_PLUS_R: f32 = 4.5;
+/// The gap between the button and the headings' outer edge, so its ring (and stroke) is drawn
+/// whole instead of cut by the bar above (or the window's edge, for rows).
+const INSERT_PLUS_INSET: f32 = 1.5;
 /// The band at the top of the column headings the button sits in and answers in: the edge below
-/// it keeps its resize drag and autofit double-click, a Table heading its filter button.
-const INSERT_PLUS_BAND: f32 = 8.0;
+/// it keeps its resize drag and autofit double-click, a Table heading its filter button. It stays
+/// 8 points deep though the ring moved down: a deeper band takes the edge's mid-heading grip.
+const INSERT_PLUS_BAND: f32 = INSERT_PLUS_INSET + INSERT_PLUS_R + 2.0;
 
 /// The insert-column button the pointer at `p` (sheet coordinates) brings up: on the column
 /// headings within reach of an edge, the column a new one goes after and the button's centre.
@@ -857,7 +956,7 @@ pub(super) fn insert_col_button(geo: &Geo, sh: &Sheet, p: Pos2) -> Option<(u32, 
         Some(before) if (p.x - geo.x(sh, c)).abs() < (right - p.x).abs() => (before, geo.x(sh, c)),
         _ => (c, right),
     };
-    ((p.x - edge).abs() <= 10.0 && sh.col_width(col) > 0.0).then(|| (col, pos2(edge, geo.head_top() + INSERT_PLUS_R + 0.5)))
+    ((p.x - edge).abs() <= 10.0 && sh.col_width(col) > 0.0).then(|| (col, pos2(edge, geo.head_top() + INSERT_PLUS_INSET + INSERT_PLUS_R)))
 }
 
 /// Whether `p` is on the insert-column button itself (not just near the edge that shows it).
@@ -879,7 +978,7 @@ pub(super) fn insert_row_button(geo: &Geo, sh: &Sheet, p: Pos2) -> Option<(u32, 
         Some(before) if (p.y - geo.y(sh, r)).abs() < (bottom - p.y).abs() => (before, geo.y(sh, r)),
         _ => (r, bottom),
     };
-    ((p.y - edge).abs() <= 8.0 && sh.row_height(row) > 0.0).then(|| (row, pos2(geo.head_left() + INSERT_PLUS_R + 0.5, edge)))
+    ((p.y - edge).abs() <= 8.0 && sh.row_height(row) > 0.0).then(|| (row, pos2(geo.head_left() + INSERT_PLUS_INSET + INSERT_PLUS_R, edge)))
 }
 
 /// Whether `p` is on the insert-row button itself.

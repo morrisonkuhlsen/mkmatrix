@@ -66,6 +66,25 @@ fn go_to_format_cells_and_sort_can_be_dragged_too() {
         drag_title_bar(&mut h, name, vec2(-100.0, 60.0));
         h.run_steps(10);
         let after = dialog_rect(&h, name);
-        assert_eq!(after.min - before.min, vec2(-100.0, 60.0), "{name} went from {before:?} to {after:?}");
+        // A dialog opens centred, so an odd fraction of a point in its height puts its corner
+        // off the pixel grid; egui snaps the corner to a pixel once it is moved.
+        let moved = after.min - before.min;
+        assert!((moved - vec2(-100.0, 60.0)).length() <= 0.5, "{name} went from {before:?} to {after:?}");
     }
+}
+
+#[test]
+fn about_keeps_one_size_in_every_section() {
+    let mut h = harness();
+    let mut heights = Vec::new();
+    for tab in ["About", "Contributors", "Models"] {
+        h.state_mut().open_dialog("about", json!({"tab": tab}));
+        h.run_steps(6);
+        let r = dialog_rect(&h, "about");
+        assert!(r.height() < 700.0, "{tab}: the window grew to {r:?}");
+        heights.push(r.height());
+        h.state_mut().dialog = None;
+        h.run_steps(2);
+    }
+    assert!(heights.iter().all(|x| (x - heights[0]).abs() < 1.0), "sections differ in height: {heights:?}");
 }

@@ -2,7 +2,7 @@
 //! dialog, and its arrow opens a menu whose Circular References submenu lists a cell on each
 //! circular reference and selects the one picked, on its own sheet.
 
-use egui::{Event, Shape, pos2, vec2};
+use egui::{Event, pos2, vec2};
 use egui_kittest::kittest::{NodeT as _, Queryable as _};
 use mkmatrix_engine::Session;
 use mkmatrix_ui_egui::SheetApp;
@@ -28,7 +28,7 @@ fn harness(loops: bool) -> Harness {
         s.execute("cell.set", json!({"cell": "C2", "input": "=C2+1"})).unwrap();
     }
     s.execute("selection.set", json!({"range": "H20"})).unwrap();
-    let mut h = crate::common::builder().with_size(vec2(1400.0, 800.0)).build_ui_state(
+    let mut h = crate::common::builder().with_size(vec2(2000.0, 800.0)).build_ui_state(
         |ui, app: &mut SheetApp| {
             app.logic(ui.ctx());
             app.ui(ui);
@@ -41,18 +41,10 @@ fn harness(loops: bool) -> Harness {
     h
 }
 
-/// The painted "Error Checking" ribbon label: its left edge, right edge and vertical center.
+/// The "Error Checking" button: its left edge, right edge and vertical center.
 fn label(h: &Harness) -> (f32, f32, f32) {
-    h.output()
-        .shapes
-        .iter()
-        .find_map(|s| match &s.shape {
-            Shape::Text(t) if t.galley.job.text == "Error Checking" => {
-                Some((t.pos.x, t.pos.x + t.galley.size().x, t.pos.y + t.galley.size().y / 2.0))
-            }
-            _ => None,
-        })
-        .expect("the Formulas tab shows Error Checking")
+    let r = h.get_by_role_and_label(egui::accesskit::Role::Button, "Error Checking").rect();
+    (r.left(), r.right(), r.center().y)
 }
 
 fn click(h: &mut Harness, at: egui::Pos2) {
@@ -66,9 +58,8 @@ fn click(h: &mut Harness, at: egui::Pos2) {
 }
 
 fn open_menu(h: &mut Harness) {
-    let (_, right, y) = label(h);
-    // The arrow sits right of the label, past the 6 px gap after the text.
-    click(h, pos2(right + 13.0, y));
+    let at = h.get_by_role_and_label(egui::accesskit::Role::Button, "Error Checking options").rect().center();
+    click(h, at);
 }
 
 fn hover(h: &mut Harness, label: &str) {

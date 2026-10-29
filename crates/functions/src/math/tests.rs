@@ -531,6 +531,21 @@ fn msolve_square_least_squares_and_singular() {
 }
 
 #[test]
+fn msolve_keeps_small_components_of_the_answer() {
+    // #12: the noise floor followed B's scale squared, so 0.01 beside 1e6 read as 0.
+    let eye = || m(&[&[1.0, 0.0], &[0.0, 1.0]]);
+    mat_close(ev("MX.SOLVE", vec![eye(), m(&[&[1e6], &[0.01]])]), &[&[1e6], &[0.01]], 1e-9);
+    // A tiny answer is an answer, not noise.
+    mat_close(ev("MX.SOLVE", vec![eye(), m(&[&[1e-20], &[2e-20]])]), &[&[1e-20], &[2e-20]], 1e-33);
+    // Least squares, the same.
+    mat_close(ev("MX.SOLVE", vec![m(&[&[1.0, 0.0], &[0.0, 1.0], &[0.0, 0.0]]), m(&[&[1e6], &[0.01], &[0.0]])]), &[&[1e6], &[0.01]], 1e-9);
+    // Rounding noise far below the answer still reads as 0.
+    mat_close(ev("MX.SOLVE", vec![m(&[&[0.3, 0.7], &[0.1, 0.9]]), m(&[&[0.3], &[0.1]])]), &[&[1.0], &[0.0]], 1e-15);
+    let x = rows_of(&ev("MX.SOLVE", vec![m(&[&[0.3, 0.7], &[0.1, 0.9]]), m(&[&[0.3], &[0.1]])]));
+    assert_eq!(x.get(1).and_then(|r| r.first()), Some(&nv(0.0)));
+}
+
+#[test]
 fn rank_trace_norms_and_condition() {
     assert_eq!(ev("MX.RANK", vec![m(&[&[1.0, 2.0], &[2.0, 4.0]])]), nv(1.0));
     assert_eq!(ev("MX.RANK", vec![m(&[&[1.0, 0.0, 0.0], &[0.0, 1.0, 0.0]])]), nv(2.0));
@@ -557,6 +572,16 @@ fn eigenvalues_and_vectors() {
     // A rotation: ±i, as real and imaginary columns.
     mat_close(ev("MX.EIG", vec![m(&[&[0.0, -1.0], &[1.0, 0.0]])]), &[&[0.0, 1.0], &[0.0, -1.0]], 1e-12);
     is_err(ev("MX.EIGVEC", vec![m(&[&[4.0, 1.0], &[2.0, 3.0]])]), CellError::Value);
+}
+
+#[test]
+fn symmetry_is_judged_at_the_matrix_scale() {
+    // #13: entries below 1e-12 passed as symmetric, so these took the symmetric algorithms.
+    mat_close(ev("MX.EIG", vec![m(&[&[0.0, 1e-13], &[-1e-13, 0.0]])]), &[&[0.0, 1e-13], &[0.0, -1e-13]], 1e-26);
+    is_err(ev("MX.CHOL", vec![m(&[&[4e-13, 1e-13], &[0.0, 3e-13]])]), CellError::Value);
+    is_err(ev("MX.EIGVEC", vec![m(&[&[4e-13, 1e-13], &[2e-13, 3e-13]])]), CellError::Value);
+    // A small symmetric matrix is still symmetric.
+    mat_close(ev("MX.EIG", vec![m(&[&[2e-13, 1e-13], &[1e-13, 2e-13]])]), &[&[3e-13], &[1e-13]], 1e-26);
 }
 
 #[test]

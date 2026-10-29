@@ -135,6 +135,8 @@ const EXACT_TEXT_WIDTHS: usize = 2_000;
 
 pub(super) fn autofit_cols(s: &mut Session, p: &Json) -> Result<Json> {
     let (si, lines) = line_targets(s, p, false)?;
+    // Room past the widest entry, for what the UI draws over the column (a matrix's name).
+    let extra = p.get("extra").and_then(Json::as_f64).filter(|x| x.is_finite()).map_or(0.0, |x| x.clamp(0.0, 1785.0) as f32);
     let measure = s.text_width.clone();
     edit(s, |cx| {
         let Some(sh) = cx.wb.sheet(si) else { return Ok(Json::Null) };
@@ -174,7 +176,7 @@ pub(super) fn autofit_cols(s: &mut Session, p: &Json) -> Result<Json> {
                     }
                 }
                 if max > 0.0 {
-                    widths.push((c, max.clamp(8.0, 1785.0)));
+                    widths.push((c, (max + extra).clamp(8.0, 1785.0)));
                 }
             }
         }

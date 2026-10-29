@@ -57,55 +57,70 @@ fn chart_icon(t: &str) -> Icon {
     }
 }
 
+/// Insert › Recommended Charts, in Format Cells' style: Recommended and All Charts as joined
+/// buttons, the chart types in a framed list (icon and name, the chosen one tinted), and a preview
+/// of the chosen one drawn from the data on a card beside it. A double-click inserts at once.
 pub(super) fn recommended_charts(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool, open: &mut bool) {
-    ui.horizontal(|ui| {
-        for tab in ["Recommended Charts", "All Charts"] {
-            if ui.selectable_label(d.tab == tab, tab).clicked() && d.tab != tab {
-                d.tab = tab.to_string();
-                select_chart(d, 0);
-            }
-        }
-    });
-    ui.separator();
-    let choices = chart_choices(d);
+    use super::kit::{ROW_H, heading, panel, rule, segments};
+    let lang = app.ui.language;
     let t = crate::theme::Tokens::get(ui.ctx());
+    if let Some(tab) = segments(ui, &d.tab, &[("Recommended Charts", lang.tr("Recommended Charts")), ("All Charts", lang.tr("All Charts"))], 160.0)
+        && d.tab != tab
+    {
+        d.tab = tab.to_string();
+        select_chart(d, 0);
+    }
+    ui.add_space(10.0);
+    let choices = chart_choices(d);
+    const BODY_H: f32 = 300.0;
     ui.horizontal_top(|ui| {
         ui.vertical(|ui| {
-            ui.set_width(190.0);
-            egui::ScrollArea::vertical().id_salt("chart_choices").max_height(300.0).show(ui, |ui| {
-                for (i, (kind, _, label)) in choices.iter().enumerate() {
-                    let resp = ui
-                        .horizontal(|ui| {
-                            let (r, _) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::hover());
-                            icons::paint(ui.painter(), r.shrink(2.0), chart_icon(kind), t.text);
-                            ui.selectable_label(i == d.list_index, label.as_str())
-                        })
-                        .inner;
-                    if resp.clicked() {
-                        select_chart(d, i);
+            ui.set_width(210.0);
+            panel(ui, BODY_H, |ui| {
+                ui.spacing_mut().item_spacing.y = 0.0;
+                egui::ScrollArea::vertical().id_salt("chart_choices").auto_shrink([false, false]).show(ui, |ui| {
+                    for (i, (kind, _, label)) in choices.iter().enumerate() {
+                        let on = i == d.list_index;
+                        let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click());
+                        resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, label.as_str()));
+                        let p = ui.painter();
+                        if on {
+                            p.rect_filled(r, 0.0, t.accent_soft);
+                            p.rect_filled(egui::Rect::from_min_size(r.min, vec2(2.0, r.height())), 0.0, t.accent);
+                        } else if resp.hovered() {
+                            p.rect_filled(r, 0.0, t.hover);
+                        }
+                        let ink = if on { t.accent } else { t.text };
+                        icons::paint(p, egui::Rect::from_center_size(egui::pos2(r.left() + 20.0, r.center().y), vec2(16.0, 16.0)), chart_icon(kind), ink);
+                        let font = if on { theme::ui_bold(13.0) } else { theme::ui_font(13.0) };
+                        p.with_clip_rect(r).text(egui::pos2(r.left() + 38.0, r.center().y), egui::Align2::LEFT_CENTER, lang.tr(label), font, ink);
+                        if resp.clicked() {
+                            select_chart(d, i);
+                        }
+                        if resp.double_clicked() {
+                            select_chart(d, i);
+                            *confirm = true;
+                        }
                     }
-                    if resp.double_clicked() {
-                        select_chart(d, i);
-                        *confirm = true;
-                    }
-                }
+                });
             });
         });
         ui.add_space(12.0);
         ui.vertical(|ui| {
             let label = choices.get(d.list_index).map(|c| c.2.clone()).unwrap_or_default();
-            ui.strong(label);
-            let (rect, _) = ui.allocate_exact_size(vec2(360.0, 216.0), Sense::hover());
-            ui.painter().rect_filled(rect, 2.0, Color32::WHITE);
-            ui.painter().rect_stroke(rect, 2.0, Stroke::new(1.0, t.separator), StrokeKind::Inside);
+            heading(ui, lang.tr(&label));
+            let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), BODY_H - 26.0), Sense::hover());
+            ui.painter().rect_filled(rect, 0.0, Color32::WHITE);
+            ui.painter().rect_stroke(rect, 0.0, Stroke::new(1.0, t.input_border), StrokeKind::Inside);
             let params = json!({"type": d.values.get("type").cloned().unwrap_or(Json::Null), "subtype": d.values.get("subtype").cloned().unwrap_or(Json::Null)});
             if let Some(doc) = app.session.active()
                 && let Ok((sheet, chart)) = mkmatrix_engine::cmd::insert::build_chart(&app.session, &params)
             {
-                crate::chartview::paint_chart(ui.painter(), rect, &doc.wb, sheet, &chart);
+                crate::chartview::paint_chart(ui.painter(), rect.shrink(6.0), &doc.wb, sheet, &chart);
             }
         });
     });
+    rule(ui);
     ok_cancel(ui, confirm, open);
     if *confirm {
         *confirm = false;
@@ -122,44 +137,64 @@ pub(super) fn recommended_charts(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut 
     }
 }
 
-/// Draws chart range, series keep/remove and category-range controls and runs `chart.selectData` when something changed.
+/// Chart Design › Select Data, in Format Cells' style: the chart's data range, its series in a
+/// framed list (each kept or removed, the removed ones struck through), and the category labels,
+/// each under a muted heading; OK runs `chart.selectData` when something changed.
 pub(super) fn select_data(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool, open: &mut bool) {
+    use super::kit::{ROW_H, button, heading, panel, rule};
+    let lang = app.ui.language;
+    let t = crate::theme::Tokens::get(ui.ctx());
     let text = |d: &Dialog, k: &str| d.values.get(k).and_then(Json::as_str).unwrap_or("").to_string();
     let edit = |ui: &mut egui::Ui, d: &mut Dialog, key: &str, label: &str| {
-        let label = ui.label(label);
+        heading(ui, lang.tr(label));
         let mut v = text(d, key);
-        if ui.add(egui::TextEdit::singleline(&mut v).desired_width(420.0)).labelled_by(label.id).changed() {
+        if ui.add(egui::TextEdit::singleline(&mut v).desired_width(ui.available_width())).accessible_name(lang.tr(label)).changed() {
             d.values.insert(key.into(), json!(v));
         }
     };
+    ui.spacing_mut().item_spacing.y = 6.0;
     edit(ui, d, "range", "Chart data range:");
     ui.add_space(6.0);
-    ui.strong("Legend Entries (Series)");
+    heading(ui, lang.tr("Legend Entries (Series)"));
     let names: Vec<String> =
         d.values.get("names").and_then(Json::as_array).map(|a| a.iter().map(|n| n.as_str().unwrap_or("").to_string()).collect()).unwrap_or_default();
     let mut remove: Vec<u64> =
         d.values.get("remove").and_then(Json::as_array).map(|a| a.iter().filter_map(Json::as_u64).collect()).unwrap_or_default();
     let kept = names.len().saturating_sub(remove.len());
-    egui::ScrollArea::vertical().id_salt("series").max_height(160.0).show(ui, |ui| {
-        for (i, name) in names.iter().enumerate() {
-            let i = i as u64;
-            let removed = remove.contains(&i);
-            ui.horizontal(|ui| {
+    let list_h = 5.0 * (ROW_H + 4.0) + 2.0;
+    panel(ui, list_h, |ui| {
+        ui.spacing_mut().item_spacing.y = 0.0;
+        egui::ScrollArea::vertical().id_salt("series").auto_shrink([false, false]).show(ui, |ui| {
+            for (i, name) in names.iter().enumerate() {
+                let i = i as u64;
+                let removed = remove.contains(&i);
                 let label = if name.is_empty() { format!("Series{}", i + 1) } else { name.clone() };
-                ui.label(if removed { egui::RichText::new(label).strikethrough().weak() } else { egui::RichText::new(label) });
-                if removed {
-                    if ui.small_button("Keep").clicked() {
-                        remove.retain(|x| *x != i);
-                    }
-                } else if ui.add_enabled(kept > 1, egui::Button::new("Remove").small()).clicked() {
-                    remove.push(i);
-                }
-            });
-        }
+                ui.allocate_ui_with_layout(vec2(ui.available_width(), ROW_H + 4.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.add_space(10.0);
+                    let text = egui::RichText::new(label).font(theme::ui_font(13.0));
+                    ui.label(if removed { text.strikethrough().color(t.text_disabled) } else { text.color(t.text) });
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.add_space(4.0);
+                        if removed {
+                            if button(ui, lang.tr("Keep"), false).clicked() {
+                                remove.retain(|x| *x != i);
+                            }
+                        } else {
+                            ui.add_enabled_ui(kept > 1, |ui| {
+                                if button(ui, lang.tr("Remove"), false).clicked() {
+                                    remove.push(i);
+                                }
+                            });
+                        }
+                    });
+                });
+            }
+        });
     });
     d.values.insert("remove".into(), json!(remove));
     ui.add_space(6.0);
     edit(ui, d, "categories", "Horizontal (Category) Axis Labels:");
+    rule(ui);
     ok_cancel(ui, confirm, open);
     if *confirm {
         *confirm = false;

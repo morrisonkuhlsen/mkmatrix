@@ -150,14 +150,47 @@ pub(super) fn data_validation_fields(kind: &str, operator: &str) -> Vec<Field> {
     fields
 }
 
+/// Data Validation, in Format Cells' style: Settings, Input Message and Error Alert down the left
+/// (as Excel's tabs), the chosen section's fields on the right, and the footer. Every field stays
+/// in `d.fields`, so OK sends all of them whichever section is showing.
 pub(super) fn data_validation_form(ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool, open: &mut bool) {
+    use super::kit::{nav_item, nav_rail, nav_width, rule};
+    const SECTIONS: [(&str, Icon); 3] = [("Settings", Icon::Validation), ("Input Message", Icon::Comment), ("Error Alert", Icon::Info)];
+    let lang = crate::i18n::current(ui.ctx());
+    let t = crate::theme::Tokens::get(ui.ctx());
     let kind = d.values.get("type").and_then(Json::as_str).unwrap_or("any");
     let operator = d.values.get("operator").and_then(Json::as_str).unwrap_or("between");
-    d.fields = data_validation_fields(kind, operator);
-    form_fields(ui, d);
+    let all = data_validation_fields(kind, operator);
+    if !SECTIONS.iter().any(|(s, _)| *s == d.tab) {
+        d.tab = "Settings".into();
+    }
+    let section = |f: &Field| match f {
+        Field::Text { key: "inputMessage", .. } => "Input Message",
+        Field::Text { key: "errorMessage", .. } | Field::Choice { key: "errorStyle", .. } => "Error Alert",
+        _ => "Settings",
+    };
+    ui.horizontal_top(|ui| {
+        let names: Vec<&str> = SECTIONS.iter().map(|(s, _)| lang.tr(s)).collect();
+        nav_rail(ui, nav_width(ui, &names, 150.0), 300.0, &t, |ui| {
+            for (tab, icon) in SECTIONS {
+                if nav_item(ui, icon, lang.tr(tab), d.tab == tab, None, &t).clicked() {
+                    d.tab = tab.to_string();
+                }
+            }
+        });
+        ui.vertical(|ui| {
+            ui.set_min_height(300.0);
+            d.fields = all.iter().filter(|f| section(f) == d.tab).cloned().collect();
+            form_fields(ui, d);
+        });
+    });
+    d.fields = all;
+    rule(ui);
     ok_cancel(ui, confirm, open);
 }
 
+/// Data › Advanced filter, in Format Cells' style: the action as round options, the ranges, and the
+/// footer under a rule.
 pub(super) fn advanced_filter_form(ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool, open: &mut bool) {
     use Field::*;
     let copy = d.values.get("action").and_then(Json::as_str) == Some("copy");
@@ -175,17 +208,139 @@ pub(super) fn advanced_filter_form(ui: &mut egui::Ui, d: &mut Dialog, confirm: &
     }
     d.fields.push(Check { key: "unique", label: "Unique rows only" });
     form_fields(ui, d);
+    super::kit::rule(ui);
     // Constrain the button row: the shared right-to-left layout otherwise
     // consumes the window's remaining height instead of fitting the buttons.
     ui.allocate_ui(vec2(ui.available_width(), ui.spacing().interact_size.y + 8.0), |ui| ok_cancel(ui, confirm, open));
 }
 
-/// Draws the sort-level editor: header toggle, column/by/order controls, add/remove level, and `data.sort` on confirmation.
-pub(super) fn sort(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool) {
+/// Splits `text` as Text to Columns will with these delimiters: on any of them, runs of them
+/// counting as one when `consecutive` is on.
+fn split_preview(text: &str, delims: &[char], consecutive: bool) -> Vec<String> {
+    if delims.is_empty() {
+        return vec![text.to_string()];
+    }
+    let parts = text.split(|c| delims.contains(&c));
+    if consecutive { parts.filter(|p| !p.is_empty()).map(str::to_string).collect() } else { parts.map(str::to_string).collect() }
+}
+
+/// Data › Text to Columns, in Format Cells' style: the delimiters in two columns with Other and
+/// its character on one line, the destination, and a preview of the first rows split as OK will
+/// split them. The values are the dialog's `fields`, so the control channel sets the same.
+pub(super) fn text_to_columns(app: &SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool, open: &mut bool) {
+    use super::kit::{heading, panel, rule};
     let lang = app.ui.language;
+    let t = crate::theme::Tokens::get(ui.ctx());
+    let flag = |d: &Dialog, k: &str| d.values.get(k).and_then(Json::as_bool).unwrap_or(false);
+    let text = |d: &Dialog, k: &str| d.values.get(k).and_then(Json::as_str).unwrap_or("").to_string();
+    let check = |ui: &mut egui::Ui, d: &mut Dialog, key: &str, label: &str| {
+        let mut on = flag(d, key);
+        if ui.checkbox(&mut on, lang.tr(label)).changed() {
+            d.values.insert(key.into(), json!(on));
+        }
+    };
+    let col_w = (ui.available_width() - 12.0) / 2.0;
+    ui.spacing_mut().item_spacing.y = 6.0;
+    heading(ui, lang.tr("Delimiters"));
+    ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing.x = 12.0;
+        for column in [[("tab", "Tab"), ("semicolon", "Semicolon")], [("comma", "Comma"), ("space", "Space")]] {
+            ui.vertical(|ui| {
+                ui.set_width(col_w);
+                for (key, label) in column {
+                    check(ui, d, key, label);
+                }
+            });
+        }
+    });
+    ui.horizontal(|ui| {
+        let id = ui.label(egui::RichText::new(lang.tr("Other:")).font(theme::ui_font(13.0))).id;
+        let mut other = text(d, "other");
+        let r = ui.add(egui::TextEdit::singleline(&mut other).char_limit(1).desired_width(32.0)).labelled_by(id);
+        if r.changed() {
+            d.values.insert("other".into(), json!(other));
+        }
+    });
+    check(ui, d, "treatConsecutive", "Treat consecutive delimiters as one");
+    ui.add_space(4.0);
+    heading(ui, lang.tr("Destination:"));
+    let mut dest = text(d, "destination");
+    if ui.add(egui::TextEdit::singleline(&mut dest).desired_width(ui.available_width())).accessible_name(lang.tr("Destination:")).changed() {
+        d.values.insert("destination".into(), json!(dest));
+    }
+
+    // The preview: the selection's first rows, split.
+    ui.add_space(4.0);
+    heading(ui, lang.tr("Data preview"));
+    let mut delims: Vec<char> =
+        [("tab", '\t'), ("semicolon", ';'), ("comma", ','), ("space", ' ')].into_iter().filter(|(k, _)| flag(d, k)).map(|(_, c)| c).collect();
+    delims.extend(text(d, "other").chars().next());
+    let consecutive = flag(d, "treatConsecutive");
+    let rows: Vec<Vec<String>> = app
+        .session
+        .active()
+        .and_then(|doc| {
+            let sh = doc.wb.active()?;
+            let r = doc.selection.current();
+            Some(
+                (r.start.row..=r.end.row.min(r.start.row.saturating_add(5)))
+                    .map(|row| {
+                        split_preview(
+                            &mkmatrix_engine::display::cell_text(&doc.wb, sh, mkmatrix_engine::core::CellRef::new(row, r.start.col)),
+                            &delims,
+                            consecutive,
+                        )
+                    })
+                    .collect(),
+            )
+        })
+        .unwrap_or_default();
+    let preview_h = 6.0 * 22.0 + 10.0;
+    panel(ui, preview_h, |ui| {
+        egui::ScrollArea::both().id_salt("textToColumns.preview").auto_shrink([false, false]).show(ui, |ui| {
+            egui::Grid::new("textToColumns.grid").spacing([0.0, 0.0]).min_row_height(22.0).show(ui, |ui| {
+                for row in &rows {
+                    for cell in row.iter().take(16) {
+                        let (r, _) = ui.allocate_exact_size(vec2(84.0, 22.0), egui::Sense::hover());
+                        let p = ui.painter();
+                        p.rect_stroke(r, 0.0, egui::Stroke::new(1.0, t.separator), egui::StrokeKind::Inside);
+                        p.with_clip_rect(r.shrink(1.0)).text(
+                            egui::pos2(r.left() + 6.0, r.center().y),
+                            egui::Align2::LEFT_CENTER,
+                            cell,
+                            theme::ui_font(12.5),
+                            t.text,
+                        );
+                    }
+                    ui.end_row();
+                }
+            });
+        });
+    });
+    rule(ui);
+    ok_cancel(ui, confirm, open);
+}
+
+#[cfg(test)]
+mod text_to_columns_tests {
+    use super::split_preview;
+
+    #[test]
+    fn the_preview_splits_as_the_command_does() {
+        assert_eq!(split_preview("a;b,,c", &[';', ','], false), ["a", "b", "", "c"]);
+        assert_eq!(split_preview("a;b,,c", &[';', ','], true), ["a", "b", "c"]);
+        assert_eq!(split_preview("a b", &[], false), ["a b"]);
+    }
+}
+
+/// Sort, in Format Cells' style: Add Level and My list has headers above a table of levels (Sort
+/// by / Then by, the column, what to sort on and the order as two joined buttons, a cross to drop
+/// the level), then the footer; OK runs `data.sort`.
+pub(super) fn sort(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool) {
+    use super::kit::{button, footer, rule, segments};
+    let lang = app.ui.language;
+    let t = crate::theme::Tokens::get(ui.ctx());
     let mut header = d.values.get("header").and_then(Json::as_bool).unwrap_or(true);
-    ui.checkbox(&mut header, "My list has headers");
-    d.values.insert("header".into(), json!(header));
     let mut levels: Vec<Json> = d.values.get("levels").and_then(Json::as_array).cloned().unwrap_or_default();
     // Columns of the region around the active cell, labelled with their header (or first value).
     let columns: Vec<(String, String)> = app
@@ -210,16 +365,44 @@ pub(super) fn sort(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confir
             )
         })
         .unwrap_or_default();
+
+    let mut add = false;
+    ui.horizontal(|ui| {
+        add = button(ui, lang.tr("+ Add Level"), false).clicked();
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.checkbox(&mut header, lang.tr("My list has headers"));
+        });
+    });
+    d.values.insert("header".into(), json!(header));
+    rule(ui);
+
     let mut remove = None;
-    for (i, lv) in levels.iter_mut().enumerate() {
-        ui.horizontal(|ui| {
-            let label = ui.label(lang.tr(if i == 0 { "Sort by" } else { "Then by" }));
+    // The only level can't be removed.
+    let removable = levels.len() > 1;
+    egui::Grid::new("sort_levels").num_columns(5).spacing([10.0, 8.0]).min_col_width(0.0).min_row_height(28.0).show(ui, |ui| {
+        // Muted headings, as `kit::heading` draws them (which can't sit in a grid).
+        let heading = |ui: &mut egui::Ui, text: &str| ui.label(egui::RichText::new(text).font(theme::ui_bold(11.5)).color(t.text_dim));
+        ui.label("");
+        heading(ui, lang.tr("Column"));
+        heading(ui, lang.tr("Sort On"));
+        heading(ui, lang.tr("Order"));
+        ui.label("");
+        ui.end_row();
+        for (i, lv) in levels.iter_mut().enumerate() {
+            let label = ui.add_sized(
+                vec2(64.0, 28.0),
+                egui::Label::new(
+                    egui::RichText::new(lang.tr(if i == 0 { "Sort by" } else { "Then by" })).font(theme::ui_font(13.0)).color(t.text_dim),
+                ),
+            );
             let mut col = lv["column"].as_str().unwrap_or("A").to_string();
             if columns.is_empty() {
-                ui.add(egui::TextEdit::singleline(&mut col).desired_width(50.0)).labelled_by(label.id);
+                ui.add(egui::TextEdit::singleline(&mut col).desired_width(170.0)).labelled_by(label.id);
             } else {
+                let shown = columns.iter().find(|(l, _)| *l == col).map(|(_, text)| text.clone()).unwrap_or_else(|| col.clone());
                 craft_ui::ComboBox::from_id_salt(("sort_col", i))
-                    .selected_text(col.clone())
+                    .selected_text(shown)
+                    .width(170.0)
                     .show_ui(ui, |ui| {
                         for (letter, label) in &columns {
                             ui.selectable_value(&mut col, letter.clone(), label.as_str());
@@ -230,36 +413,37 @@ pub(super) fn sort(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confir
             }
             lv["column"] = json!(col.to_ascii_uppercase());
             let mut by = lv["by"].as_str().unwrap_or("values").to_string();
+            let ons = [("values", "Cell Values"), ("cellColor", "Cell Color"), ("fontColor", "Font Color")];
             craft_ui::ComboBox::from_id_salt(("by", i))
-                .selected_text(match by.as_str() {
-                    "cellColor" => "Cell Color",
-                    "fontColor" => "Font Color",
-                    _ => "Cell Values",
-                })
+                .selected_text(lang.tr(ons.iter().find(|(v, _)| *v == by).map_or("Cell Values", |(_, text)| text)))
+                .width(120.0)
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut by, "values".into(), "Cell Values");
-                    ui.selectable_value(&mut by, "cellColor".into(), "Cell Color");
-                    ui.selectable_value(&mut by, "fontColor".into(), "Font Color");
+                    for (v, text) in ons {
+                        ui.selectable_value(&mut by, v.into(), lang.tr(text));
+                    }
                 })
                 .response
                 .accessible_name(lang.tr("Sort On"));
             lv["by"] = json!(by);
-            let mut desc = lv["order"].as_str() == Some("desc");
-            ui.radio_value(&mut desc, false, "A to Z");
-            ui.radio_value(&mut desc, true, "Z to A");
-            lv["order"] = json!(if desc { "desc" } else { "asc" });
-            if crate::widgets::icon_button(ui, Icon::Close, crate::theme::Tokens::get(ui.ctx()).text_dim, "Remove level", vec2(18.0, 18.0)).clicked()
+            let order = if lv["order"].as_str() == Some("desc") { "desc" } else { "asc" };
+            let picked = ui.push_id(("order", i), |ui| segments(ui, order, &[("asc", lang.tr("A to Z")), ("desc", lang.tr("Z to A"))], 64.0)).inner;
+            lv["order"] = json!(picked.unwrap_or(order));
+            if ui
+                .add_enabled_ui(removable, |ui| crate::widgets::icon_button(ui, Icon::Close, t.text_dim, "Remove level", vec2(18.0, 18.0)))
+                .inner
+                .clicked()
             {
                 remove = Some(i);
             }
-        });
-    }
+            ui.end_row();
+        }
+    });
     if let Some(i) = remove
         && levels.len() > 1
     {
         levels.remove(i);
     }
-    if ui.button("+ Add Level").clicked() {
+    if add {
         let used: Vec<String> = levels.iter().filter_map(|l| l.get("column").and_then(Json::as_str).map(str::to_string)).collect();
         let next = columns
             .iter()
@@ -272,7 +456,7 @@ pub(super) fn sort(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confir
     }
     d.values.insert("levels".into(), Json::Array(levels.clone()));
     let mut open = true;
-    ok_cancel(ui, confirm, &mut open);
+    footer(ui, confirm, &mut open, |_| {});
     if *confirm {
         app.run_or_alert("data.sort", json!({"header": header, "keys": levels}));
     }

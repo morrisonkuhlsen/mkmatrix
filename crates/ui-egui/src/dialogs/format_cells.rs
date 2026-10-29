@@ -4,6 +4,7 @@ use super::*;
 use egui::pos2;
 use mkmatrix_engine::model::{BorderLine, BorderStyle, Color, Fill, HAlign, Style, Underline, VAlign, VertAlign};
 
+use super::kit::{form, heading, label, nav_item, nav_rail, segment};
 use crate::theme::Tokens;
 
 /// The sections, as `d.tab` names them (the English name `open_dialog` and tests pass), with the
@@ -22,8 +23,6 @@ const SECTIONS: [(&str, &str, Icon); 6] = [
 const BODY_H: f32 = 360.0;
 /// The navigation column's width.
 const NAV_W: f32 = 168.0;
-/// The form's label column.
-const LABEL_W: f32 = 112.0;
 
 /// Draws Format Cells: a navigation column of sections beside one form at a time, laid out on a
 /// fixed grid (labels left, controls right), and a footer with a live preview of the active cell
@@ -36,19 +35,14 @@ pub(super) fn format_cells(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog
     let theme = app.session.active().map(|doc| doc.wb.theme.clone()).unwrap_or_default();
     ui.horizontal_top(|ui| {
         // Navigation.
-        ui.vertical(|ui| {
-            ui.set_width(NAV_W);
-            ui.set_min_height(BODY_H);
-            ui.spacing_mut().item_spacing.y = 2.0;
+        let names: Vec<&str> = SECTIONS.iter().map(|(_, k, _)| lang.tr(k)).collect();
+        nav_rail(ui, super::kit::nav_width(ui, &names, NAV_W), BODY_H, &t, |ui| {
             for (tab, key, icon) in SECTIONS {
-                if nav_item(ui, icon, lang.tr(key), d.tab == tab, &t).clicked() {
+                if nav_item(ui, icon, lang.tr(key), d.tab == tab, None, &t).clicked() {
                     d.tab = tab.to_string();
                 }
             }
         });
-        let (line, _) = ui.allocate_exact_size(vec2(1.0, BODY_H), egui::Sense::hover());
-        ui.painter().rect_filled(line, 0.0, t.separator);
-        ui.add_space(16.0);
         // The section's form.
         ui.vertical(|ui| {
             ui.set_min_height(BODY_H);
@@ -90,64 +84,6 @@ pub(super) fn format_cells(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog
 }
 
 // ------------------------------------------------------------------------------------ pieces
-
-/// A navigation row: icon and name, the selected one tinted with a bar of the accent.
-fn nav_item(ui: &mut egui::Ui, icon: Icon, label: &str, selected: bool, t: &Tokens) -> egui::Response {
-    let (r, resp) = ui.allocate_exact_size(vec2(NAV_W, 34.0), egui::Sense::click());
-    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, label));
-    let p = ui.painter();
-    if selected {
-        p.rect_filled(r, 0.0, t.accent_soft);
-        p.rect_filled(egui::Rect::from_min_size(r.min, vec2(3.0, r.height())), 0.0, t.accent);
-    } else if resp.hovered() {
-        p.rect_filled(r, 0.0, t.hover);
-    }
-    let ink = if selected { t.accent } else { t.text };
-    icons::paint(p, egui::Rect::from_center_size(pos2(r.left() + 22.0, r.center().y), vec2(16.0, 16.0)), icon, ink);
-    let font = if selected { theme::ui_bold(13.0) } else { theme::ui_font(13.0) };
-    p.text(pos2(r.left() + 42.0, r.center().y), egui::Align2::LEFT_CENTER, label, font, ink);
-    resp
-}
-
-/// A section's heading: small, muted, with room above.
-fn heading(ui: &mut egui::Ui, text: &str) {
-    let t = Tokens::get(ui.ctx());
-    ui.add_space(2.0);
-    ui.label(egui::RichText::new(text).font(theme::ui_bold(11.5)).color(t.text_dim));
-}
-
-/// A form of labelled rows: labels in a column of their own, controls lined up beside them.
-fn form(ui: &mut egui::Ui, id: &str, add: impl FnOnce(&mut egui::Ui)) {
-    egui::Grid::new(id).num_columns(2).min_col_width(LABEL_W).spacing([12.0, 10.0]).show(ui, add);
-}
-
-/// A row's label; its id names the row's control for screen readers.
-fn label(ui: &mut egui::Ui, text: &str) -> egui::Id {
-    let t = Tokens::get(ui.ctx());
-    ui.label(egui::RichText::new(text).font(theme::ui_font(13.0)).color(t.text_dim)).id
-}
-
-/// One choice of a segmented control: joined buttons of one height, the chosen one filled.
-fn segment(ui: &mut egui::Ui, text: &str, on: bool, width: f32, a11y: &str) -> egui::Response {
-    let t = Tokens::get(ui.ctx());
-    let (r, resp) = ui.allocate_exact_size(vec2(width, 28.0), egui::Sense::click());
-    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, a11y));
-    let p = ui.painter();
-    p.rect_filled(
-        r,
-        0.0,
-        if on {
-            t.accent_soft
-        } else if resp.hovered() {
-            t.hover
-        } else {
-            t.input_bg
-        },
-    );
-    p.rect_stroke(r, 0.0, egui::Stroke::new(1.0, if on { t.accent } else { t.input_border }), egui::StrokeKind::Inside);
-    p.text(r.center(), egui::Align2::CENTER_CENTER, text, theme::ui_font(12.5), if on { t.accent } else { t.text });
-    resp
-}
 
 /// A drop-down of named choices bound to `value`.
 fn choice<T: PartialEq + Copy>(ui: &mut egui::Ui, id: &str, label: egui::Id, value: &mut T, options: &[(T, &str)], lang: crate::i18n::Language) {

@@ -47,9 +47,31 @@ use tables::filter_table_range;
 pub use tables::{TableHeading, filter_button_rect, heading_table, table_headings};
 
 pub const COL_HEADER_H: f32 = 21.0;
-/// Sheet units are 96-dpi pixels (as in XLSX); on screen one unit is drawn at this many points,
-/// which matches desktop spreadsheet density (a default 20 px row is 16 pt tall).
+/// Sheet units are 96-dpi pixels (as in XLSX); on a high-density screen one unit is drawn at this
+/// many points, which matches desktop spreadsheet density (a default 20 px row is 16 pt tall).
 pub const DISPLAY_SCALE: f32 = 0.8;
+
+/// The points one sheet unit is drawn at now: [`DISPLAY_SCALE`] unless the app chose otherwise
+/// for its screen ([`set_display_scale`]). Stored as `f32` bits.
+static SCALE_BITS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x3F4C_CCCD);
+
+/// The points one sheet unit is drawn at (see [`DISPLAY_SCALE`]).
+pub fn display_scale() -> f32 {
+    f32::from_bits(SCALE_BITS.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+/// Sets the points one sheet unit is drawn at; the native app sets it from its screen
+/// ([`display_scale_for`]).
+pub fn set_display_scale(scale: f32) {
+    SCALE_BITS.store(scale.clamp(0.5, 2.0).to_bits(), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The scale for a screen of `pixels_per_point`: on a 1x screen a point is a pixel, and 0.8
+/// would draw the default row 16 pixels tall where desktop spreadsheets draw it 20, so the grid
+/// is drawn at full size there; high-density screens keep [`DISPLAY_SCALE`].
+pub fn display_scale_for(pixels_per_point: f32) -> f32 {
+    if pixels_per_point < 1.5 { 1.0 } else { display_scale() }
+}
 
 /// The zoom percentages a Ctrl+wheel notch steps between: four per doubling (about 20% apart),
 /// so 25, 50, 100, 200 and 400 are on it. Excel steps 15 points a notch instead; the status bar's
@@ -129,7 +151,9 @@ pub enum Drag {
         id: u32,
         start: Pos2,
         orig: (CellRef, f32, f32, f32, f32),
-        resize: bool,
+        /// The sizing handle held, as the sides it moves: (-1 left, 0 neither, 1 right) and
+        /// (-1 top, 0 neither, 1 bottom); `None` moves the object.
+        resize: Option<(i8, i8)>,
     },
 }
 
@@ -274,7 +298,7 @@ impl WheelZoom {
 /// Row and column heading labels grow with the zoom as the cells do, as in Excel (at 400% the
 /// labels are four times their 100% size), and never get smaller than a readable 8.5 points.
 pub(crate) fn heading_font_size(zoom: f32) -> f32 {
-    (11.5 * (zoom / DISPLAY_SCALE)).max(8.5)
+    (11.5 * (zoom / display_scale())).max(8.5)
 }
 
 #[cfg(test)]

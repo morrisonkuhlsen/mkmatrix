@@ -80,7 +80,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
             }
             app.grid.wheel_zoom = Some(zooming);
         } else if scroll_delta != egui::Vec2::ZERO {
-            let z = if paper { make_geo(app, view.scroll).z } else { sh.zoom as f32 / 100.0 * DISPLAY_SCALE };
+            let z = if paper { make_geo(app, view.scroll).z } else { sh.zoom as f32 / 100.0 * display_scale() };
             let mut d = scroll_delta;
             // A horizontal swipe moves the content the way the fingers go, which is towards
             // higher columns on a mirrored sheet.
@@ -99,7 +99,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
         app.grid.touch_pan = true;
     }
     if app.grid.touch_pan && resp.dragged() && ui.input(|i| i.multi_touch().is_none()) {
-        let z = if paper { make_geo(app, view.scroll).z } else { sh.zoom as f32 / 100.0 * DISPLAY_SCALE };
+        let z = if paper { make_geo(app, view.scroll).z } else { sh.zoom as f32 / 100.0 * display_scale() };
         let mut d = resp.drag_delta();
         if sh.right_to_left {
             d.x = -d.x;
@@ -539,7 +539,7 @@ pub(crate) fn paint_headers(
                         // The name is cut off at the button, as a cell's text is at its neighbour.
                         let end = h.button.map_or(cr.right(), |b| b.left()) - 2.0;
                         let room = Rect::from_min_max(cr.min, pos2(end.max(cr.left()), cr.bottom())).intersect(pc.clip_rect());
-                        let pad = 4.0 * (geo.z / DISPLAY_SCALE).max(0.75);
+                        let pad = 4.0 * (geo.z / display_scale()).max(0.75);
                         pc.with_clip_rect(room).text(pos2(cr.left() + pad, cr.center().y), Align2::LEFT_CENTER, &h.name, font.clone(), color);
                         if let Some(b) = h.button {
                             paint_filter_button(&pc, b, h.filtered);
@@ -595,8 +595,13 @@ pub(crate) fn paint_headers(
     // Corner (select all) and edges.
     let corner = Rect::from_min_max(r.min, geo.cells.min);
     p.rect_filled(corner, 0.0, t.header_bg);
-    // MK Matrix marks select-all with an omega, the whole, centred in the corner.
-    p.text(corner.center(), Align2::CENTER_CENTER, "Ω", font.clone(), t.header_text);
+    // MK Matrix marks select-all with an omega, the whole, centred in the corner: a size larger
+    // than the headings' numbers, never taller than the corner.
+    // Set on whole pixels, so its strokes stay sharp on a 1x screen instead of straddling two.
+    let size = (font.size * 1.35).min(corner.height() * 0.8).max(font.size).round();
+    let galley = p.layout_no_wrap("Ω".into(), theme::ui_font(size), t.header_text);
+    let at = egui::emath::GuiRounding::round_to_pixels(corner.center() - galley.size() / 2.0, p.pixels_per_point());
+    p.galley(at, galley, t.header_text);
     p.line_segment([pos2(r.left(), geo.cells.top() - 0.5), pos2(r.right(), geo.cells.top() - 0.5)], Stroke::new(1.0, t.header_line));
     p.line_segment([pos2(geo.cells.left() - 0.5, r.top()), pos2(geo.cells.left() - 0.5, r.bottom())], Stroke::new(1.0, t.header_line));
 }

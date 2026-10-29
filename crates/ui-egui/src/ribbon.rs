@@ -36,105 +36,64 @@ use insert::{draw, insert};
 use page_layout::page_layout;
 use review::review;
 pub use shortcuts::shortcut;
-pub use title_bar::{MAC_CONTENT_LEFT, MAC_TITLE_BAR, TITLE_LEFT_PAD, title_bar};
+pub use title_bar::{MAC_CONTENT_LEFT, MAC_TITLE_BAR, TITLE_LEFT_PAD, resize_edges, title_bar};
 use title_bar::{TITLE_BAR_H, TITLE_CONTROL_H};
 use view::view;
 
 pub const TABS: &[&str] = &["Home", "Insert", "Draw", "Page Layout", "Formulas", "Data", "Review", "View", "Automate"];
 const _: () = assert!(TITLE_CONTROL_H < TITLE_BAR_H, "title-bar controls keep a margin above and below");
 
-/// Draws the ribbon tabs and the active tab's horizontally scrollable card, resetting an unavailable contextual tab to Home.
+/// MK Matrix's top bar: File (the Backstage view), the tabs and the Help menu over a single row of the active
+/// tab's controls, one size throughout. A tab's click shows its controls in the row; a click on the
+/// active tab, or a double click, folds the row away (as Minimal density does). A contextual tab
+/// that is gone (the cell left the table) falls back to Home.
 pub fn show(app: &mut SheetApp, ui: &mut Ui) {
-    if !app.ui.classic_ribbon {
-        toolbar(app, ui);
-        return;
-    }
     let t = Tokens::get(ui.ctx());
-    let collapsed = app.ui.ribbon_collapsed;
-    // Compact: lower tabs, and a card without the groups' names.
     let compact = app.ui.density.compact();
-    let (tabs_h, card_h) = if compact { (28.0, 88.0) } else { (34.0, 104.0) };
-    let h = if collapsed { tabs_h } else { tabs_h + card_h + 4.0 };
+    let menu_h = if compact { 26.0 } else { 30.0 };
+    // The row of controls, and under it the groups' names (not in compact density).
+    let row_h = if compact { 36.0 } else { 50.0 };
     // A contextual tab exists only while its object is selected (Excel hides Table Design once the
-    // cell leaves the table); a remembered one that is gone would draw an empty ribbon.
+    // cell leaves the table); a remembered one that is gone would draw an empty row.
     if CONTEXTUAL_TABS.contains(&app.ui.ribbon_tab.as_str()) && !contextual_tabs(app).contains(&app.ui.ribbon_tab.as_str()) {
         app.ui.ribbon_tab = "Home".to_string();
     }
+    let collapsed = app.ui.ribbon_collapsed;
+    // Room between the tabs and the icons under them.
+    let gap = if compact { 4.0 } else { 8.0 };
+    let h = menu_h + if collapsed { 0.0 } else { gap + row_h + 2.0 };
     egui::Panel::top("ribbon")
         .exact_size(h)
-        .frame(egui::Frame::NONE.fill(t.window).inner_margin(egui::Margin { left: 10, right: 10, top: 0, bottom: 6 }))
+        .show_separator_line(false)
+        .frame(egui::Frame::NONE.fill(t.window).inner_margin(egui::Margin { left: 10, right: 10, top: 0, bottom: 0 }))
         .show(ui, |ui| {
-            // Tabs row.
-            let tabs_rect = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), tabs_h - 2.0));
-            ui.scope_builder(egui::UiBuilder::new().max_rect(tabs_rect), |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 2.0;
-                    ui.add_space(8.0);
+            let bar = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), menu_h));
+            ui.scope_builder(egui::UiBuilder::new().max_rect(bar), |ui| {
+                ui.horizontal_centered(|ui| {
+                    ui.spacing_mut().item_spacing.x = 0.0;
                     if app.chrome.file_tab {
-                        file_menu(app, ui);
+                        file_button(app, ui, menu_h);
                     }
                     let mut tabs: Vec<&str> = TABS.to_vec();
                     let ctx_tabs = contextual_tabs(app);
                     tabs.extend(ctx_tabs.iter());
                     for tab in tabs {
-                        let active = app.ui.ribbon_tab == tab;
-                        let contextual = ctx_tabs.contains(&tab);
-                        let font = theme::ui_font(13.5);
-                        let label = app.ui.language.tr(tab);
-                        let tw = ui.painter().layout_no_wrap(label.to_string(), font.clone(), t.text).size().x;
-                        let (r, resp) = ui.allocate_exact_size(vec2(tw + 22.0, tabs_h - 4.0), Sense::click());
-                        if resp.hovered() && !active {
-                            ui.painter().rect_filled(r.shrink2(vec2(2.0, 4.0)), 5.0, t.hover);
-                        }
-                        let color = if contextual {
-                            t.accent
-                        } else if active {
-                            t.text
-                        } else {
-                            t.text_dim
-                        };
-                        ui.painter().text(r.center(), Align2::CENTER_CENTER, label, if active { theme::ui_bold(13.5) } else { font }, color);
-                        if active {
-                            let ul = Rect::from_center_size(pos2(r.center().x, r.bottom() - 3.0), vec2(tw.clamp(20.0, 40.0), 3.0));
-                            ui.painter().rect_filled(ul, 1.5, t.accent);
-                        }
-                        if resp.clicked() {
-                            if active && !collapsed {
-                                app.ui.ribbon_collapsed = true;
-                            } else {
-                                app.ui.ribbon_tab = tab.to_string();
-                                app.ui.ribbon_collapsed = false;
-                            }
-                        }
-                        if resp.double_clicked() {
-                            app.ui.ribbon_collapsed = !collapsed;
-                        }
-                        if app.keytips.prefix() == Some("")
-                            && let Some(sequence) = keytip_table::tab_sequence(tab)
-                        {
-                            keytip(app, ui, sequence, pos2(r.center().x, r.bottom() - 1.0));
-                        }
+                        tab_button(app, ui, tab, ctx_tabs.contains(&tab), menu_h);
                     }
+                    menu(app, ui, "Help", menu_h);
                 });
             });
             if collapsed {
                 return;
             }
-            // Ribbon card. The row above it can be wider than a narrow window, so the card is kept
-            // within the window (with the margin it has on the left), or its right scroll arrow
-            // would be drawn off screen.
-            let left = ui.cursor().min.x;
-            let screen = ui.ctx().content_rect();
-            let fits = (screen.right() - left - (left - screen.left()).max(0.0)).max(0.0);
-            // MK Matrix draws it borderless and transparent: the controls sit on the window itself.
-            let card = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width().min(fits), card_h));
-            let inner = card.shrink2(vec2(10.0, 6.0));
-            ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
-                // One scroll state per tab: a tab opened after scrolling another starts at its
-                // left edge, and a tab keeps its own offset while others are used.
-                let tab = app.ui.ribbon_tab.clone();
+            // The active tab's controls in one row, scrolling sideways when the window is narrower
+            // than they are. One scroll state per tab: a tab opened after scrolling another starts
+            // at its left edge.
+            let tab = app.ui.ribbon_tab.clone();
+            let row = Rect::from_min_size(pos2(bar.left(), bar.bottom() + gap), vec2(bar.width(), row_h));
+            ui.scope_builder(egui::UiBuilder::new().max_rect(row), |ui| {
                 let mut area = egui::ScrollArea::horizontal()
-                    .id_salt(("ribbon_scroll", tab.as_str()))
+                    .id_salt(("toolbar_scroll", tab.as_str()))
                     .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden);
                 // egui 0.37 keeps `ScrollArea`'s offset private; `scroll_offset` is the supported
                 // way to move it. An arrow click records the requested offset for the next frame.
@@ -145,11 +104,14 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                     area = area.horizontal_scroll_offset(x);
                 }
                 let scroll = area.show(ui, |ui| {
-                    ui.horizontal(|ui| {
+                    ui.set_min_height(row_h);
+                    ui.horizontal_top(|ui| {
                         ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
-                        controls::group_begin(ui);
+                        ui.set_height(controls::TOOL_ROW_H);
+                        controls::set_single_row(ui, true);
                         controls::show_group_names(ui, !compact);
-                        match app.ui.ribbon_tab.as_str() {
+                        controls::group_begin(ui);
+                        match tab.as_str() {
                             "Home" => home(app, ui),
                             "Insert" => insert(app, ui),
                             "Draw" => draw(app, ui),
@@ -164,7 +126,8 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                             crate::paper_view::TAB => crate::paper_view::ribbon_tab(app, ui),
                             _ => home(app, ui),
                         }
-                        controls::group_end(ui, last_group(&app.ui.ribbon_tab));
+                        controls::group_end(ui, last_group(&tab));
+                        controls::set_single_row(ui, false);
                     });
                 });
                 scroll_arrows(ui, &t, tab.as_str(), scroll);
@@ -172,82 +135,101 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
         });
 }
 
-/// MK Matrix's top bar: a menu bar (File, Edit, View, Insert, Format, Data, Tools, Help) over a
-/// single row of the Home tab's controls, one size throughout. Minimal density keeps the menus
-/// only. View › Classic Ribbon brings the tabs back.
-fn toolbar(app: &mut SheetApp, ui: &mut Ui) {
+/// One of the top bar's tabs: bold while active, in the accent colour when contextual.
+fn tab_button(app: &mut SheetApp, ui: &mut Ui, tab: &str, contextual: bool, menu_h: f32) {
     let t = Tokens::get(ui.ctx());
-    let compact = app.ui.density.compact();
-    let menu_h = if compact { 26.0 } else { 30.0 };
-    // The row of controls, and under it the groups' names (not in compact density).
-    let row_h = if compact { 36.0 } else { 50.0 };
-    let with_row = app.ui.density != crate::Density::Minimal;
-    let h = menu_h + if with_row { row_h + 2.0 } else { 0.0 };
-    egui::Panel::top("ribbon")
-        .exact_size(h)
-        .show_separator_line(false)
-        .frame(egui::Frame::NONE.fill(t.window).inner_margin(egui::Margin { left: 10, right: 10, top: 0, bottom: 0 }))
-        .show(ui, |ui| {
-            let lang = app.ui.language;
-            let bar = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), menu_h));
-            ui.scope_builder(egui::UiBuilder::new().max_rect(bar), |ui| {
-                ui.horizontal_centered(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    for (title, items) in crate::menus::tree() {
-                        let font = theme::ui_font(13.0);
-                        let label = lang.tr(title).to_string();
-                        let tw = ui.painter().layout_no_wrap(label.clone(), font.clone(), t.text).size().x;
-                        let (r, resp) = ui.allocate_exact_size(vec2(tw + 18.0, menu_h - 4.0), Sense::click());
-                        let open = egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&resp));
-                        if resp.hovered() || open {
-                            ui.painter().rect_filled(r, 0.0, t.hover);
-                        }
-                        ui.painter().text(r.center(), Align2::CENTER_CENTER, label.clone(), font, t.text);
-                        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &label));
-                        egui::Popup::menu(&resp).show(|ui| {
-                            ui.set_min_width(230.0);
-                            for (item, id) in &items {
-                                if *item == "-" {
-                                    ui.separator();
-                                    continue;
-                                }
-                                let button = egui::Button::new(lang.tr(item)).frame_when_inactive(false).min_size(vec2(230.0, 24.0));
-                                if ui.add(button).clicked() {
-                                    let ctx = ui.ctx().clone();
-                                    crate::menus::run(app, &ctx, id);
-                                    ui.close();
-                                }
-                            }
-                        });
-                    }
-                });
-            });
-            if !with_row {
-                return;
+    let active = app.ui.ribbon_tab == tab;
+    let collapsed = app.ui.ribbon_collapsed;
+    let font = theme::ui_font(13.0);
+    let label = app.ui.language.tr(tab).to_string();
+    let tw = ui.painter().layout_no_wrap(label.clone(), font.clone(), t.text).size().x;
+    let (r, resp) = ui.allocate_exact_size(vec2(tw + 18.0, menu_h - 4.0), Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(r, 0.0, t.hover);
+    }
+    let color = if contextual {
+        t.accent
+    } else if active {
+        t.text
+    } else {
+        t.text_dim
+    };
+    ui.painter().text(r.center(), Align2::CENTER_CENTER, label.clone(), if active { theme::ui_bold(13.0) } else { font }, color);
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Tab, true, active, &label));
+    if resp.double_clicked() {
+        app.ui.ribbon_collapsed = !collapsed;
+    } else if resp.clicked() {
+        if active && !collapsed {
+            app.ui.ribbon_collapsed = true;
+        } else {
+            app.ui.ribbon_tab = tab.to_string();
+            app.ui.ribbon_collapsed = false;
+        }
+    }
+    if app.keytips.prefix() == Some("")
+        && let Some(sequence) = keytip_table::tab_sequence(tab)
+    {
+        keytip(app, ui, sequence, pos2(r.center().x, r.bottom() - 1.0));
+    }
+}
+
+/// File, in the accent colour: opens the Backstage view.
+fn file_button(app: &mut SheetApp, ui: &mut Ui, menu_h: f32) {
+    let t = Tokens::get(ui.ctx());
+    let font = theme::ui_font(13.0);
+    let label = app.ui.language.tr("File").to_string();
+    let tw = ui.painter().layout_no_wrap(label.clone(), font.clone(), t.text).size().x;
+    let (r, resp) = ui.allocate_exact_size(vec2(tw + 18.0, menu_h - 4.0), Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(r, 0.0, t.hover);
+    }
+    ui.painter().text(r.center(), Align2::CENTER_CENTER, label.clone(), font, t.accent);
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &label));
+    if resp.clicked() {
+        app.open_backstage(crate::backstage::Page::Home);
+    }
+    if app.keytips.prefix() == Some("")
+        && let Some(sequence) = keytip_table::tab_sequence("File")
+    {
+        keytip(app, ui, sequence, pos2(r.center().x, r.bottom() - 1.0));
+    }
+}
+
+/// One of the top bar's menus (Help): the items `crate::menus::tree()` lists under `title`.
+fn menu(app: &mut SheetApp, ui: &mut Ui, title: &str, menu_h: f32) {
+    let t = Tokens::get(ui.ctx());
+    let lang = app.ui.language;
+    let Some((_, items)) = crate::menus::tree().into_iter().find(|(m, _)| *m == title) else { return };
+    let font = theme::ui_font(13.0);
+    let label = lang.tr(title).to_string();
+    let tw = ui.painter().layout_no_wrap(label.clone(), font.clone(), t.text).size().x;
+    let (r, resp) = ui.allocate_exact_size(vec2(tw + 18.0, menu_h - 4.0), Sense::click());
+    let open = egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&resp));
+    if resp.hovered() || open {
+        ui.painter().rect_filled(r, 0.0, t.hover);
+    }
+    ui.painter().text(r.center(), Align2::CENTER_CENTER, label.clone(), font, t.text);
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &label));
+    if app.keytips.prefix() == Some("")
+        && let Some(sequence) = keytip_table::tab_sequence(title)
+    {
+        keytip(app, ui, sequence, pos2(r.center().x, r.bottom() - 1.0));
+    }
+    egui::Popup::menu(&resp).show(|ui| {
+        ui.set_min_width(230.0);
+        for (item, id) in &items {
+            if *item == "-" {
+                ui.separator();
+                continue;
             }
-            // The toolbar: the Home controls in one row, scrolling sideways when the window is
-            // narrower than they are.
-            let row = Rect::from_min_size(pos2(bar.left(), bar.bottom()), vec2(bar.width(), row_h));
-            ui.scope_builder(egui::UiBuilder::new().max_rect(row), |ui| {
-                let scroll = egui::ScrollArea::horizontal()
-                    .id_salt("toolbar_scroll")
-                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
-                    .show(ui, |ui| {
-                        ui.set_min_height(row_h);
-                        ui.horizontal_top(|ui| {
-                            ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
-                            ui.set_height(controls::TOOL_ROW_H);
-                            controls::set_single_row(ui, true);
-                            controls::show_group_names(ui, !compact);
-                            controls::group_begin(ui);
-                            home(app, ui);
-                            controls::group_end(ui, "Editing");
-                            controls::set_single_row(ui, false);
-                        });
-                    });
-                scroll_arrows(ui, &t, "toolbar", scroll);
-            });
-        });
+            let button = egui::Button::new(lang.tr(item)).frame_when_inactive(false).min_size(vec2(230.0, 24.0));
+            if ui.add(button).clicked() {
+                let ctx = ui.ctx().clone();
+                crate::menus::run(app, &ctx, id);
+                ui.close();
+            }
+        }
+    });
 }
 
 /// The name of a tab's last group, which no separator closes.
@@ -346,22 +328,6 @@ fn scroll_arrows(ui: &mut Ui, t: &Tokens, tab: &str, scroll: egui::scroll_area::
         let frame = ui.ctx().cumulative_frame_nr();
         ui.ctx().data_mut(|d| d.insert_temp(RibbonOverflow::scroll_target_id(tab), (frame, x.clamp(0.0, max))));
         ui.ctx().request_repaint();
-    }
-}
-
-/// The File tab opens the Backstage view (New, Open, Info, Save As, Print, Export, Options…), like
-/// Excel's; the ribbon's tab and collapsed state are left as they were for when it closes.
-fn file_menu(app: &mut SheetApp, ui: &mut Ui) {
-    let t = Tokens::get(ui.ctx());
-    let label = egui::RichText::new(app.ui.language.tr("File")).font(theme::ui_font(13.5)).color(t.accent);
-    let file = ui.add(egui::Button::new(label).frame(false).min_size(vec2(46.0, 30.0)));
-    if file.clicked() {
-        app.open_backstage(crate::backstage::Page::Home);
-    }
-    if app.keytips.prefix() == Some("")
-        && let Some(sequence) = keytip_table::tab_sequence("File")
-    {
-        keytip(app, ui, sequence, pos2(file.rect.center().x, file.rect.bottom() - 1.0));
     }
 }
 

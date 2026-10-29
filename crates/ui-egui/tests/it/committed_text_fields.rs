@@ -65,8 +65,9 @@ fn typing_a_table_name_on_the_table_design_tab_renames_the_table() {
     h.state_mut().ui.ribbon_tab = "Table Design".into();
     h.run_steps(2);
     let label = h.get_by_label("Table Name:").rect();
-    let below_label = |r: &egui::Rect| r.top() >= label.bottom() - 2.0 && (r.left() - label.left()).abs() < 20.0;
-    let field = h.get_all_by_role(Role::TextInput).map(|n| n.rect()).find(below_label).unwrap();
+    // The toolbar's single row puts the field just right of its label.
+    let beside_label = |r: &egui::Rect| r.left() >= label.right() - 2.0 && r.left() - label.right() < 20.0 && r.y_range().intersects(label.y_range());
+    let field = h.get_all_by_role(Role::TextInput).map(|n| n.rect()).find(beside_label).unwrap();
     retype(&mut h, field, "Sales");
     let name = h.state().session.active().unwrap().wb.active().unwrap().tables[0].name.clone();
     assert_eq!(name, "Sales");

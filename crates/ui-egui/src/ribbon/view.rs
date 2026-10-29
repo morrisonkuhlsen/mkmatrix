@@ -1,7 +1,7 @@
 use super::controls::{act, checkbox_on, control_keytip, invoke, keytip, menu_items, popup_command, sep};
 use super::*;
 
-/// Draws the View tab: view modes, ruler/gridlines/formula-bar/headings toggles, zoom, freeze panes, theme, animations, interface size and language.
+/// Draws the View tab: view modes, ruler/gridlines/formula-bar/headings toggles, zoom, freeze panes, theme, animations and interface size (the language is in File › Options).
 pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let _ = t;
@@ -22,7 +22,7 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
     let page_layout =
         app.session.active().and_then(|d| d.wb.active().map(|s| s.view == mkmatrix_engine::model::SheetViewMode::PageLayout)).unwrap_or(false);
     // Two columns of two, as in Excel's Show group: four stacked rows overflow the ribbon body.
-    ui.vertical(|ui| {
+    controls::check_column(ui, |ui| {
         // Rulers exist only in Page Layout view.
         let mut ruler = !app.session.hide_ruler;
         let ruler_resp = ui.add_enabled(page_layout, egui::Checkbox::new(&mut ruler, lang.tr("Ruler")));
@@ -38,7 +38,7 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
         }
     });
     ui.add_space(6.0);
-    ui.vertical(|ui| {
+    controls::check_column(ui, |ui| {
         let mut fb = app.session.prefs.formula_bar;
         let resp = ui.checkbox(&mut fb, lang.tr("Formula Bar"));
         control_keytip(app, ui, &resp, "view.formulaBar");
@@ -54,7 +54,7 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
     });
     // A third column: MK Matrix's numbered column headings.
     ui.add_space(6.0);
-    ui.vertical(|ui| {
+    controls::check_column(ui, |ui| {
         let mut numbered = app.ui.numbered_columns;
         let hint = lang.tr("Head the columns 1, 2, 3… as a matrix's a(i,j), rather than A, B, C");
         if ui.checkbox(&mut numbered, lang.tr("Numbered Columns")).on_hover_text(hint).changed() {
@@ -113,8 +113,8 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
         );
     });
     switch_windows(app, ui);
-    ui.vertical(|ui| {
-        let label_response = ui.label(lang.tr("Display theme"));
+    controls::stack(ui, |ui| {
+        let label_id = controls::field_label(ui, lang.tr("Display theme"));
         let mode = app.ui.theme_mode();
         let label = match mode {
             "system" => "System",
@@ -132,7 +132,8 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
                 }
             })
             .response
-            .labelled_by(label_response.id);
+            .labelled_by(label_id);
+        controls::item_gap(ui);
         let mut animations = app.ui.animations;
         let hint = lang.tr("Glide the selection outline to the cell you move to instead of jumping there");
         if ui.checkbox(&mut animations, lang.tr("Animations")).on_hover_text(hint).changed() {
@@ -141,8 +142,8 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
     });
     sep(ui, "Window");
     // Interface size (issue #230): scales the whole window on top of the desktop's scale.
-    ui.vertical(|ui| {
-        let label = ui.label(egui::RichText::new(lang.tr("Interface size")).font(theme::ui_font(11.5)).color(t.text_dim));
+    controls::stack(ui, |ui| {
+        let label = controls::field_label(ui, lang.tr("Interface size"));
         let current = app.ui.interface_scale;
         let text = |v: u16| if v == 100 { lang.tr("Auto").to_string() } else { format!("{v}%") };
         craft_ui::ComboBox::from_id_salt("ui_interface_size")
@@ -156,11 +157,11 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
                 }
             })
             .response
-            .labelled_by(label.id);
+            .labelled_by(label);
     });
     // Density: how much room the bars above and below the sheet take.
-    ui.vertical(|ui| {
-        let label = ui.label(egui::RichText::new(lang.tr("Density")).font(theme::ui_font(11.5)).color(t.text_dim));
+    controls::stack(ui, |ui| {
+        let label = controls::field_label(ui, lang.tr("Density"));
         let current = app.ui.density;
         craft_ui::ComboBox::from_id_salt("ui_density")
             .width(110.0)
@@ -173,24 +174,7 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
                 }
             })
             .response
-            .labelled_by(label.id);
-    });
-    // Interface language: settings live in the View tab, like Excel's Options. The label follows
-    // the current language so it stays readable; the choices are always shown in their own script.
-    ui.vertical(|ui| {
-        let label = ui.label(egui::RichText::new(lang.tr("Interface language")).font(theme::ui_font(11.5)).color(t.text_dim));
-        craft_ui::ComboBox::from_id_salt("ui_language")
-            .width(120.0)
-            .selected_text(egui::RichText::new(lang.name()).font(theme::ui_font(12.5)))
-            .show_ui(ui, |ui| {
-                for l in crate::i18n::Language::ALL {
-                    if ui.selectable_label(l == lang, l.name()).clicked() {
-                        act(app, "app.language.set", json!({"language": l.code()}));
-                    }
-                }
-            })
-            .response
-            .labelled_by(label.id);
+            .labelled_by(label);
     });
 }
 

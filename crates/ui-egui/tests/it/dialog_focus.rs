@@ -81,3 +81,16 @@ fn command_search_arrow_and_page_keys_move_the_selection_and_keep_the_search_foc
     assert!(after_page > 2, "PageDown moved past the third row, got {after_page}");
     assert!(h.ctx.memory(|m| m.focused()).is_some(), "the search field kept focus");
 }
+
+#[test]
+fn command_search_cancel_closes_without_running_the_selected_command() {
+    use egui_kittest::kittest::Queryable as _;
+    let mut h = harness();
+    h.state_mut().open_dialog("commandSearch", json!({}));
+    h.run_steps(6);
+    let journal = h.state().session.journal.len();
+    h.get_by_label(" Cancel ").click();
+    h.run_steps(3);
+    assert!(h.state().dialog.is_none(), "Cancel closed Search Commands");
+    assert_eq!(h.state().session.journal.len(), journal, "no command ran");
+}

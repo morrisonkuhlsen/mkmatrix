@@ -1,5 +1,6 @@
 use super::controls::{act, control_keytip};
 use super::*;
+use crate::widgets::icon_button_mono;
 
 /// macOS draws the window into the title bar (`with_fullsize_content_view`) and AppKit paints the
 /// traffic lights itself, centred in its standard 28 pt title-bar band. Moving them would take
@@ -62,12 +63,12 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                 app.toggle_autosave();
             }
             ui.add_space(6.0);
-            let __k = icon_button(ui, Icon::Home, t.text_dim, "Home", vec2(26.0, ch));
+            let __k = icon_button_mono(ui, Icon::Home, t.text_dim, "Home", vec2(26.0, ch));
             control_keytip(app, ui, &__k, "start");
             if __k.clicked() {
                 app.open_dialog("start", json!({}));
             }
-            if icon_button(ui, Icon::Save, t.text_dim, "Save", vec2(26.0, ch)).clicked()
+            if icon_button_mono(ui, Icon::Save, t.text_dim, "Save", vec2(26.0, ch)).clicked()
                 // File operations must include the cell the user is still editing (as the File > Save menu item already does).
                 && app.commit_edit(0, 0, false, false)
             {
@@ -78,12 +79,12 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
             let can_undo = mkmatrix_engine::cmd::can_undo(&app.session).is_ok();
             let can_redo = mkmatrix_engine::cmd::can_redo(&app.session).is_ok();
             // Named and marked enabled or not for assistive technology (and the UI tests).
-            let undo = icon_button(ui, Icon::Undo, if can_undo { t.text_dim } else { t.text_disabled }, "Undo", vec2(26.0, ch));
+            let undo = icon_button_mono(ui, Icon::Undo, if can_undo { t.text_dim } else { t.text_disabled }, "Undo", vec2(26.0, ch));
             undo.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, can_undo, "Undo"));
             if undo.clicked() && can_undo {
                 app.run_or_alert("edit.undo", json!({}));
             }
-            let undo_list = icon_button(ui, Icon::Chevron, t.text_dim, "Undo list", vec2(14.0, ch));
+            let undo_list = icon_button_mono(ui, Icon::Chevron, t.text_dim, "Undo list", vec2(14.0, ch));
             egui::Popup::menu(&undo_list).show(|ui| {
                 let labels: Vec<String> = if can_undo {
                     app.session.active().map(|d| d.undo.iter().rev().take(20).map(|e| e.label.clone()).collect()).unwrap_or_default()
@@ -99,12 +100,12 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                     }
                 }
             });
-            let redo = icon_button(ui, Icon::Redo, if can_redo { t.text_dim } else { t.text_disabled }, "Redo", vec2(26.0, ch));
+            let redo = icon_button_mono(ui, Icon::Redo, if can_redo { t.text_dim } else { t.text_disabled }, "Redo", vec2(26.0, ch));
             redo.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, can_redo, "Redo"));
             if redo.clicked() && can_redo {
                 app.run_or_alert("edit.redo", json!({}));
             }
-            let more = icon_button(ui, Icon::More, t.text_dim, "More commands", vec2(26.0, ch));
+            let more = icon_button_mono(ui, Icon::More, t.text_dim, "More commands", vec2(26.0, ch));
             egui::Popup::menu(&more).show(|ui| {
                 for (label, id) in [
                     ("New Workbook", "file.new"),
@@ -123,13 +124,18 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
             });
             let left_end = ui.min_rect().right();
             let right = ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.add_space(8.0);
-                let __k = icon_button(ui, Icon::Search, t.text_dim, "Search commands", vec2(28.0, ch));
+                if app.chrome.window_controls {
+                    window_controls(ui, bar_h);
+                    ui.add_space(4.0);
+                } else {
+                    ui.add_space(8.0);
+                }
+                let __k = icon_button_mono(ui, Icon::Search, t.text_dim, "Search commands", vec2(28.0, ch));
                 control_keytip(app, ui, &__k, "commandSearch");
                 if __k.clicked() {
                     app.open_dialog("commandSearch", json!({}));
                 }
-                let share = small_button(ui, Icon::Share, "Share", "Share: export or save a copy", true);
+                let share = icon_button_mono(ui, Icon::Share, t.text_dim, "Share: export or save a copy", vec2(28.0, ch));
                 egui::Popup::menu(&share).show(|ui| {
                     if ui.button("Export as PDF…").clicked() {
                         app.run_or_alert("file.exportPdf", json!({}));
@@ -142,7 +148,7 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                         }
                     }
                 });
-                let __k = icon_button(ui, Icon::Comment, t.text_dim, "Comments", vec2(28.0, ch));
+                let __k = icon_button_mono(ui, Icon::Comment, t.text_dim, "Comments", vec2(28.0, ch));
                 control_keytip(app, ui, &__k, "comments");
                 if __k.clicked() {
                     app.open_dialog("comments", json!({}));
@@ -150,7 +156,7 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                 // Quick light/dark switch (#194); right-click offers System as well. The same
                 // choice lives in File › Display theme and the View tab.
                 let lang = app.ui.language;
-                let theme = icon_button(ui, Icon::Appearance, t.text_dim, "Dark Mode", vec2(28.0, 26.0));
+                let theme = icon_button_mono(ui, Icon::Appearance, t.text_dim, "Dark Mode", vec2(28.0, ch));
                 let dark = ui.ctx().theme() == egui::Theme::Dark;
                 theme.widget_info(|| egui::WidgetInfo::selected(egui::Role::CheckBox, true, dark, lang.tr("Dark Mode")));
                 if theme.clicked() {
@@ -160,12 +166,99 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                 ui.min_rect().left()
             });
             // Centred title, cut with "…" so it never runs under the controls on either side.
-            let title = app.session.active().map(|d| d.display_title()).unwrap_or_default();
+            // Sheets selected together edit as one: the title says so, as Excel's does.
+            let title = app
+                .session
+                .active()
+                .map(|d| {
+                    let title = d.display_title();
+                    if d.sheet_group.len() > 1 { format!("{title}  {}", app.ui.language.tr("[Group]")) } else { title }
+                })
+                .unwrap_or_default();
             let dirty = app.session.active().is_some_and(|d| d.is_dirty());
             let max_w = title_max_width(rect.center().x, left_end, right.inner);
             paint_title(ui, rect.center(), &title, dirty, max_w, t.text);
         });
     });
+}
+
+/// Minimize, maximize (or restore) and close, flush with the title bar's right end, for a window
+/// drawn without the system's frame (`Chrome::window_controls`). `ui` lays them out right to left.
+fn window_controls(ui: &mut Ui, h: f32) {
+    let t = Tokens::get(ui.ctx());
+    let lang = crate::i18n::current(ui.ctx());
+    let maximized = ui.ctx().input(|i| i.viewport().maximized).unwrap_or(false);
+    for (button, tip) in [("close", "Close"), ("max", if maximized { "Restore Down" } else { "Maximize" }), ("min", "Minimize")] {
+        let (r, resp) = ui.allocate_exact_size(vec2(46.0, h), Sense::click());
+        let close = button == "close";
+        if resp.hovered() {
+            ui.painter().rect_filled(r, 0.0, if close { t.danger } else { t.hover });
+        }
+        let ink = if close && resp.hovered() { Color32::WHITE } else { t.text };
+        let s = Stroke::new(1.0, ink);
+        let c = r.center();
+        let p = ui.painter();
+        match button {
+            "min" => {
+                p.line_segment([c + vec2(-5.0, 0.0), c + vec2(5.0, 0.0)], s);
+            }
+            "max" if maximized => {
+                // Restore: a window in front of another.
+                p.rect_stroke(Rect::from_min_size(c + vec2(-5.0, -3.0), vec2(8.0, 8.0)), 0.0, s, StrokeKind::Inside);
+                p.line_segment([c + vec2(-3.0, -5.0), c + vec2(5.0, -5.0)], s);
+                p.line_segment([c + vec2(5.0, -5.0), c + vec2(5.0, 3.0)], s);
+            }
+            "max" => {
+                p.rect_stroke(Rect::from_center_size(c, vec2(10.0, 10.0)), 0.0, s, StrokeKind::Inside);
+            }
+            _ => {
+                p.line_segment([c + vec2(-5.0, -5.0), c + vec2(5.0, 5.0)], s);
+                p.line_segment([c + vec2(-5.0, 5.0), c + vec2(5.0, -5.0)], s);
+            }
+        }
+        let name = lang.tr(tip).to_string();
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &name));
+        if resp.on_hover_text(name).clicked() {
+            ui.ctx().send_viewport_cmd(match button {
+                "min" => egui::ViewportCommand::Minimized(true),
+                "max" => egui::ViewportCommand::Maximized(!maximized),
+                _ => egui::ViewportCommand::Close,
+            });
+        }
+    }
+}
+
+/// How far in from the window's edges a press resizes a window drawn without the system's frame.
+const RESIZE_EDGE: f32 = 5.0;
+
+/// Resizing from the edges and corners of a window drawn without the system's frame
+/// (`Chrome::window_controls`): the cursor shows the direction, and a press there resizes.
+/// Run after the rest of the frame, so its cursor wins.
+pub fn resize_edges(ctx: &egui::Context) {
+    let maximized = ctx.input(|i| i.viewport().maximized).unwrap_or(false);
+    let Some(p) = ctx.input(|i| i.pointer.hover_pos()) else { return };
+    if maximized {
+        return;
+    }
+    let r = ctx.content_rect();
+    let (w, e) = (p.x - r.left() <= RESIZE_EDGE, r.right() - p.x <= RESIZE_EDGE);
+    let (n, s) = (p.y - r.top() <= RESIZE_EDGE, r.bottom() - p.y <= RESIZE_EDGE);
+    use egui::{CursorIcon as C, ResizeDirection as D};
+    let (dir, cursor) = match (n, s, w, e) {
+        (true, _, true, _) => (D::NorthWest, C::ResizeNwSe),
+        (true, _, _, true) => (D::NorthEast, C::ResizeNeSw),
+        (_, true, true, _) => (D::SouthWest, C::ResizeNeSw),
+        (_, true, _, true) => (D::SouthEast, C::ResizeNwSe),
+        (true, ..) => (D::North, C::ResizeVertical),
+        (_, true, ..) => (D::South, C::ResizeVertical),
+        (_, _, true, _) => (D::West, C::ResizeHorizontal),
+        (_, _, _, true) => (D::East, C::ResizeHorizontal),
+        _ => return,
+    };
+    ctx.set_cursor_icon(cursor);
+    if ctx.input(|i| i.pointer.primary_pressed()) {
+        ctx.send_viewport_cmd(egui::ViewportCommand::BeginResize(dir));
+    }
 }
 
 /// Lay out the title truncated to fit `max_w` together with the unsaved marker (when `dirty`).

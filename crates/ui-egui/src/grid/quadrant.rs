@@ -216,13 +216,8 @@ pub(crate) fn paint_quadrant(
             let s = (11.0 * z * 1.2).clamp(8.0, 24.0);
             let b = Rect::from_center_size(rect.center(), vec2(s, s));
             let on = v == Value::Bool(true);
-            p.rect_filled(b, 2.0, if on { Color32::from_rgb(0x0B, 0x7A, 0x63) } else { Color32::WHITE });
-            p.rect_stroke(
-                b,
-                2.0,
-                Stroke::new(1.0, if on { Color32::from_rgb(0x0B, 0x7A, 0x63) } else { Color32::from_gray(110) }),
-                StrokeKind::Inside,
-            );
+            p.rect_filled(b, 2.0, if on { Tokens::light().accent } else { Color32::WHITE });
+            p.rect_stroke(b, 2.0, Stroke::new(1.0, if on { Tokens::light().accent } else { Color32::from_gray(110) }), StrokeKind::Inside);
             if on {
                 crate::icons::paint_on_sheet(p, b.shrink(1.5), crate::icons::Icon::Check, Color32::WHITE);
             }
@@ -274,7 +269,7 @@ pub(crate) fn paint_quadrant(
             h => painted_halign(h, geo.rtl),
         };
         let indent = st.align.indent as f32 * 9.0 * z;
-        let pad = 2.5 * z;
+        let pad = 3.0 * z;
         let rotated = st.align.rotation != 0 && st.align.rotation != 255;
         // Rotated text wraps along its own direction (below), not across the column width.
         if !rotated && (st.align.wrap || st.align.h == HAlign::Justify) {

@@ -18,28 +18,12 @@ pub(super) fn show_group_names(ui: &Ui, on: bool) {
     ui.ctx().data_mut(|d| d.insert_temp(group_names_id(), on));
 }
 
-fn single_row_id() -> egui::Id {
-    egui::Id::unique("ribbon_single_row")
-}
-
-/// Whether this frame lays the Home controls out as MK Matrix's single-row toolbar.
-pub(super) fn set_single_row(ui: &Ui, on: bool) {
-    ui.ctx().data_mut(|d| d.insert_temp(single_row_id(), on));
-}
-
-pub(super) fn single_row(ui: &Ui) -> bool {
-    ui.ctx().data(|d| d.get_temp::<bool>(single_row_id())).unwrap_or(false)
-}
+pub(super) use crate::widgets::{check_column, field_label, item_gap, set_single_row, single_row, stack};
 
 /// A group's main button: a large one with its label in the ribbon, an icon of the toolbar's
 /// size in the single row.
 pub(super) fn tool(ui: &mut Ui, icon: Icon, label: &str, tip: &str, dropdown: bool) -> egui::Response {
     if single_row(ui) { small_button(ui, icon, "", tip, dropdown) } else { big_button(ui, icon, label, tip, dropdown) }
-}
-
-/// A group's rows of controls: stacked in the ribbon, side by side in the single row.
-pub(super) fn stack<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> egui::InnerResponse<R> {
-    if single_row(ui) { ui.horizontal(add) } else { ui.vertical(add) }
 }
 
 /// A small button's label in the ribbon; none in the single row (the tooltip names it).
