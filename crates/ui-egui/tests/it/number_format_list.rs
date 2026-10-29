@@ -22,3 +22,18 @@ fn the_number_format_list_shows_symbols_and_previews() {
         assert!(h.query_all_by_label(name).next().is_some(), "{name} is listed");
     }
 }
+
+#[test]
+fn the_font_list_offers_the_installed_families_too() {
+    let mut s = Session::new();
+    s.new_workbook();
+    let mut h = crate::common::harness_with(crate::common::builder().with_size(egui::vec2(1500.0, 800.0)), crate::common::app(s), 3);
+    h.state_mut().run("home.fontName", json!({"name": "Georgia"})).unwrap();
+    h.run_steps(2);
+    h.get_by_label("Georgia").click();
+    h.run_steps(4);
+    if let Ok(path) = std::env::var("MKMATRIX_FONT_LIST_SCREENSHOT") {
+        h.render().unwrap().save(path).unwrap();
+    }
+    assert!(h.query_all_by_label("Cambria").next().is_some(), "the standard names are listed");
+}

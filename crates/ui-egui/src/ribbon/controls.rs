@@ -175,6 +175,8 @@ pub(crate) fn editable_combo(
 /// What sits before a combo row's name: an icon, or a short glyph (`123`, `½`).
 #[derive(Clone, Copy)]
 pub(crate) enum Mark {
+    /// No mark: the name starts at the row's left.
+    None,
     Icon(Icon),
     Text(&'static str),
 }
@@ -184,6 +186,8 @@ pub(crate) struct RowExtra<'a> {
     pub value: &'a str,
     pub mark: Mark,
     pub note: String,
+    /// The name's own font (a font list shows each name in its font), else the interface's.
+    pub font: Option<egui::FontFamily>,
 }
 
 /// [`editable_combo`] whose rows carry a mark before the name and a note after it, as Excel's
@@ -300,6 +304,16 @@ fn combo_rows(ui: &mut Ui, head: ComboHead, items: &[(&str, String)], row_w: f32
     (picked, sel)
 }
 
+/// Where [`marked_row`] lists the font rows it drew this frame.
+fn shown_fonts_id() -> egui::Id {
+    egui::Id::unique("marked_combo_shown_fonts")
+}
+
+/// The font rows drawn since the last call (a font list's visible names), emptied.
+pub(crate) fn take_shown_fonts(ctx: &egui::Context) -> Vec<String> {
+    ctx.data_mut(|d| d.remove_temp::<Vec<String>>(shown_fonts_id())).unwrap_or_default()
+}
+
 /// A combo row with its mark in a column of its own, the name, and the note muted at the right.
 fn marked_row(ui: &mut Ui, selected: bool, name: &str, extra: &RowExtra, width: f32) -> egui::Response {
     let t = Tokens::get(ui.ctx());
@@ -314,6 +328,7 @@ fn marked_row(ui: &mut Ui, selected: bool, name: &str, extra: &RowExtra, width: 
     let ink = if selected { t.accent } else { t.text };
     let mark = Rect::from_center_size(pos2(r.left() + 16.0, r.center().y), vec2(16.0, 16.0));
     match extra.mark {
+        Mark::None => {}
         Mark::Icon(icon) => crate::icons::paint_mono(p, mark, icon, if selected { t.accent } else { t.text_dim }),
         Mark::Text(glyph) => {
             p.text(mark.center(), Align2::CENTER_CENTER, glyph, theme::ui_bold(11.0), if selected { t.accent } else { t.text_dim });
@@ -326,7 +341,13 @@ fn marked_row(ui: &mut Ui, selected: bool, name: &str, extra: &RowExtra, width: 
         at.left() - 8.0
     };
     let clip = Rect::from_min_max(r.min, pos2(note_left, r.max.y));
-    p.with_clip_rect(clip).text(pos2(r.left() + 34.0, r.center().y), Align2::LEFT_CENTER, name, theme::ui_font(13.0), ink);
+    let left = if matches!(extra.mark, Mark::None) { 10.0 } else { 34.0 };
+    // A row in view asks for its font, so a font list can bind the families it shows.
+    if extra.font.is_some() && ui.is_rect_visible(r) {
+        ui.ctx().data_mut(|d| d.get_temp_mut_or_default::<Vec<String>>(shown_fonts_id()).push(extra.value.to_string()));
+    }
+    let font = extra.font.clone().map_or_else(|| theme::ui_font(13.0), |family| egui::FontId::new(14.0, family));
+    p.with_clip_rect(clip).text(pos2(r.left() + left, r.center().y), Align2::LEFT_CENTER, name, font, ink);
     resp
 }
 

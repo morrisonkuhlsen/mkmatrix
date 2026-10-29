@@ -10,6 +10,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Paste Formatting" => "Colar Formatação",
         "Transpose" => "Transpor",
         "Paste Link" => "Colar Vínculo",
+        "not installed" => "não instalada",
         "Type to filter…" => "Digite para filtrar…",
         "Cell Value" => "Valor da Célula",
         "Formula" => "Fórmula",

@@ -1,6 +1,6 @@
 use super::controls::{
-    ComboResult, Mark, RowExtra, act, active_style, anchor_keytip, control_keytip, editable_combo, invoke, keytip, list_combo, marked_combo,
-    menu_items, popup_command, sep, stack, theme_colors, tool, wide,
+    ComboResult, Mark, RowExtra, act, active_style, anchor_keytip, control_keytip, invoke, keytip, list_combo, marked_combo, menu_items,
+    popup_command, sep, stack, theme_colors, tool, wide,
 };
 use super::galleries::{cell_style_gallery, table_gallery};
 use super::*;
@@ -576,8 +576,28 @@ fn font_combo(app: &mut SheetApp, ui: &mut Ui, st: &Style) {
     let resp = ui.add_sized([150.0, 24.0], egui::Button::new(egui::RichText::new(&name).font(theme::ui_font(12.5))));
     control_keytip(app, ui, &resp, "home.fontName");
     let forced = invoke(app, "home.fontName");
-    let items: Vec<(&str, String)> = FONTS.iter().map(|f| (*f, f.to_string())).collect();
-    if let ComboResult::Picked(value) = editable_combo(ui, &resp, "font", &name, &items, forced) {
+    // The standard names, then every installed family; each name drawn in its own font (or the
+    // kind of font that stands in for it), a missing one marked as such.
+    let families = crate::fonts::families();
+    let lang = app.ui.language;
+    let missing = lang.tr("not installed");
+    let items: Vec<(&str, String)> = families.iter().map(|f| (f.as_str(), f.clone())).collect();
+    let extras: Vec<RowExtra> = families
+        .iter()
+        .map(|f| RowExtra {
+            value: f.as_str(),
+            mark: Mark::None,
+            note: if crate::fonts::installed_now(f) == Some(false) { missing.to_string() } else { String::new() },
+            font: Some(theme::cell_family(f, false, false)),
+        })
+        .collect();
+    let picked = marked_combo(ui, &resp, "font", &name, &items, forced, &extras);
+    // Bind the installed families in view, so their names show in their own faces.
+    let shown = super::controls::take_shown_fonts(ui.ctx());
+    if !shown.is_empty() {
+        app.preview_fonts(shown);
+    }
+    if let ComboResult::Picked(value) = picked {
         act(app, "home.fontName", json!({"name": value}));
     }
 }
@@ -697,10 +717,10 @@ fn number_combo(app: &mut SheetApp, ui: &mut Ui, st: &Style) {
         let code = mkmatrix_engine::cmd::format::format_code_for(n);
         let preview = app.session.active().map(|d| mkmatrix_engine::display::format(&sample, code, &d.wb).text).unwrap_or_default();
         items.push((n, lang.tr(n).to_string()));
-        extras.push(RowExtra { value: n, mark, note: preview.chars().take(28).collect() });
+        extras.push(RowExtra { value: n, mark, note: preview.chars().take(28).collect(), font: None });
     }
     items.push(("__more", lang.tr("More Number Formats…").to_string()));
-    extras.push(RowExtra { value: "__more", mark: Mark::Icon(Icon::More), note: String::new() });
+    extras.push(RowExtra { value: "__more", mark: Mark::Icon(Icon::More), note: String::new(), font: None });
     if let ComboResult::Picked(value) = marked_combo(ui, &resp, "number", &current, &items, forced, &extras) {
         match value.as_str() {
             "__more" => app.open_dialog("formatCells", json!({"tab": "Number"})),
