@@ -174,3 +174,21 @@ impl Default for PivotTable {
         }
     }
 }
+
+impl PivotTable {
+    /// The report filters (the Filters area), in the order their rows sit above the report: the
+    /// filters on fields that aren't also in Rows or Columns (those hide items instead).
+    pub fn report_filters(&self) -> impl Iterator<Item = &PivotFilter> {
+        self.filters.iter().filter(|f| !self.rows.iter().chain(self.columns.iter()).any(|a| a.source_col.eq_ignore_ascii_case(&f.source_col)))
+    }
+
+    /// The report filter whose value cell (the one with the dropdown, beside the field's name) is
+    /// `c`, as the last refresh wrote it.
+    pub fn report_filter_at(&self, c: CellRef) -> Option<&PivotFilter> {
+        let r = self.last_range?;
+        if c.col != r.start.col.checked_add(1)? || c.row < r.start.row || c.row > r.end.row {
+            return None;
+        }
+        self.report_filters().nth((c.row - r.start.row) as usize)
+    }
+}

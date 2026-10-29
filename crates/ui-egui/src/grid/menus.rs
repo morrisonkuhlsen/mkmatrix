@@ -5,6 +5,7 @@ use super::*;
 use crate::icons::{self, Icon};
 
 /// Draws the filter-header popup: sort, search/select-all, apply/clear, a lazily installed table autofilter, new-open search focus and dismissal.
+/// On a PivotTable's report filter cell the same menu lists the field's items and applies through `pivot.filter` (no sort: the report orders itself).
 pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_open: bool) {
     let Some((col, row, at)) = app.grid.filter_menu else { return };
     let Some(d) = app.session.active() else { return };
@@ -12,8 +13,10 @@ pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_
     let si = wb.active_sheet();
     let Some(sh) = wb.sheet(si) else { return };
     let _ = geo;
+    // A report filter: (the PivotTable's id, the field).
+    let pivot = sh.pivot_filter_at(CellRef::new(row, col)).and_then(|(i, f)| Some((sh.pivots.get(i)?.id, f.source_col.clone())));
     // Tables get an autofilter on demand.
-    let table_range = filter_table_range(sh, col, row);
+    let table_range = filter_table_range(sh, col, row).filter(|_| pivot.is_none());
     if sh.autofilter.is_none()
         && let Some(r) = table_range
     {
@@ -32,15 +35,23 @@ pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_
         }
     }
     let wb = app.session.active().map(|d| d.wb.clone()).unwrap_or(wb);
-    let counted = mkmatrix_engine::cmd::data::filter_value_counts(&wb, si, col);
+    let counted = match &pivot {
+        Some((id, field)) => wb
+            .sheet(si)
+            .and_then(|sh| sh.pivots.iter().find(|pt| pt.id == *id))
+            .and_then(|pt| mkmatrix_engine::pivot::report_filter_items(&wb, pt, si, field).ok())
+            .unwrap_or_default(),
+        None => mkmatrix_engine::cmd::data::filter_value_counts(&wb, si, col),
+    };
     let values: Vec<(String, bool)> = counted.iter().map(|(v, on, _)| (v.clone(), *on)).collect();
     let counts: std::collections::HashMap<&str, usize> = counted.iter().map(|(v, _, n)| (v.as_str(), *n)).collect();
     let most = counted.iter().map(|(_, _, n)| *n).max().unwrap_or(1).max(1);
     let lang = crate::i18n::current(ui.ctx());
     let t = Tokens::get(ui.ctx());
-    let title = wb
-        .sheet(si)
-        .map(|sh| mkmatrix_engine::display::cell_text(&wb, sh, CellRef::new(row, col)))
+    let title = pivot
+        .as_ref()
+        .map(|(_, field)| field.clone())
+        .or_else(|| wb.sheet(si).map(|sh| mkmatrix_engine::display::cell_text(&wb, sh, CellRef::new(row, col))))
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| lang.tr("Column {col}").replace("{col}", &col_to_letters(col)));
     let key = egui::Id::unique(("filter_sel", col));
@@ -71,27 +82,29 @@ pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_
             });
             // Sort, side by side.
             let mut sort_buttons = Vec::new();
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 8.0;
-                let half = (W - 8.0) / 2.0;
-                for (icon, short, name, order) in
-                    [(Icon::SortAsc, "Ascending", "Sort Ascending", "asc"), (Icon::SortDesc, "Descending", "Sort Descending", "desc")]
-                {
-                    let r = sort_button(ui, icon, lang.tr(short), lang.tr(name), half, &t);
-                    if r.clicked() {
-                        // The filter's range, under its header row (a guess would take an all-text
-                        // header for data).
-                        let key = json!([{"column": col_to_letters(col), "order": order}]);
-                        let p = match wb.sheet(si).and_then(|sh| sh.autofilter.as_ref()) {
-                            Some(af) => json!({"range": af.range.a1(), "header": true, "keys": key}),
-                            None => json!({"keys": key}),
-                        };
-                        app.run_or_alert("data.sort", p);
-                        close = true;
+            if pivot.is_none() {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 8.0;
+                    let half = (W - 8.0) / 2.0;
+                    for (icon, short, name, order) in
+                        [(Icon::SortAsc, "Ascending", "Sort Ascending", "asc"), (Icon::SortDesc, "Descending", "Sort Descending", "desc")]
+                    {
+                        let r = sort_button(ui, icon, lang.tr(short), lang.tr(name), half, &t);
+                        if r.clicked() {
+                            // The filter's range, under its header row (a guess would take an all-text
+                            // header for data).
+                            let key = json!([{"column": col_to_letters(col), "order": order}]);
+                            let p = match wb.sheet(si).and_then(|sh| sh.autofilter.as_ref()) {
+                                Some(af) => json!({"range": af.range.a1(), "header": true, "keys": key}),
+                                None => json!({"keys": key}),
+                            };
+                            app.run_or_alert("data.sort", p);
+                            close = true;
+                        }
+                        sort_buttons.push(r.id);
                     }
-                    sort_buttons.push(r.id);
-                }
-            });
+                });
+            }
             let mut checks: Vec<(String, bool)> = ui.ctx().data_mut(|d| d.get_temp::<Vec<(String, bool)>>(key)).unwrap_or(values.clone());
             // A search narrows the list; Select All and Apply then only cover the matches.
             let mut search: String = ui.ctx().data_mut(|d| d.get_temp(search_key)).unwrap_or_default();
@@ -151,7 +164,11 @@ pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_
             ui.horizontal(|ui| {
                 // This column's filter (of any kind: values, a condition, a colour), or else the
                 // other columns' ones.
-                let criteria = wb.sheet(si).and_then(|sh| sh.autofilter.as_ref()).map(|af| (af.range.start.col, af.criteria.clone()));
+                let criteria = wb
+                    .sheet(si)
+                    .and_then(|sh| sh.autofilter.as_ref())
+                    .filter(|_| pivot.is_none())
+                    .map(|af| (af.range.start.col, af.criteria.clone()));
                 let (this, others) = criteria.map_or((false, false), |(c0, cr)| {
                     let off = col.saturating_sub(c0);
                     (cr.iter().any(|(o, _)| *o == off), cr.iter().any(|(o, _)| *o != off))
@@ -166,7 +183,9 @@ pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_
                         .min_size(vec2(0.0, 28.0)),
                 );
                 if clear.clicked() {
-                    if this {
+                    if let Some((id, field)) = &pivot {
+                        app.run_or_alert("pivot.filter", json!({"pivot": id, "field": field, "selected": null}));
+                    } else if this {
                         app.run_or_alert("data.filterBy", json!({"column": col_to_letters(col), "clear": true}));
                     } else {
                         app.run_or_alert("data.clearFilter", json!({}));
@@ -180,7 +199,17 @@ pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_
                     let mut ids = sort_buttons.clone();
                     ids.extend([clear.id, apply.id]);
                     ui.ctx().data_mut(|d| d.insert_temp(buttons_key, ids));
-                    if apply.clicked() || (enter && any) {
+                    if (apply.clicked() || (enter && any))
+                        && let Some((id, field)) = &pivot
+                    {
+                        let all = checks.iter().all(|(_, b)| *b);
+                        let vals: Vec<&String> = checks.iter().filter(|(_, on)| *on).map(|(v, _)| v).collect();
+                        app.run_or_alert(
+                            "pivot.filter",
+                            json!({"pivot": id, "field": field, "selected": if all { json!(null) } else { json!(vals) }}),
+                        );
+                        close = true;
+                    } else if apply.clicked() || (enter && any) {
                         let blanks = checks.iter().any(|(v, on)| v == "(Blanks)" && *on);
                         let vals: Vec<String> = checks.iter().filter(|(v, on)| *on && v != "(Blanks)").map(|(v, _)| v.clone()).collect();
                         let p = if checks.iter().all(|(_, b)| *b) {
