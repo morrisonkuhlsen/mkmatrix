@@ -303,6 +303,17 @@ impl PassHost<'_> {
         v
     }
 
+    /// The stored spill ranges on `sheet` whose anchor is being calculated now (on the stack):
+    /// their old values must not feed the new result.
+    fn busy_spills(&self, sheet: usize) -> Vec<(CellRef, RangeRef)> {
+        if self.in_progress.is_empty() {
+            return Vec::new();
+        }
+        let Some(sh) = self.wb.sheet(sheet) else { return Vec::new() };
+        // The stack is short; the sheet may hold many spills.
+        self.in_progress.iter().filter(|(s, _)| *s == sheet).filter_map(|(_, a)| sh.spill_ranges.get(a).map(|r| (*a, *r))).collect()
+    }
+
     /// A formula's previous value for iterative calculation: from the last iteration, else the
     /// value it shows. Blank, and the `#CIRC!` of a loop calculated with iteration off, are 0.
     fn previous(&self, k: Key) -> Value {
@@ -437,7 +448,13 @@ impl Host for PassHost<'_> {
                 }
             }
         }
-        self.wb.sheet(sheet).map(|s| s.value(c)).unwrap_or_default()
+        let Some(sh) = self.wb.sheet(sheet) else { return Value::Empty };
+        // The old spill of a formula being calculated right now reads as blank, as a full
+        // recalculation (which starts with no spills) reads it.
+        if !sh.cells.has(c) && sh.spill.contains_key(&c) && self.busy_spills(sheet).iter().any(|(a, r)| *a != c && r.contains(c)) {
+            return Value::Empty;
+        }
+        sh.value(c)
     }
     fn range_values(&mut self, sheet: usize, range: RangeRef) -> Vec<Value> {
         let (h, w) = (range.height() as usize, range.width() as usize);
@@ -454,7 +471,14 @@ impl Host for PassHost<'_> {
                 *slot = cell.value.clone();
             }
         }
+        // Only when the range holds spilled cells at all.
+        let busy = if sh.spill.range(range.start..=range.end).next().is_some() { self.busy_spills(sheet) } else { Vec::new() };
         for (c, v) in sh.spill.range(range.start..=range.end) {
+            // The old spill of a formula being calculated right now reads as blank (see
+            // `cell_value`).
+            if busy.iter().any(|(a, r)| a != c && r.contains(*c)) {
+                continue;
+            }
             if range.contains(*c) {
                 let i = (c.row - range.start.row) as usize * w + (c.col - range.start.col) as usize;
                 if let Some(slot) = out.get_mut(i)

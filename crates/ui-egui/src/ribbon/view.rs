@@ -77,6 +77,10 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
         }
     });
     sep(ui, "Show");
+    // Beyond Excel: the workbook's timeline.
+    if big_button(ui, Icon::Clock, "History", "History", false).clicked() {
+        act(app, "view.history", json!({}));
+    }
     let __k = big_button(ui, Icon::Zoom, "Zoom", "Zoom…", false);
     control_keytip(app, ui, &__k, "dialog:zoom");
     if __k.clicked() {

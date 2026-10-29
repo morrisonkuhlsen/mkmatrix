@@ -69,6 +69,24 @@ pub fn specs() -> Vec<CommandSpec> {
         cmd!(noundo "edit.goToSpecial", "Go To Special…", ["Home", "Editing", "Find & Select"], None, "{kind: blanks|constants|formulas|comments|lastCell|currentRegion|visible|conditionalFormats|dataValidation|errors|numbers|text}", has_doc, go_to_special),
         cmd!(noundo "edit.undo", "Undo", ["Edit"], Some("Cmd+Z"), "{steps?: 1}", can_undo, undo),
         cmd!(noundo "edit.redo", "Redo", ["Edit"], Some("Cmd+Y"), "{steps?: 1}", can_redo, redo),
+        cmd!(
+            query "edit.history",
+            "History",
+            ["Edit"],
+            None,
+            "{} → {steps: [{label, at}…] (oldest first: what each undo step did, and where), position}: the timeline of the active workbook; positions run 0 (before the oldest step) to steps.length, `position` being now (steps after it can be redone). Go to position p with edit.undo / edit.redo {steps: |position − p|}",
+            has_doc,
+            history
+        ),
+        cmd!(
+            query "edit.historyDiff",
+            "History Difference",
+            ["Edit"],
+            None,
+            "{position} → {cells: [{cell, text}]}: the cells of the active sheet whose shown text differs at that point of edit.history from now, with the text they had (at most 5,000); nothing runs",
+            has_doc,
+            history_diff
+        ),
         cmd!(noundo "edit.repeat", "Repeat", ["Edit"], Some("F4"), "{} (runs the last edit again on the current selection) → {repeated: id}", can_repeat, repeat),
         cmd!(noundo "edit.copy", "Copy", ["Home", "Clipboard"], Some("Cmd+C"), "{range?, html?: bool} → {range, text, html?} (html: a styled HTML table, only when requested and small enough)", has_doc, copy),
         cmd!(noundo "edit.cut", "Cut", ["Home", "Clipboard"], Some("Cmd+X"), "{range?, html?: bool} → {range, text, html?} (html: a styled HTML table, only when requested and small enough)", has_doc, cut),
@@ -169,6 +187,100 @@ fn coalesce(cells: &[CellRef]) -> Vec<RangeRef> {
 }
 
 // ---------------------------------------------------------------- history
+
+/// How many of the latest steps edit.history says the place of (each is a diff of two states).
+const HISTORY_PLACES: usize = 60;
+
+/// Where `b` differs from `a`: the cells (as `B1`, or `B1:C4` around them) of the first sheet that
+/// changed, with its name when it isn't the active one. `None` when no cell changed (a format, a
+/// sheet added…) or the sheet is too big to compare.
+fn changed_place(a: &mkmatrix_model::Workbook, b: &mkmatrix_model::Workbook) -> Option<String> {
+    for (i, sb) in b.sheets.iter().enumerate() {
+        let Some(sa) = a.sheets.get(i) else { continue };
+        // Untouched sheets are shared between the two states.
+        if std::sync::Arc::ptr_eq(sa, sb) {
+            continue;
+        }
+        if sa.cells.len().max(sb.cells.len()) > crate::PREVIEW_SHEET_CELLS {
+            return None;
+        }
+        let mut keys: std::collections::BTreeSet<CellRef> = sa.cells.iter().map(|(c, _)| c).collect();
+        keys.extend(sb.cells.iter().map(|(c, _)| c));
+        let mut area: Option<(CellRef, CellRef)> = None;
+        for c in keys {
+            if sa.cells.get(c) != sb.cells.get(c) {
+                area = Some(match area {
+                    None => (c, c),
+                    Some((lo, hi)) => (CellRef::new(lo.row.min(c.row), lo.col.min(c.col)), CellRef::new(hi.row.max(c.row), hi.col.max(c.col))),
+                });
+            }
+        }
+        let Some((lo, hi)) = area else { continue };
+        let place = RangeRef::new(lo, hi).a1();
+        return Some(if i == b.active_sheet() { place } else { format!("{}!{place}", mkmatrix_formula::quote_sheet(&sb.name)) });
+    }
+    None
+}
+
+/// The workbook at `position` of the timeline: an undo snapshot before it, now, or a redo snapshot
+/// after it.
+fn workbook_at(d: &crate::DocState, position: usize) -> Option<std::sync::Arc<mkmatrix_model::Workbook>> {
+    let now = d.undo.len();
+    match position.cmp(&now) {
+        std::cmp::Ordering::Less => d.undo.get(position).map(|e| e.wb.clone()),
+        std::cmp::Ordering::Equal => Some(d.wb.clone()),
+        // The redo stack's last entry is the next state forward.
+        std::cmp::Ordering::Greater => d.redo.len().checked_sub(position - now).and_then(|i| d.redo.get(i)).map(|e| e.wb.clone()),
+    }
+}
+
+fn history(s: &mut Session, _: &Json) -> Result<Json> {
+    let d = s.doc()?;
+    // Undo entries are oldest first; redo entries are a stack (next forward last).
+    // Every state of the timeline, oldest first: each step goes from one to the next.
+    let states: Vec<&mkmatrix_model::Workbook> =
+        d.undo.iter().map(|e| e.wb.as_ref()).chain(std::iter::once(d.wb.as_ref())).chain(d.redo.iter().rev().map(|e| e.wb.as_ref())).collect();
+    let labels = d.undo.iter().map(|e| e.label.as_str()).chain(d.redo.iter().rev().map(|e| e.label.as_str()));
+    let total = states.len().saturating_sub(1);
+    let steps: Vec<Json> = labels
+        .enumerate()
+        .map(|(i, label)| {
+            // Where the step changed cells, for the latest steps (older ones by name only).
+            let at = match (states.get(i), states.get(i + 1)) {
+                (Some(a), Some(b)) if i + HISTORY_PLACES >= total => changed_place(a, b),
+                _ => None,
+            };
+            json!({"label": label, "at": at})
+        })
+        .collect();
+    Ok(json!({"steps": steps, "position": d.undo.len()}))
+}
+
+fn history_diff(s: &mut Session, p: &Json) -> Result<Json> {
+    let d = s.doc()?;
+    let position = u32_param(p, "position").ok_or_else(|| bad("edit.historyDiff", "position is required"))? as usize;
+    let then = workbook_at(d, position).ok_or_else(|| bad("edit.historyDiff", "no such position"))?;
+    let sheet = d.wb.active_sheet();
+    let (Some(now_sh), Some(then_sh)) = (d.wb.sheet(sheet), then.sheet(sheet)) else { return Ok(json!({"cells": []})) };
+    if now_sh.cells.len().max(then_sh.cells.len()) > crate::PREVIEW_SHEET_CELLS {
+        return Ok(json!({"cells": []}));
+    }
+    // Stored cells and spilled ones (a dynamic array's results aren't stored cells).
+    let mut keys: std::collections::BTreeSet<CellRef> = now_sh.cells.iter().map(|(c, _)| c).collect();
+    keys.extend(then_sh.cells.iter().map(|(c, _)| c));
+    keys.extend(now_sh.spill.keys().copied().chain(then_sh.spill.keys().copied()));
+    let mut cells = Vec::new();
+    for c in keys {
+        let then_text = crate::display::cell_text(&then, then_sh, c);
+        if then_text != crate::display::cell_text(&d.wb, now_sh, c) {
+            cells.push(json!({"cell": c.a1(), "text": then_text}));
+            if cells.len() >= crate::PREVIEW_CELLS {
+                break;
+            }
+        }
+    }
+    Ok(json!({"cells": cells}))
+}
 
 fn undo(s: &mut Session, p: &Json) -> Result<Json> {
     let steps = u32_param(p, "steps").unwrap_or(1).max(1);

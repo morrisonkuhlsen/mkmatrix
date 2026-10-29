@@ -27,6 +27,7 @@ mod range_fill_formats;
 mod row_autofit;
 mod sheet_name_quoting;
 mod sparse_clear_invalidation;
+mod spill_reads_its_own_area;
 mod sql_function;
 mod stored_list_shape;
 mod table_resize_overlap;

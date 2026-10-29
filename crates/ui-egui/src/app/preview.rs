@@ -11,6 +11,13 @@ impl SheetApp {
         self.preview.as_ref().map_or(&[], |(_, cells)| cells.as_slice())
     }
 
+    /// The cells the History pane's chosen point would bring back, with their text then (empty
+    /// when it is now, or the pane is closed).
+    #[doc(hidden)]
+    pub fn history_cells(&self) -> &[(mkmatrix_engine::core::CellRef, String)] {
+        self.history_preview.as_ref().map_or(&[], |(_, cells)| cells.as_slice())
+    }
+
     /// Computes (or keeps) the preview of the command under the pointer, for the grid to draw.
     pub(super) fn update_preview(&mut self) {
         let Some((id, params)) = self.preview_hover.clone() else {
