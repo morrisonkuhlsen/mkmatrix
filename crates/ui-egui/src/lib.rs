@@ -260,6 +260,9 @@ pub struct Perf {
     last: f64,
 }
 
+/// Most installed families the font list binds to show their names in their own faces.
+pub(crate) const FONT_PREVIEWS: usize = 48;
+
 pub struct SheetApp {
     pub session: Session,
     pub ui: UiState,
@@ -301,6 +304,9 @@ pub struct SheetApp {
     /// The open workbooks' (uid, revision), folded, that `fonts_bound` was computed for, so the
     /// style tables are walked only when a workbook changes.
     fonts_seen: (u64, u64),
+    /// Installed families the font list showed, bound so each name is drawn in its own face (at
+    /// most [`FONT_PREVIEWS`]; they stay bound for the session).
+    pub(crate) font_previews: Vec<String>,
     /// Set while a font-set change is pending activation: skip this frame's paint, like the
     /// startup `fonts_ready` gate (egui applies new definitions at the next pass).
     fonts_rebind: bool,

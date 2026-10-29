@@ -29,15 +29,33 @@ impl SheetApp {
             // Text boxes and shapes name their own typefaces.
             names.extend(d.wb.sheets.iter().flat_map(|sh| sh.shapes.iter().filter_map(|s| s.format.font.clone())));
         }
+        // The families the font list is previewing.
+        names.extend(self.font_previews.iter().cloned());
         names
     }
 
-    /// The open workbooks' (uid, revision), folded: [`Self::used_fonts`] changes only with it.
+    /// The open workbooks' (uid, revision), folded, and the previewed families' count:
+    /// [`Self::used_fonts`] changes only with it.
     fn fonts_key(&self) -> (u64, u64) {
-        self.session
+        let (uid, rev) = self
+            .session
             .documents()
             .iter()
-            .fold((0u64, 0u64), |(uid, rev), d| (uid.wrapping_mul(31).wrapping_add(d.uid), rev.wrapping_mul(31).wrapping_add(d.revision)))
+            .fold((0u64, 0u64), |(uid, rev), d| (uid.wrapping_mul(31).wrapping_add(d.uid), rev.wrapping_mul(31).wrapping_add(d.revision)));
+        (uid, rev.wrapping_mul(31).wrapping_add(self.font_previews.len() as u64))
+    }
+
+    /// Asks for `families` (the font list's visible rows) to be bound, so their names show in
+    /// their own faces: installed ones only, and at most [`crate::FONT_PREVIEWS`] in a session.
+    pub(crate) fn preview_fonts(&mut self, families: Vec<String>) {
+        for f in families {
+            if self.font_previews.len() >= crate::FONT_PREVIEWS {
+                break;
+            }
+            if fonts::installed_now(&f) == Some(true) && !self.font_previews.contains(&f) && !fonts::is_bound(&fonts::role_key(&f, false, false)) {
+                self.font_previews.push(f);
+            }
+        }
     }
 
     /// Installs the text-width closure once, on the first frame.
