@@ -10,6 +10,28 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Paste Formatting" => "Colar Formatação",
         "Transpose" => "Transpor",
         "Paste Link" => "Colar Vínculo",
+        "Settings" => "Configurações",
+        "Input Message" => "Mensagem de Entrada",
+        "Error Alert" => "Alerta de Erro",
+        "Input" => "Entrada",
+        "No constraints" => "Nenhuma restrição",
+        "Constraint Cell Reference" => "Referência de Célula da Restrição",
+        "Constraint Operator" => "Operador da Restrição",
+        "Constraint Value" => "Valor da Restrição",
+        "Simplex LP" => "LP Simplex",
+        "Evolutionary" => "Evolutionário",
+        "Simplex LP: for linear models; integer and binary constraints by branch and bound." => {
+            "LP Simplex: para modelos lineares; restrições inteiras e binárias por ramificação e limite."
+        }
+        "Evolutionary: a genetic search for models that aren't smooth; every variable cell needs bounds." => {
+            "Evolutionário: uma busca genética para modelos não suaves; toda célula variável precisa de limites."
+        }
+        "GRG Nonlinear: a local optimum of a smooth model, from the current values." => {
+            "GRG Não Linear: um ótimo local de um modelo suave, a partir dos valores atuais."
+        }
+        "Reports:" => "Relatórios:",
+        "Answer" => "Resposta",
+        "Limits" => "Limites",
         "Automation in this workbook. MK Matrix runs its own scripts; a file's VBA project is preserved but not executed." => {
             "Automação nesta pasta de trabalho. O MK Matrix executa seus próprios scripts; o projeto VBA de um arquivo é preservado, mas não executado."
         }

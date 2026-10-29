@@ -150,14 +150,46 @@ pub(super) fn data_validation_fields(kind: &str, operator: &str) -> Vec<Field> {
     fields
 }
 
+/// Data Validation, in Format Cells' style: Settings, Input Message and Error Alert down the left
+/// (as Excel's tabs), the chosen section's fields on the right, and the footer. Every field stays
+/// in `d.fields`, so OK sends all of them whichever section is showing.
 pub(super) fn data_validation_form(ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool, open: &mut bool) {
+    use super::kit::{nav_item, nav_rail, rule};
+    const SECTIONS: [(&str, Icon); 3] = [("Settings", Icon::Validation), ("Input Message", Icon::Comment), ("Error Alert", Icon::Info)];
+    let lang = crate::i18n::current(ui.ctx());
+    let t = crate::theme::Tokens::get(ui.ctx());
     let kind = d.values.get("type").and_then(Json::as_str).unwrap_or("any");
     let operator = d.values.get("operator").and_then(Json::as_str).unwrap_or("between");
-    d.fields = data_validation_fields(kind, operator);
-    form_fields(ui, d);
+    let all = data_validation_fields(kind, operator);
+    if !SECTIONS.iter().any(|(s, _)| *s == d.tab) {
+        d.tab = "Settings".into();
+    }
+    let section = |f: &Field| match f {
+        Field::Text { key: "inputMessage", .. } => "Input Message",
+        Field::Text { key: "errorMessage", .. } | Field::Choice { key: "errorStyle", .. } => "Error Alert",
+        _ => "Settings",
+    };
+    ui.horizontal_top(|ui| {
+        nav_rail(ui, 150.0, 300.0, &t, |ui| {
+            for (tab, icon) in SECTIONS {
+                if nav_item(ui, icon, lang.tr(tab), d.tab == tab, None, &t).clicked() {
+                    d.tab = tab.to_string();
+                }
+            }
+        });
+        ui.vertical(|ui| {
+            ui.set_min_height(300.0);
+            d.fields = all.iter().filter(|f| section(f) == d.tab).cloned().collect();
+            form_fields(ui, d);
+        });
+    });
+    d.fields = all;
+    rule(ui);
     ok_cancel(ui, confirm, open);
 }
 
+/// Data › Advanced filter, in Format Cells' style: the action as round options, the ranges, and the
+/// footer under a rule.
 pub(super) fn advanced_filter_form(ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool, open: &mut bool) {
     use Field::*;
     let copy = d.values.get("action").and_then(Json::as_str) == Some("copy");
@@ -175,6 +207,7 @@ pub(super) fn advanced_filter_form(ui: &mut egui::Ui, d: &mut Dialog, confirm: &
     }
     d.fields.push(Check { key: "unique", label: "Unique rows only" });
     form_fields(ui, d);
+    super::kit::rule(ui);
     // Constrain the button row: the shared right-to-left layout otherwise
     // consumes the window's remaining height instead of fitting the buttons.
     ui.allocate_ui(vec2(ui.available_width(), ui.spacing().interact_size.y + 8.0), |ui| ok_cancel(ui, confirm, open));
