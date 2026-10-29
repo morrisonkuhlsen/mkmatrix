@@ -138,6 +138,15 @@ impl SheetApp {
                 self.ui.ribbon_collapsed = !self.ui.ribbon_collapsed;
                 Ok(Json::Null)
             }
+            // While the floating bar is up, it is the one that expands.
+            "view.expandFormulaBar" if self.ui.floating_formula_bar && self.floating_bar_open => {
+                let now = self.floating_bar_expanded || self.ui.floating_bar_lines.is_some() || self.ui.floating_bar_width.is_some();
+                let on = match p.get("on").and_then(Json::as_bool) {
+                    Some(on) if on == now => on,
+                    _ => crate::formula_bar::toggle_floating_expand(self),
+                };
+                Ok(json!({"on": on}))
+            }
             "view.expandFormulaBar" => {
                 self.ui.formula_bar_expanded = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.formula_bar_expanded);
                 Ok(json!({"on": self.ui.formula_bar_expanded}))

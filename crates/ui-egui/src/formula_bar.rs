@@ -92,7 +92,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
                 let box_h = one_line(row_h) - squeeze - 2.0 * f32::from(pad);
                 layout.name_box = name_box(app, ui, &t, box_h);
                 ui.add_space(4.0);
-                contents(app, ui, &t, &font, row_h, &mut layout);
+                contents(app, ui, &t, &font, row_h, false, &mut layout);
             });
         });
     ui.ctx().data_mut(|d| d.insert_temp(BarLayout::id(), layout));
@@ -100,8 +100,10 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
 
 /// The bar's working part, after the Name Box: Insert Function, the formula field (editable,
 /// darker under the pointer and while typing, a spill child's formula muted) and the expand
-/// chevron. Shared by the docked bar and the floating one; records the field in `layout`.
-fn contents(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens, font: &FontId, row_h: f32, layout: &mut BarLayout) {
+/// chevron. Shared by the docked bar and the floating one (`floating`, whose chevron also
+/// takes back a size dragged with its edges); records the field in `layout`.
+#[allow(clippy::too_many_arguments)]
+fn contents(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens, font: &FontId, row_h: f32, floating: bool, layout: &mut BarLayout) {
     // No Cancel / Enter buttons: Esc and Enter do that.
     // Insert Function: the fx drawn large, the bar's one label-like button.
     let (fx_rect, fx) = ui.allocate_exact_size(vec2(34.0, 24.0), egui::Sense::click());
@@ -180,9 +182,20 @@ fn contents(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens, font: &FontId, ro
     if math.clicked() {
         app.ui.math_notation = !app.ui.math_notation;
     }
-    let chevron = if app.ui.formula_bar_expanded { Icon::ChevronUp } else { Icon::Chevron };
+    // The floating bar is "expanded" while the chevron or a dragged edge made it bigger than its
+    // formula; the chevron then brings it back to the formula's size.
+    let expanded = if floating {
+        app.floating_bar_expanded || app.ui.floating_bar_lines.is_some() || app.ui.floating_bar_width.is_some()
+    } else {
+        app.ui.formula_bar_expanded
+    };
+    let chevron = if expanded { Icon::ChevronUp } else { Icon::Chevron };
     if crate::widgets::icon_button(ui, chevron, t.text_dim, "Expand formula bar", vec2(20.0, 24.0)).clicked() {
-        app.ui.formula_bar_expanded = !app.ui.formula_bar_expanded;
+        if floating {
+            toggle_floating_expand(app);
+        } else {
+            app.ui.formula_bar_expanded = !app.ui.formula_bar_expanded;
+        }
     }
     if app.ui.math_notation && app.dialog.is_none() {
         math_panel(app, ui.ctx(), field, t);
@@ -236,9 +249,28 @@ fn math_panel(app: &SheetApp, ctx: &egui::Context, field: Rect, t: &Tokens) {
 /// The grip at its left end moves it: dragged, the bar stays where it is dropped
 /// (`UiState::floating_bar_at`) instead of following the cell, and a double-click on the grip
 /// sends it back. Its right edge sets the width and its bottom edge the rows it shows (the corner
-/// both); a double-click on an edge puts the size back.
+/// both), as far as the grid has room; a double-click on an edge puts the size back.
+///
+/// Left to itself it follows the formula: wider as a line gets longer (up to most of the grid's
+/// width, then it wraps), taller as lines are added (up to half the cells' height, then it
+/// scrolls); the chevron shows the whole formula (five rows at least). It stays over the cells,
+/// clear of the headings, with its controls on its first line. Its size eases, and it fades in.
 pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
     floating_keys(app, ctx);
+    // Alt+Shift+F lays the formula out on several lines, or back on one; taken before the field
+    // sees it (with its letter, which some systems also send as text).
+    if app.floating_bar_open
+        && app.dialog.is_none()
+        && ctx.input_mut(|i| {
+            let hit = i.consume_key(egui::Modifiers::ALT | egui::Modifiers::SHIFT, Key::F);
+            if hit {
+                i.events.retain(|e| !matches!(e, egui::Event::Text(t) if t.eq_ignore_ascii_case("f")));
+            }
+            hit
+        })
+    {
+        toggle_layout(app);
+    }
     let Some(grid) = app.grid.rect else { return };
     // An edit in the bar keeps it up, and its end (Enter, Esc, a click away) puts it away.
     let typing = app.editor.as_ref().is_some_and(|e| e.from_formula_bar);
@@ -250,12 +282,41 @@ pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
     } else if was_typing && app.dialog.is_none() {
         app.floating_bar_open = false;
     }
+    // A size made for one cell's formula (the chevron, a dragged edge) doesn't carry over: closed,
+    // or moved to another cell, the bar is sized to the formula it shows.
+    let at = app.session.active().map(|d| (d.uid, d.wb.active_sheet(), d.selection.active.row, d.selection.active.col));
+    let shown_id = egui::Id::unique("mkmatrix.floating_bar.on");
+    let before = ctx.data(|d| d.get_temp::<(bool, Option<(u64, usize, u32, u32)>)>(shown_id));
+    if before.is_some_and(|(was_open, was_at)| was_open && (!app.floating_bar_open || was_at != at)) {
+        reset_floating_size(app);
+    }
+    ctx.data_mut(|d| d.insert_temp(shown_id, (app.floating_bar_open, at)));
     if !app.floating_bar_open || app.dialog.is_some() {
+        // Faded out while away, so it fades in when it comes back.
+        ctx.animate_bool_with_time(egui::Id::unique(SHOWN), false, EASE_SECONDS);
         return;
     }
-    let Some(cell) = app.session.active().and_then(|d| {
+    // Each sheet keeps where the bar was dropped on it: another sheet brings its own place.
+    let sheet_name = app.session.active().and_then(|d| d.wb.active()).map(|sh| sh.name.clone()).unwrap_or_default();
+    let sheet_id = egui::Id::unique("mkmatrix.floating_bar.sheet");
+    if ctx.data(|d| d.get_temp::<String>(sheet_id)).is_some_and(|was| was != sheet_name) {
+        app.ui.floating_bar_at = app.ui.floating_bar_at_sheets.get(&sheet_name).copied();
+    }
+    ctx.data_mut(|d| d.insert_temp(sheet_id, sheet_name.clone()));
+    // The cell being edited (the active one without an edit), the range being pointed at while a
+    // formula is typed, and the cells' area (the grid without its headings), which the bar stays in.
+    let Some((cell, pointed, area)) = app.session.active().and_then(|d| {
         let sh = d.wb.active()?;
-        Some(crate::grid::Geo::new(sh, grid, app.view().scroll).cell_rect(sh, d.selection.active))
+        let si = d.wb.active_sheet();
+        let geo = crate::grid::Geo::new(sh, grid, app.view().scroll);
+        let editing = app.editor.as_ref().filter(|e| e.sheet == si).map_or(d.selection.active, |e| e.cell);
+        let pointed = app.editor.as_ref().filter(|e| e.point.is_some()).and_then(|e| {
+            let to = e.point_cell?;
+            let from = e.point_anchor.filter(|(s, _)| *s == si).map_or(to, |(_, c)| c);
+            let r = mkmatrix_engine::core::RangeRef::new(from, to);
+            Some(geo.cell_rect(sh, r.start).union(geo.cell_rect(sh, r.end)))
+        });
+        Some((geo.cell_rect(sh, editing), pointed, geo.cells))
     }) else {
         return;
     };
@@ -263,25 +324,81 @@ pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
     let font = theme::ui_font(13.0);
     let row_h = ctx.fonts_mut(|f| f.row_height(&font));
     let last = BarLayout::get(ctx);
+    // The rows the cells' area has room for (the most the bottom edge and the chevron give), and
+    // the rows the formula grows to by itself.
+    let room = ((area.height() - 12.0 - FOOTER_H - one_line(row_h)) / row_h.max(1.0)).floor().max(0.0) as usize + 1;
+    let auto = ((area.height() * 0.5 - one_line(row_h)) / row_h.max(1.0)).floor().max(0.0) as usize + 1;
+    let auto = auto.max(MAX_LINES).min(room);
     let at_least = app.ui.floating_bar_lines.map_or(1, usize::from);
-    let lines = if app.ui.formula_bar_expanded { MAX_LINES } else { last.lines.max(at_least).clamp(1, MAX_LINES) };
-    let h = one_line(row_h) + (lines - 1) as f32 * row_h;
-    let w = app.ui.floating_bar_width.unwrap_or(560.0).min(grid.width() - 16.0).max(FLOATING_MIN_W);
-    // Where it was dropped, or above the cell with its left edge on the cell's; inside the grid.
+    // The chevron shows the whole formula (five rows at least), as far as there's room.
+    let lines = if app.floating_bar_expanded { last.lines.max(MAX_LINES) } else { last.lines.min(auto) };
+    let lines = lines.max(at_least).clamp(1, room);
+    let widest = (area.width() - 16.0).max(FLOATING_MIN_W);
+    let w = match app.ui.floating_bar_width {
+        Some(w) => w,
+        // As wide as the formula's longest line, between the comfortable width and most of the grid.
+        None => (natural_width(app, ctx, &font) + FLOATING_CHROME).clamp(FLOATING_W, (area.width() * 0.85).max(FLOATING_W)),
+    }
+    .min(widest)
+    .max(FLOATING_MIN_W);
+    // Eased, except under the pointer: a dragged edge follows it exactly.
+    let resizing = ctx.data(|d| d.get_temp::<bool>(egui::Id::unique(RESIZING))).unwrap_or(false);
+    let ease = if resizing { 0.0 } else { EASE_SECONDS };
+    let h = ctx.animate_value_with_time(egui::Id::unique("mkmatrix.floating_bar.h"), one_line(row_h) + (lines - 1) as f32 * row_h, ease);
+    let w = ctx.animate_value_with_time(egui::Id::unique("mkmatrix.floating_bar.w"), w, ease);
+    let shown = ctx.animate_bool_with_time(egui::Id::unique(SHOWN), true, EASE_SECONDS);
+    // Where it was dropped, or above the cell with its left edge on the cell's; over the cells,
+    // clear of the headings.
     let gap = 6.0;
     let (x, y) = match app.ui.floating_bar_at {
         Some([dx, dy]) => (grid.left() + dx, grid.top() + dy),
         None => {
-            let above = cell.top() - gap - h - 4.0;
-            (cell.left(), if above >= grid.top() + 4.0 { above } else { cell.bottom() + gap })
+            let above = cell.top() - gap - h - FOOTER_H - 4.0;
+            (cell.left(), if above >= area.top() + 4.0 { above } else { cell.bottom() + gap })
         }
     };
-    let x = x.clamp(grid.left() + 8.0, (grid.right() - w - 8.0).max(grid.left() + 8.0));
-    let y = y.clamp(grid.top() + 4.0, (grid.bottom() - h - 8.0).max(grid.top() + 4.0));
+    let x = x.clamp(area.left() + 4.0, (area.right() - w - 8.0).max(area.left() + 4.0));
+    let y = y.clamp(area.top() + 4.0, (area.bottom() - h - FOOTER_H - 8.0).max(area.top() + 4.0));
+    // Out of the way of the range being pointed at: below it, or else above it.
+    let total = h + FOOTER_H + 4.0;
+    let y = match pointed {
+        Some(r) if Rect::from_min_size(pos2(x, y), vec2(w + 8.0, total)).intersects(r.expand(2.0)) => {
+            if r.bottom() + gap + total <= area.bottom() - 8.0 {
+                r.bottom() + gap
+            } else if r.top() - gap - total >= area.top() + 4.0 {
+                r.top() - gap - total
+            } else {
+                y
+            }
+        }
+        _ => y,
+    };
+    // Fainter while it waits: away from the pointer, with nothing typed in it or a range being
+    // dragged out on the sheet.
+    let last_rect = ctx.data(|d| d.get_temp::<Rect>(egui::Id::unique("mkmatrix.floating_bar.rect")));
+    let (hover, down) = ctx.input(|i| (i.pointer.hover_pos(), i.pointer.primary_down()));
+    let over = hover.is_some_and(|p| last_rect.is_some_and(|r| r.expand(6.0).contains(p)));
+    let waiting = !over && (!typing || (down && pointed.is_some()));
+    let solid = ctx.animate_value_with_time(egui::Id::unique("mkmatrix.floating_bar.solid"), if waiting { FAINT } else { 1.0 }, EASE_SECONDS);
+    // A bar dropped away from its cell points at it: a thin line to the cell, outlined.
+    if app.ui.floating_bar_at.is_some() {
+        let bar = Rect::from_min_size(pos2(x, y), vec2(w + 8.0, total));
+        if !bar.expand(gap + 2.0).intersects(cell) {
+            // From the bar's edge nearest the cell to the cell's edge nearest the bar.
+            let clamp = |r: Rect, q: egui::Pos2| pos2(q.x.clamp(r.left(), r.right()), q.y.clamp(r.top(), r.bottom()));
+            let from = clamp(bar.shrink(6.0), cell.center());
+            let near = clamp(cell, from);
+            let p = ctx.layer_painter(egui::LayerId::new(egui::Order::Middle, egui::Id::unique("mkmatrix.floating_bar.link"))).with_clip_rect(area);
+            let ink = t.accent.gamma_multiply(0.7 * shown);
+            p.line_segment([from, near], egui::Stroke::new(1.0, ink));
+            p.rect_stroke(cell, 0.0, egui::Stroke::new(1.5, ink), egui::StrokeKind::Inside);
+        }
+    }
     let mut layout = BarLayout { height: h, ..Default::default() };
     let mut moved: Option<egui::Vec2> = None;
     let mut reset_at = false;
     egui::Area::new(egui::Id::unique("mkmatrix.floating_formula_bar")).order(egui::Order::Foreground).fixed_pos(pos2(x, y)).show(ctx, |ui| {
+        ui.multiply_opacity(shown * solid);
         let frame = egui::Frame::new()
             .fill(t.window)
             .stroke(egui::Stroke::new(1.0, t.input_border))
@@ -290,39 +407,223 @@ pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
             .shadow(egui::epaint::Shadow { offset: [0, 3], blur: 12, spread: 0, color: egui::Color32::from_black_alpha(48) })
             .show(ui, |ui| {
                 ui.set_width(w);
-                ui.set_height(h);
-                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.set_height(h + FOOTER_H);
+                ui.spacing_mut().item_spacing.y = 0.0;
+                ui.allocate_ui_with_layout(vec2(w, h), egui::Layout::left_to_right(egui::Align::Min), |ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
                     let name = crate::i18n::current(ui.ctx()).tr("Move the formula bar").to_owned();
-                    let grip = grip(ui, h, &t, &name);
+                    // Its controls sit on the first line, however tall the bar gets.
+                    let grip = grip(ui, h, one_line(row_h), &t, &name);
                     if grip.dragged() {
                         moved = Some(grip.drag_delta());
                     }
                     reset_at = grip.double_clicked();
-                    contents(app, ui, &t, &font, row_h, &mut layout);
+                    contents(app, ui, &t, &font, row_h, true, &mut layout);
                 });
+                footer(app, ui, layout.field, &t);
             });
-        resize_edges(app, ui, frame.response.rect, grid.min, w, lines, row_h, &t);
+        resize_edges(app, ui, frame.response.rect, grid.min, w, lines, room, row_h, &t);
+        ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("mkmatrix.floating_bar.rect"), frame.response.rect));
     });
     if reset_at {
         app.ui.floating_bar_at = None;
+        app.ui.floating_bar_at_sheets.remove(&sheet_name);
     } else if let Some(d) = moved {
-        app.ui.floating_bar_at = Some([x + d.x - grid.left(), y + d.y - grid.top()]);
+        let at = [x + d.x - grid.left(), y + d.y - grid.top()];
+        app.ui.floating_bar_at = Some(at);
+        app.ui.floating_bar_at_sheets.insert(sheet_name.clone(), at);
     }
     ctx.data_mut(|d| d.insert_temp(BarLayout::id(), layout));
 }
 
+/// The floating bar's opacity while it waits (see [`floating`]).
+const FAINT: f32 = 0.55;
+
+/// The strip under the floating bar's field.
+const FOOTER_H: f32 = 20.0;
+
+/// The floating bar's footer, under the field (`field`): the cell being edited (with its sheet
+/// when the edit is on another one), the formula's value as typed, and the layout button.
+fn footer(app: &mut SheetApp, ui: &mut egui::Ui, field: Rect, t: &Tokens) {
+    let (strip, _) = ui.allocate_exact_size(vec2(ui.available_width(), FOOTER_H), Sense::hover());
+    let font = theme::ui_font(11.5);
+    let lang = crate::i18n::current(ui.ctx());
+    let painter = ui.painter().with_clip_rect(strip);
+    let mid = strip.center().y;
+    // The layout button at the right end, under the chevron.
+    let pretty = app.editor.as_ref().is_some_and(|e| e.text.contains('\n'));
+    let button = Rect::from_center_size(pos2(strip.right() - 14.0, mid), vec2(22.0, FOOTER_H - 2.0));
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(button));
+    let ink = if pretty { t.accent } else { t.text_dim };
+    let tip = format!("{} (Alt+Shift+F)", lang.tr("Lay out the formula on several lines"));
+    if crate::widgets::icon_button(&mut child, Icon::IndentInc, ink, &tip, vec2(20.0, FOOTER_H - 2.0)).clicked() {
+        toggle_layout(app);
+    }
+    let left = field.left().max(strip.left()) + 6.0;
+    let label = editing_label(app);
+    let place = painter.text(pos2(left, mid), egui::Align2::LEFT_CENTER, &label, font.clone(), t.text_dim);
+    // Both read out too (and found by tests).
+    let read_out = |ui: &mut egui::Ui, r: Rect, what: &str, text: String| {
+        ui.interact(r, egui::Id::unique(("mkmatrix.floating_bar.footer", what)), Sense::hover())
+            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, text.clone()));
+    };
+    read_out(ui, place, "cell", label);
+    if let Some((text, error)) = live_value(app, ui.ctx()) {
+        let color = if error { t.danger } else { t.text_dim };
+        let galley = painter.layout_no_wrap(format!("= {text}"), font, color);
+        let room = (button.left() - 8.0) - (place.right() + 16.0);
+        if room > 24.0 {
+            let w = galley.size().x.min(room);
+            let at = Rect::from_min_max(pos2(button.left() - 8.0 - w, strip.top()), pos2(button.left() - 8.0, strip.bottom()));
+            read_out(ui, at, "value", format!("= {text}"));
+            painter.with_clip_rect(Rect::from_min_max(pos2(button.left() - 8.0 - w, strip.top()), pos2(button.left() - 8.0, strip.bottom()))).galley(
+                pos2(button.left() - 8.0 - w, mid - galley.size().y / 2.0),
+                galley,
+                color,
+            );
+        }
+    }
+}
+
+/// Where the bar edits: the cell as the Name Box writes it, after its sheet when that isn't the
+/// active one (pointing can take the edit's references to another sheet).
+fn editing_label(app: &SheetApp) -> String {
+    let Some(d) = app.session.active() else { return String::new() };
+    let (sheet, cell) = app.editor.as_ref().map_or((d.wb.active_sheet(), d.selection.active), |e| (e.sheet, e.cell));
+    let at = if app.ui.numbered_columns { format!("({}, {})", u64::from(cell.row) + 1, u64::from(cell.col) + 1) } else { cell.a1() };
+    match d.wb.sheet(sheet) {
+        Some(sh) if sheet != d.wb.active_sheet() => format!("{}!{at}", mkmatrix_engine::core::quote_sheet(&sh.name)),
+        _ => at,
+    }
+}
+
+/// The value of the formula being typed (or of the cell's formula), in the cell's number format,
+/// and whether it is an error. Worked out again only when the text or the workbook changes.
+fn live_value(app: &SheetApp, ctx: &egui::Context) -> Option<(String, bool)> {
+    let d = app.session.active()?;
+    let (sheet, cell, text, locale) = match &app.editor {
+        Some(e) => (e.sheet, e.cell, e.text.clone(), e.locale),
+        None => {
+            let sh = d.wb.active()?;
+            let c = sh.cell(d.selection.active)?;
+            c.formula.as_ref()?;
+            (d.wb.active_sheet(), d.selection.active, c.input_text(), Default::default())
+        }
+    };
+    if !text.starts_with('=') {
+        return None;
+    }
+    let id = egui::Id::unique("mkmatrix.floating_bar.value");
+    let key = (d.uid, d.revision, sheet, cell.row, cell.col, text.clone());
+    if let Some((k, v)) = ctx.data(|m| m.get_temp::<((u64, u64, usize, u32, u32, String), Option<(String, bool)>)>(id))
+        && k == key
+    {
+        return v;
+    }
+    let shown = (|| {
+        let canon = crate::formula_locale::canonical(&text, locale, &d.wb, sheet, cell).ok()?;
+        let v = mkmatrix_engine::calc::evaluate(&d.wb, sheet, cell, &canon);
+        let sh = d.wb.sheet(sheet)?;
+        let fmt = d.wb.styles.get(sh.style_id(cell)).num_fmt.as_str().to_string();
+        let one = |v: &mkmatrix_engine::core::Value| mkmatrix_engine::display::format(v, &fmt, &d.wb).text;
+        Some(match &v {
+            mkmatrix_engine::core::Value::Error(e) => (e.as_str().to_string(), true),
+            mkmatrix_engine::core::Value::Array(a) => {
+                let first = a.data.first().map(one).unwrap_or_default();
+                (format!("{first} … ({}×{})", a.rows, a.cols), false)
+            }
+            v => (one(v), false),
+        })
+    })();
+    ctx.data_mut(|m| m.insert_temp(id, (key, shown.clone())));
+    shown
+}
+
+/// Lays the formula being edited out with each long call's arguments on their own lines, or puts
+/// a laid-out one back on one line (the cell keeps the formula either way). Without an edit, it
+/// starts one in the bar first. The caret stays by the same character.
+pub(crate) fn toggle_layout(app: &mut SheetApp) {
+    if app.editor.is_none() {
+        app.begin_edit(None, true);
+    }
+    let Some(ed) = app.editor.as_mut().filter(|e| e.is_formula()) else { return };
+    let new = if ed.text.contains('\n') {
+        mkmatrix_engine::formula::pretty::compact(&ed.text, ed.locale)
+    } else {
+        mkmatrix_engine::formula::pretty::pretty(&ed.text, ed.locale)
+    };
+    let Some(new) = new.filter(|n| *n != ed.text) else { return };
+    let kept = ed.text.chars().take(ed.caret).filter(|c| !c.is_whitespace()).count();
+    let mut seen = 0;
+    let caret = new
+        .chars()
+        .position(|c| {
+            if seen == kept {
+                return true;
+            }
+            seen += usize::from(!c.is_whitespace());
+            false
+        })
+        .unwrap_or(new.chars().count());
+    ed.text = new;
+    ed.caret = caret;
+    ed.anchor = caret;
+    ed.sync_caret = true;
+    ed.request_focus = true;
+    ed.point = None;
+    ed.autocomplete.clear();
+    ed.completion = None;
+}
+
+/// The floating bar's chevron (and Ctrl+Shift+U while it's up): the whole formula shows, or, on a
+/// bar the chevron or a dragged edge made bigger than its formula, back to the formula's size.
+/// Whether it is now expanded.
+pub(crate) fn toggle_floating_expand(app: &mut SheetApp) -> bool {
+    if app.floating_bar_expanded || app.ui.floating_bar_lines.is_some() || app.ui.floating_bar_width.is_some() {
+        reset_floating_size(app);
+        false
+    } else {
+        app.floating_bar_expanded = true;
+        true
+    }
+}
+
+/// Back to the formula's own size: no chevron, no dragged width or rows.
+fn reset_floating_size(app: &mut SheetApp) {
+    app.floating_bar_expanded = false;
+    app.ui.floating_bar_width = None;
+    app.ui.floating_bar_lines = None;
+}
+
 /// The floating formula bar's narrowest width.
 const FLOATING_MIN_W: f32 = 240.0;
+/// Its width while the formula fits: a comfortable formula.
+const FLOATING_W: f32 = 560.0;
+/// What the bar takes besides the formula's text: the grip, fx, the field's padding, the notation
+/// toggle, the chevron, spacing and the frame.
+const FLOATING_CHROME: f32 = 136.0;
+/// Set while an edge of the floating bar is being dragged (its size then doesn't ease).
+const RESIZING: &str = "mkmatrix.floating_bar.resizing";
+/// The floating bar's fade in.
+const SHOWN: &str = "mkmatrix.floating_bar.shown";
+
+/// The width of the longest line of what the bar shows: the edit's text, or the active cell's.
+fn natural_width(app: &SheetApp, ctx: &egui::Context, font: &FontId) -> f32 {
+    let text = app.editor.as_ref().map_or_else(|| active_input(app), |e| e.text.clone());
+    // Only the first few thousand characters: past that the bar is at its widest anyway.
+    let text: String = text.chars().take(4000).collect();
+    ctx.fonts_mut(|f| text.lines().map(|l| f.layout_no_wrap(l.to_owned(), font.clone(), egui::Color32::WHITE).size().x).fold(0.0, f32::max))
+}
 
 /// The floating bar's grip: two columns of dots at its left end, dragged to move the bar.
-fn grip(ui: &mut egui::Ui, h: f32, t: &Tokens, name: &str) -> egui::Response {
+/// Its dots sit in the middle of the bar's first line (`first` tall).
+fn grip(ui: &mut egui::Ui, h: f32, first: f32, t: &Tokens, name: &str) -> egui::Response {
     let (r, resp) = ui.allocate_exact_size(vec2(10.0, h), egui::Sense::click_and_drag());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, name));
     let ink = if resp.hovered() || resp.dragged() { t.accent } else { t.text_dim };
     for i in 0..3 {
         for j in 0..2 {
-            let c = pos2(r.center().x - 2.0 + 4.0 * j as f32, r.center().y - 4.0 + 4.0 * i as f32);
+            let c = pos2(r.center().x - 2.0 + 4.0 * j as f32, r.top() + first.min(h) / 2.0 - 4.0 + 4.0 * i as f32);
             ui.painter().circle_filled(c, 1.1, ink);
         }
     }
@@ -337,9 +638,10 @@ fn grip(ui: &mut egui::Ui, h: f32, t: &Tokens, name: &str) -> egui::Response {
 /// bottom edge or the corner pins the bar where it is (`grid` is the grid's top-left), so it
 /// grows down under the pointer instead of up from the cell it sits above.
 #[allow(clippy::too_many_arguments)]
-fn resize_edges(app: &mut SheetApp, ui: &mut egui::Ui, bar: Rect, grid: egui::Pos2, w: f32, lines: usize, row_h: f32, t: &Tokens) {
+fn resize_edges(app: &mut SheetApp, ui: &mut egui::Ui, bar: Rect, grid: egui::Pos2, w: f32, lines: usize, room: usize, row_h: f32, t: &Tokens) {
     let lang = crate::i18n::current(ui.ctx());
     let start_id = egui::Id::unique("mkmatrix.floating_bar.resize_start");
+    let mut resizing = false;
     let edges = [
         (
             "e",
@@ -375,6 +677,7 @@ fn resize_edges(app: &mut SheetApp, ui: &mut egui::Ui, bar: Rect, grid: egui::Po
             }
         }
         if resp.dragged() {
+            resizing = true;
             let (w0, lines0) = ui.ctx().data(|d| d.get_temp::<(f32, usize)>(start_id)).unwrap_or((w, lines));
             let (Some(origin), Some(now)) = (ui.input(|i| i.pointer.press_origin()), ui.input(|i| i.pointer.latest_pos())) else { continue };
             let d = now - origin;
@@ -382,13 +685,14 @@ fn resize_edges(app: &mut SheetApp, ui: &mut egui::Ui, bar: Rect, grid: egui::Po
                 app.ui.floating_bar_width = Some((w0 + d.x).max(FLOATING_MIN_W).round());
             }
             if side != "e" {
-                let rows = (lines0 as f32 + d.y / row_h.max(1.0)).round().clamp(1.0, MAX_LINES as f32);
+                let rows = (lines0 as f32 + d.y / row_h.max(1.0)).round().clamp(1.0, room.min(u8::MAX as usize) as f32);
                 app.ui.floating_bar_lines = Some(rows as u8);
             }
             // The edge being dragged, in the accent.
             ui.painter().rect_stroke(bar, 6.0, egui::Stroke::new(1.0, t.accent), egui::StrokeKind::Inside);
         }
     }
+    ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique(RESIZING), resizing));
 }
 
 /// Ctrl pressed twice in a row (alone, each tap within 400 ms of the last) toggles the floating
@@ -706,6 +1010,15 @@ pub fn editor_widget(app: &mut SheetApp, ui: &mut egui::Ui, id: egui::Id, font: 
                 state.store(ui.ctx(), id);
             }
         }
+        // With the formula bar floating, F2 takes the edit from the bar into the cell and back.
+        if app.ui.floating_formula_bar && app.session.prefs.formula_bar && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::F2)) {
+            ed.from_formula_bar = !ed.from_formula_bar;
+            ed.request_focus = true;
+            ed.sync_caret = true;
+            if ed.from_formula_bar {
+                app.floating_bar_open = true;
+            }
+        }
         // Ctrl+Shift+U (Control+Shift+U on a Mac) expands or collapses the formula bar while editing too.
         if ui.input_mut(|i| i.consume_key(egui::Modifiers::CTRL | egui::Modifiers::SHIFT, Key::U)) {
             app.run_or_alert("view.expandFormulaBar", json!({}));
@@ -713,6 +1026,9 @@ pub fn editor_widget(app: &mut SheetApp, ui: &mut egui::Ui, id: egui::Id, font: 
     }
     // The text widget.
     let refs = formula_refs(&ed.text);
+    // The bracket at the caret (just before or after it) and its partner, and any bracket left
+    // without one.
+    let (matched, unmatched) = if ed.is_formula() { brackets(&ed.text, ed.caret) } else { (None, Vec::new()) };
     let t = Tokens::get(ui.ctx());
     let on_sheet = id == egui::Id::unique("mkmatrix.cell_editor");
     let cell_text_color = if on_sheet { t.cell_text } else { t.text };
@@ -721,14 +1037,25 @@ pub fn editor_widget(app: &mut SheetApp, ui: &mut egui::Ui, id: egui::Id, font: 
         let s = buf.as_str();
         let mut job = egui::text::LayoutJob::default();
         let mut pos = 0usize;
-        let mut spans: Vec<(usize, usize, usize)> = refs.iter().filter(|r| r.1 <= s.len()).map(|r| (r.0, r.1, r.4)).collect();
-        spans.sort();
-        for (a, b, idx) in spans {
-            if a < pos || !s.is_char_boundary(a) || !s.is_char_boundary(b) {
+        // (start, end, colour, background): references in their colours, the matched brackets
+        // in the accent on a tint, an unmatched one in the danger colour.
+        let mut spans: Vec<(usize, usize, egui::Color32, egui::Color32)> =
+            refs.iter().filter(|r| r.1 <= s.len()).map(|r| (r.0, r.1, t.ref_color(r.4, on_sheet), egui::Color32::TRANSPARENT)).collect();
+        for at in matched.iter().flat_map(|(a, b)| [*a, *b]) {
+            spans.push((at, at + 1, t.accent, t.accent.gamma_multiply(0.18)));
+        }
+        for at in &unmatched {
+            spans.push((*at, at + 1, t.danger, egui::Color32::TRANSPARENT));
+        }
+        spans.sort_by_key(|x| (x.0, x.1));
+        for (a, b, color, bg) in spans {
+            if a < pos || b > s.len() || !s.is_char_boundary(a) || !s.is_char_boundary(b) {
                 continue;
             }
             job.append(s.get(pos..a).unwrap_or(""), 0.0, egui::TextFormat::simple(font2.clone(), cell_text_color));
-            job.append(s.get(a..b).unwrap_or(""), 0.0, egui::TextFormat::simple(font2.clone(), t.ref_color(idx, on_sheet)));
+            let mut format = egui::TextFormat::simple(font2.clone(), color);
+            format.background = bg;
+            job.append(s.get(a..b).unwrap_or(""), 0.0, format);
             pos = b;
         }
         job.append(s.get(pos..).unwrap_or(""), 0.0, egui::TextFormat::simple(font2.clone(), cell_text_color));
@@ -959,6 +1286,55 @@ fn cycle_anchor(ed: &mut crate::editor::EditState) {
     }
 }
 
+/// The brackets of formula text, outside text in quotes, quoted sheet names and structured
+/// references: the pair at char index `caret` (the bracket just before it, else the one after it)
+/// as byte offsets, and the byte offsets of closing brackets with no partner (an opening one
+/// is only not closed yet). A `'` after an operand is MK Matrix's transpose, not a sheet's quote.
+fn brackets(text: &str, caret: usize) -> (Option<(usize, usize)>, Vec<usize>) {
+    let mut open: Vec<(usize, char)> = Vec::new();
+    let mut pairs: Vec<(usize, usize)> = Vec::new();
+    let mut unmatched = Vec::new();
+    let (mut quote, mut sheet, mut square) = (false, false, 0usize);
+    // The last character outside quotes and spaces: after an operand's end a `'` transposes.
+    let mut last = ' ';
+    for (b, c) in text.char_indices() {
+        let operand_end = last.is_alphanumeric() || matches!(last, ')' | ']' | '}' | '%' | '\'' | '$');
+        if !quote && !sheet && !c.is_whitespace() && c != '"' && !(c == '\'' && !operand_end) {
+            last = c;
+        }
+        match c {
+            '"' if !sheet && square == 0 => quote = !quote,
+            '\'' if !quote && square == 0 && (sheet || !operand_end) => {
+                sheet = !sheet;
+                if !sheet {
+                    last = 'a';
+                }
+            }
+            _ if quote || sheet => {}
+            '[' => square += 1,
+            ']' => square = square.saturating_sub(1),
+            _ if square > 0 => {}
+            '(' | '{' => open.push((b, c)),
+            ')' | '}' => {
+                let want = if c == ')' { '(' } else { '{' };
+                match open.last() {
+                    Some(&(o, oc)) if oc == want => {
+                        open.pop();
+                        pairs.push((o, b));
+                    }
+                    _ => unmatched.push(b),
+                }
+            }
+            _ => {}
+        }
+    }
+    let byte = |i: usize| text.char_indices().nth(i).map(|(b, _)| b);
+    let before = caret.checked_sub(1).and_then(byte);
+    let after = byte(caret);
+    let pair_at = |at: Option<usize>| at.and_then(|at| pairs.iter().copied().find(|(a, b)| *a == at || *b == at));
+    (pair_at(before).or_else(|| pair_at(after)), unmatched)
+}
+
 fn function_names() -> Vec<String> {
     static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
     NAMES
@@ -1168,6 +1544,26 @@ mod spill_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn brackets_pair_up_outside_text_sheet_names_and_table_columns() {
+        let f = "=IF(SUM(A1:A3)>0,\"(\",'My (sheet)'!B1)+T[(x)]";
+        // The caret after SUM's ")" (char 14) pairs it with SUM's "(".
+        let sum_open = f.find("SUM(").unwrap() + 3;
+        let sum_close = f.find(")>").unwrap();
+        assert_eq!(brackets(f, sum_close + 1).0, Some((sum_open, sum_close)));
+        // Before IF's "(" (the caret right after "=IF") it pairs with the last ")".
+        let if_close = f.rfind(")+").unwrap();
+        assert_eq!(brackets(f, 3).0, Some((3, if_close)));
+        assert!(brackets(f, 0).1.is_empty(), "nothing unmatched");
+        // A closer too many is flagged; an opener still being typed isn't.
+        assert_eq!(brackets("=1+2)", 0).1, vec![4]);
+        assert!(brackets("=SUM(1,2", 0).1.is_empty());
+        // A' transposes: the next brackets still pair.
+        let t = "=(A'*B)'+(1)";
+        assert_eq!(brackets(t, t.len()).0, Some((9, 11)));
+        assert!(brackets(t, 0).1.is_empty());
+    }
 
     fn press(key: Key) -> egui::RawInput {
         let mut raw = egui::RawInput::default();
