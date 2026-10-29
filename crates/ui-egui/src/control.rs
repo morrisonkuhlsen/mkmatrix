@@ -196,6 +196,11 @@ pub fn handle(app: &mut SheetApp, ctx: &egui::Context, method: &str, p: &Json) -
                 ("view.theme", "Display Theme", ""),
                 ("view.animations", "Animations", "{on?: bool} (toggles without it) → {on}"),
                 (
+                    "view.mathNotation",
+                    "Mathematical Notation",
+                    "{on?: bool} (toggles without it) → {on}: the formula under the formula field in mathematical notation (fractions, exponents, A⁻¹, Aᵀ, matrices)",
+                ),
+                (
                     "view.floatingFormulaBar",
                     "Floating Formula Bar",
                     "{on?: bool} (toggles without it) → {on}: the formula bar floats above the active cell (F2 edits in it, Ctrl twice shows it) and the Name Box moves to the sheet tab bar",
