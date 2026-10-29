@@ -8,6 +8,7 @@ mod common;
 
 mod accounting_fill;
 mod advanced_filter;
+mod apply_preview;
 mod argument_names;
 mod autosave_persist;
 mod borders;

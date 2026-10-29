@@ -11,6 +11,7 @@ mod fonts;
 mod input;
 mod keys;
 mod prefs;
+mod preview;
 mod print;
 mod quit;
 mod view;
@@ -57,6 +58,8 @@ impl SheetApp {
             desktop_dark: None,
             name_box: None,
             floating_bar_open: false,
+            preview_hover: None,
+            preview: None,
             ctrl_tap: None,
             keytips: keytips::KeyTips::default(),
             shots: control::Shots::default(),
@@ -212,7 +215,9 @@ impl SheetApp {
             // File tab: the Backstage view replaces everything below the title bar.
             backstage::show(self, ui);
         } else {
+            self.preview_hover = None;
             ribbon::show(self, ui);
+            self.update_preview();
             widgets::notice_bar(self, ui);
             if self.session.prefs.formula_bar && !self.ui.floating_formula_bar {
                 formula_bar::show(self, ui);

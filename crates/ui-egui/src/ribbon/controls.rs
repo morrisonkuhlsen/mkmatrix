@@ -417,6 +417,18 @@ fn combo_popup(
     result
 }
 
+/// Commands whose result the grid previews, faded, while the pointer is on their button.
+const PREVIEWABLE: [&str; 4] = ["data.sortAscending", "data.sortDescending", "data.removeDuplicates", "edit.pasteSpecial"];
+
+/// While `resp` is hovered, asks the grid to preview `id` with `params` (Paste Special only with
+/// cells on MK Matrix's own clipboard).
+pub(crate) fn preview_on_hover(app: &mut SheetApp, resp: &egui::Response, id: &str, params: &serde_json::Value) {
+    let Some(id) = PREVIEWABLE.iter().find(|p| **p == id) else { return };
+    if resp.hovered() && (*id != "edit.pasteSpecial" || app.session.clipboard.is_some()) {
+        app.preview_hover = Some((id, params.clone()));
+    }
+}
+
 pub(super) fn menu_items(app: &mut SheetApp, ui: &mut Ui, items: &[(&str, &str, serde_json::Value)]) {
     for (label, id, p) in items {
         if *label == "-" {
@@ -425,6 +437,7 @@ pub(super) fn menu_items(app: &mut SheetApp, ui: &mut Ui, items: &[(&str, &str, 
         }
         let lang = app.ui.language;
         let response = ui.add(egui::Button::new(lang.tr(label)).frame_when_inactive(false).min_size(vec2(220.0, 22.0)));
+        preview_on_hover(app, &response, id, p);
         if let Some(sequence) = keytip_table::item_letter(app.keytips.prefix().unwrap_or_default(), id) {
             keytip(app, ui, sequence, pos2(response.rect.right() - 10.0, response.rect.center().y));
         }

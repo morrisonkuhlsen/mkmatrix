@@ -11,11 +11,13 @@ pub(super) fn data(app: &mut SheetApp, ui: &mut Ui) {
     controls::stack(ui, |ui| {
         let __k = small_button(ui, Icon::SortAsc, "", "Sort A to Z", false);
         control_keytip(app, ui, &__k, "data.sortAscending");
+        controls::preview_on_hover(app, &__k, "data.sortAscending", &json!({}));
         if __k.clicked() {
             act(app, "data.sortAscending", json!({}));
         }
         let __k = small_button(ui, Icon::SortDesc, "", "Sort Z to A", false);
         control_keytip(app, ui, &__k, "data.sortDescending");
+        controls::preview_on_hover(app, &__k, "data.sortDescending", &json!({}));
         if __k.clicked() {
             act(app, "data.sortDescending", json!({}));
         }
@@ -60,6 +62,7 @@ pub(super) fn data(app: &mut SheetApp, ui: &mut Ui) {
     }
     let __k = big_button(ui, Icon::Duplicates, "Remove\nDuplicates", "Remove Duplicates", false);
     control_keytip(app, ui, &__k, "dialog:removeDuplicates");
+    controls::preview_on_hover(app, &__k, "data.removeDuplicates", &json!({}));
     if __k.clicked() {
         app.open_dialog("removeDuplicates", json!({}));
     }
