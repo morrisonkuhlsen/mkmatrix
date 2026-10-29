@@ -239,8 +239,9 @@ fn math_panel(app: &SheetApp, ctx: &egui::Context, field: Rect, t: &Tokens) {
 /// both), as far as the grid has room; a double-click on an edge puts the size back.
 ///
 /// Left to itself it follows the formula: wider as a line gets longer (up to most of the grid's
-/// width, then it wraps), taller as lines are added (up to half the grid's height, then it
-/// scrolls); the chevron gives it the grid's full height. Its size eases, and it fades in.
+/// width, then it wraps), taller as lines are added (up to half the cells' height, then it
+/// scrolls); the chevron shows the whole formula (five rows at least). It stays over the cells,
+/// clear of the headings, with its controls on its first line. Its size eases, and it fades in.
 pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
     floating_keys(app, ctx);
     let Some(grid) = app.grid.rect else { return };
@@ -259,9 +260,11 @@ pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
         ctx.animate_bool_with_time(egui::Id::unique(SHOWN), false, EASE_SECONDS);
         return;
     }
-    let Some(cell) = app.session.active().and_then(|d| {
+    // The active cell, and the cells' area (the grid without its headings), which the bar stays in.
+    let Some((cell, area)) = app.session.active().and_then(|d| {
         let sh = d.wb.active()?;
-        Some(crate::grid::Geo::new(sh, grid, app.view().scroll).cell_rect(sh, d.selection.active))
+        let geo = crate::grid::Geo::new(sh, grid, app.view().scroll);
+        Some((geo.cell_rect(sh, d.selection.active), geo.cells))
     }) else {
         return;
     };
@@ -269,18 +272,20 @@ pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
     let font = theme::ui_font(13.0);
     let row_h = ctx.fonts_mut(|f| f.row_height(&font));
     let last = BarLayout::get(ctx);
-    // The rows the grid has room for (the most the bottom edge and the chevron give), and the
-    // rows the formula grows to by itself.
-    let room = ((grid.height() - 12.0 - one_line(row_h)) / row_h.max(1.0)).floor().max(0.0) as usize + 1;
-    let auto = ((grid.height() * 0.5 - one_line(row_h)) / row_h.max(1.0)).floor().max(0.0) as usize + 1;
+    // The rows the cells' area has room for (the most the bottom edge and the chevron give), and
+    // the rows the formula grows to by itself.
+    let room = ((area.height() - 12.0 - one_line(row_h)) / row_h.max(1.0)).floor().max(0.0) as usize + 1;
+    let auto = ((area.height() * 0.5 - one_line(row_h)) / row_h.max(1.0)).floor().max(0.0) as usize + 1;
     let auto = auto.max(MAX_LINES).min(room);
     let at_least = app.ui.floating_bar_lines.map_or(1, usize::from);
-    let lines = if app.ui.formula_bar_expanded { room } else { last.lines.min(auto).max(at_least).clamp(1, room) };
-    let widest = (grid.width() - 16.0).max(FLOATING_MIN_W);
+    // The chevron shows the whole formula (five rows at least), as far as there's room.
+    let lines = if app.ui.formula_bar_expanded { last.lines.max(MAX_LINES) } else { last.lines.min(auto) };
+    let lines = lines.max(at_least).clamp(1, room);
+    let widest = (area.width() - 16.0).max(FLOATING_MIN_W);
     let w = match app.ui.floating_bar_width {
         Some(w) => w,
         // As wide as the formula's longest line, between the comfortable width and most of the grid.
-        None => (natural_width(app, ctx, &font) + FLOATING_CHROME).clamp(FLOATING_W, (grid.width() * 0.85).max(FLOATING_W)),
+        None => (natural_width(app, ctx, &font) + FLOATING_CHROME).clamp(FLOATING_W, (area.width() * 0.85).max(FLOATING_W)),
     }
     .min(widest)
     .max(FLOATING_MIN_W);
@@ -290,17 +295,18 @@ pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
     let h = ctx.animate_value_with_time(egui::Id::unique("mkmatrix.floating_bar.h"), one_line(row_h) + (lines - 1) as f32 * row_h, ease);
     let w = ctx.animate_value_with_time(egui::Id::unique("mkmatrix.floating_bar.w"), w, ease);
     let shown = ctx.animate_bool_with_time(egui::Id::unique(SHOWN), true, EASE_SECONDS);
-    // Where it was dropped, or above the cell with its left edge on the cell's; inside the grid.
+    // Where it was dropped, or above the cell with its left edge on the cell's; over the cells,
+    // clear of the headings.
     let gap = 6.0;
     let (x, y) = match app.ui.floating_bar_at {
         Some([dx, dy]) => (grid.left() + dx, grid.top() + dy),
         None => {
             let above = cell.top() - gap - h - 4.0;
-            (cell.left(), if above >= grid.top() + 4.0 { above } else { cell.bottom() + gap })
+            (cell.left(), if above >= area.top() + 4.0 { above } else { cell.bottom() + gap })
         }
     };
-    let x = x.clamp(grid.left() + 8.0, (grid.right() - w - 8.0).max(grid.left() + 8.0));
-    let y = y.clamp(grid.top() + 4.0, (grid.bottom() - h - 8.0).max(grid.top() + 4.0));
+    let x = x.clamp(area.left() + 4.0, (area.right() - w - 8.0).max(area.left() + 4.0));
+    let y = y.clamp(area.top() + 4.0, (area.bottom() - h - 8.0).max(area.top() + 4.0));
     let mut layout = BarLayout { height: h, ..Default::default() };
     let mut moved: Option<egui::Vec2> = None;
     let mut reset_at = false;
@@ -315,10 +321,11 @@ pub fn floating(app: &mut SheetApp, ctx: &egui::Context) {
             .show(ui, |ui| {
                 ui.set_width(w);
                 ui.set_height(h);
-                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
                     let name = crate::i18n::current(ui.ctx()).tr("Move the formula bar").to_owned();
-                    let grip = grip(ui, h, &t, &name);
+                    // Its controls sit on the first line, however tall the bar gets.
+                    let grip = grip(ui, h, one_line(row_h), &t, &name);
                     if grip.dragged() {
                         moved = Some(grip.drag_delta());
                     }
@@ -357,13 +364,14 @@ fn natural_width(app: &SheetApp, ctx: &egui::Context, font: &FontId) -> f32 {
 }
 
 /// The floating bar's grip: two columns of dots at its left end, dragged to move the bar.
-fn grip(ui: &mut egui::Ui, h: f32, t: &Tokens, name: &str) -> egui::Response {
+/// Its dots sit in the middle of the bar's first line (`first` tall).
+fn grip(ui: &mut egui::Ui, h: f32, first: f32, t: &Tokens, name: &str) -> egui::Response {
     let (r, resp) = ui.allocate_exact_size(vec2(10.0, h), egui::Sense::click_and_drag());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, name));
     let ink = if resp.hovered() || resp.dragged() { t.accent } else { t.text_dim };
     for i in 0..3 {
         for j in 0..2 {
-            let c = pos2(r.center().x - 2.0 + 4.0 * j as f32, r.center().y - 4.0 + 4.0 * i as f32);
+            let c = pos2(r.center().x - 2.0 + 4.0 * j as f32, r.top() + first.min(h) / 2.0 - 4.0 + 4.0 * i as f32);
             ui.painter().circle_filled(c, 1.1, ink);
         }
     }

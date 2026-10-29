@@ -234,3 +234,26 @@ fn the_bar_follows_a_long_formula_wider_and_taller() {
     let layout = mkmatrix_ui_egui::formula_bar::BarLayout::get(&h.ctx);
     assert!(layout.visible_lines > 10, "the bar grows with the formula: {} rows shown", layout.visible_lines);
 }
+
+#[test]
+fn the_chevron_shows_the_whole_formula_and_the_bar_stays_off_the_headings() {
+    let mut h = harness();
+    // An empty cell near the top: expanded, the bar takes five rows, not the whole grid.
+    click(&mut h, "B2");
+    h.key_press(egui::Key::F2);
+    h.run_steps(3);
+    h.get_by_label("Expand formula bar").click();
+    h.run_steps(3);
+    let layout = mkmatrix_ui_egui::formula_bar::BarLayout::get(&h.ctx);
+    assert_eq!(layout.visible_lines, 5, "an empty formula expands to five rows");
+    let cells = {
+        let app = h.state();
+        let sheet = app.session.active().unwrap().wb.active().unwrap();
+        Geo::new(sheet, app.grid.rect.unwrap(), app.view().scroll).cells
+    };
+    let bar = bar_rect(&h);
+    assert!(bar.top() >= cells.top() && bar.left() >= cells.left(), "over the cells, not the headings: {bar:?} in {cells:?}");
+    // The controls sit on the first line.
+    let fx = h.get_by_label("Insert Function").rect();
+    assert!(fx.bottom() < layout.field.top() + 40.0, "fx on the first line: {fx:?}, field {:?}", layout.field);
+}
