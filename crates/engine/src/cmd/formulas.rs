@@ -65,6 +65,15 @@ pub fn specs() -> Vec<CommandSpec> {
             paste_name
         ),
         cmd!(query "formulas.tracePrecedents", "Trace Precedents", ["Formulas", "Formula Auditing"], None, "{cell?} → ranges", has_doc, trace_precedents),
+        cmd!(
+            query "formulas.explain",
+            "Explain Formula",
+            ["Formulas", "Formula Auditing"],
+            None,
+            "{cell?, depth?: 4 (1–8)} → {sheet, cell, text, formula, precedents: [node…]}: why a cell shows what it does — the tree of the cells and ranges its formula reads, down to the data. A range node has {range, count, numbers, sum, min, max} and its formula cells (at most 12) as precedents; a node past `depth` has more: true; a cell met twice (a cycle) isn't expanded again; at most 400 nodes",
+            has_doc,
+            explain
+        ),
         cmd!(query "formulas.traceDependents", "Trace Dependents", ["Formulas", "Formula Auditing"], None, "{cell?} → cells", has_doc, trace_dependents),
         cmd!(noundo "formulas.selectPrecedents", "Select Precedents", ["Formulas", "Formula Auditing"], Some("Ctrl+["), "{cell?, all?: true = every level (Ctrl+Shift+[)} → selects the precedent cells", has_doc, select_precedents),
         cmd!(noundo "formulas.selectDependents", "Select Dependents", ["Formulas", "Formula Auditing"], Some("Ctrl+]"), "{cell?, all?: true = every level (Ctrl+Shift+])}", has_doc, select_dependents),
@@ -654,6 +663,86 @@ fn trace_precedents(s: &mut Session, p: &Json) -> Result<Json> {
     Ok(Json::Array(v))
 }
 
+/// The most nodes `formulas.explain` builds, and the formula cells it opens inside one range.
+const EXPLAIN_NODES: usize = 400;
+const EXPLAIN_RANGE_FORMULAS: usize = 12;
+
+fn explain(s: &mut Session, p: &Json) -> Result<Json> {
+    let d = s.doc()?;
+    let at = cell_param(s, p, "cell")?.unwrap_or(d.selection.active);
+    let depth = u32_param(p, "depth").unwrap_or(4).clamp(1, 8) as usize;
+    let mut budget = EXPLAIN_NODES;
+    let mut seen = std::collections::HashSet::new();
+    Ok(explain_cell(d, d.wb.active_sheet(), at, depth, &mut budget, &mut seen))
+}
+
+/// One cell of the explanation, and (a formula's) what it reads, `depth` levels down.
+fn explain_cell(
+    d: &crate::DocState,
+    sheet: usize,
+    at: CellRef,
+    depth: usize,
+    budget: &mut usize,
+    seen: &mut std::collections::HashSet<(usize, CellRef)>,
+) -> Json {
+    *budget = budget.saturating_sub(1);
+    let Some(sh) = d.wb.sheet(sheet) else { return Json::Null };
+    let formula = sh.cell(at).and_then(|c| c.formula.as_ref()).map(|f| format!("={}", f.text));
+    let mut node = json!({"sheet": sh.name, "cell": at.a1(), "text": crate::display::cell_text(&d.wb, sh, at), "formula": formula});
+    if formula.is_none() {
+        return node;
+    }
+    if depth == 0 || *budget == 0 {
+        node["more"] = json!(true);
+        return node;
+    }
+    // A cycle: the cell is already open above.
+    if !seen.insert((sheet, at)) {
+        node["cycle"] = json!(true);
+        return node;
+    }
+    let mut precedents = Vec::new();
+    for a in d.calc.graph.precedents_of((sheet, at)) {
+        if *budget == 0 {
+            node["more"] = json!(true);
+            break;
+        }
+        let Some(psh) = d.wb.sheet(a.sheet) else { continue };
+        if a.range.is_single() {
+            precedents.push(explain_cell(d, a.sheet, a.range.start, depth - 1, budget, seen));
+            continue;
+        }
+        *budget = budget.saturating_sub(1);
+        // A range: what it holds, over its stored cells only (whole columns stay cheap).
+        let (mut count, mut numbers, mut sum) = (0usize, 0usize, 0.0f64);
+        let (mut min, mut max) = (f64::INFINITY, f64::NEG_INFINITY);
+        let mut inner = Vec::new();
+        for (c, cell) in psh.cells.iter_range(a.range) {
+            if matches!(cell.value, Value::Empty) {
+                continue;
+            }
+            count += 1;
+            if let Value::Number(n) = cell.value {
+                numbers += 1;
+                sum += n;
+                min = min.min(n);
+                max = max.max(n);
+            }
+            if cell.formula.is_some() && inner.len() < EXPLAIN_RANGE_FORMULAS && *budget > 0 {
+                inner.push(explain_cell(d, a.sheet, c, depth - 1, budget, seen));
+            }
+        }
+        let num = |x: f64| if numbers > 0 && x.is_finite() { json!(x) } else { Json::Null };
+        precedents.push(json!({
+            "sheet": psh.name, "range": a.range.a1(), "count": count, "numbers": numbers,
+            "sum": num(sum), "min": num(min), "max": num(max), "precedents": inner,
+        }));
+    }
+    seen.remove(&(sheet, at));
+    node["precedents"] = Json::Array(precedents);
+    node
+}
+
 fn trace_dependents(s: &mut Session, p: &Json) -> Result<Json> {
     let d = s.doc()?;
     let at = cell_param(s, p, "cell")?.unwrap_or(d.selection.active);
@@ -898,6 +987,30 @@ fn calc_options(s: &mut Session, p: &Json) -> Result<Json> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explain_walks_down_to_the_data() {
+        let mut s = Session::new();
+        s.new_workbook();
+        s.execute("range.setValues", json!({"range": "A1", "values": [[1], [2], [3]]})).unwrap();
+        s.execute("cell.set", json!({"cell": "B1", "input": "=SUM(A1:A3)*2"})).unwrap();
+        s.execute("cell.set", json!({"cell": "C1", "input": "=B1+A2"})).unwrap();
+        let r = s.execute("formulas.explain", json!({"cell": "C1"})).unwrap();
+        assert_eq!(r["formula"], "=B1+A2");
+        assert_eq!(r["text"], "14");
+        let b1 = &r["precedents"][0];
+        assert_eq!((b1["cell"].as_str(), b1["formula"].as_str()), (Some("B1"), Some("=SUM(A1:A3)*2")));
+        let range = &b1["precedents"][0];
+        assert_eq!((range["range"].as_str(), range["sum"].as_f64(), range["count"].as_u64()), (Some("A1:A3"), Some(6.0), Some(3)));
+        assert_eq!(r["precedents"][1]["cell"], "A2");
+        // A cycle doesn't loop, and depth stops the walk.
+        s.execute("cell.set", json!({"cell": "D1", "input": "=E1"})).unwrap();
+        s.execute("cell.set", json!({"cell": "E1", "input": "=D1"})).unwrap();
+        let r = s.execute("formulas.explain", json!({"cell": "D1", "depth": 8})).unwrap();
+        assert_eq!(r["precedents"][0]["precedents"][0]["cycle"], true);
+        let r = s.execute("formulas.explain", json!({"cell": "C1", "depth": 1})).unwrap();
+        assert_eq!(r["precedents"][0]["more"], true);
+    }
 
     #[test]
     fn names_with_relative_references() {

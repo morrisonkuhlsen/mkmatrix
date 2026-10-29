@@ -188,15 +188,10 @@ pub(super) fn evaluate_formula(ui: &mut egui::Ui, d: &Dialog, open: &mut bool) {
     let lang = crate::i18n::current(ui.ctx());
     let t = Tokens::get(ui.ctx());
     let r = d.result.clone().unwrap_or(Json::Null);
-    // Whole numbers without a trailing `.0`, as a cell shows them in General.
+    // Text in quotes, so "1" and 1 read apart; numbers and arrays as Explain Formula shows them.
     let value = |v: &Json| match v {
         Json::String(s) => format!("\"{s}\""),
-        Json::Null => String::new(),
-        Json::Number(n) => match n.as_f64() {
-            Some(f) if f.is_finite() && f.fract() == 0.0 && f.abs() < 1e15 => format!("{}", f as i64),
-            _ => n.to_string(),
-        },
-        other => other.to_string(),
+        other => step_value(other),
     };
     ui.spacing_mut().item_spacing.y = 8.0;
     let Some(formula) = r.get("formula").and_then(Json::as_str) else {
@@ -298,4 +293,179 @@ pub(super) fn agents(ui: &mut egui::Ui, open: &mut bool) {
     let count = lang.tr("{count} engine commands").replace("{count}", &mkmatrix_engine::command_specs().len().to_string());
     hint(ui, lang.tr("See docs/mcp.md and docs/control-protocol.md."));
     close_footer(ui, open, &count);
+}
+
+/// A number as a cell shows it in General: 15 significant digits (so 110.00000000000001 is 110),
+/// whole numbers without a decimal point.
+fn general(f: f64) -> String {
+    let f = format!("{f:.14e}").parse::<f64>().unwrap_or(f);
+    if f.fract() == 0.0 && f.abs() < 1e15 { format!("{}", f as i64) } else { format!("{f}") }
+}
+
+/// A step's value: a number in General, text as it is, an array as `{1, 2; 3, 4}` (at most a
+/// few rows and columns, then `…`).
+fn step_value(v: &Json) -> String {
+    match v {
+        Json::Number(n) => n.as_f64().map_or_else(|| n.to_string(), general),
+        Json::String(x) => x.clone(),
+        Json::Null => String::new(),
+        Json::Array(rows) => {
+            let cell = |c: &Json| match c {
+                Json::Array(_) => "…".to_string(),
+                other => step_value(other),
+            };
+            let mut out: Vec<String> = rows
+                .iter()
+                .take(4)
+                .map(|r| match r {
+                    Json::Array(cs) => {
+                        let mut row: Vec<String> = cs.iter().take(6).map(cell).collect();
+                        if cs.len() > 6 {
+                            row.push("…".into());
+                        }
+                        row.join(", ")
+                    }
+                    other => cell(other),
+                })
+                .collect();
+            if rows.len() > 4 {
+                out.push("…".into());
+            }
+            format!("{{{}}}", out.join("; "))
+        }
+        other => other.to_string(),
+    }
+}
+
+/// Explain Formula (beyond Excel): why the active cell shows what it does. Its formula's
+/// evaluation steps on top, then the tree of what it reads, down to the data — each cell with its
+/// formula and shown value, each range with what it holds — opened and closed row by row; a click
+/// on a row goes to that cell or range.
+pub(super) fn explain_formula(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, open: &mut bool) {
+    let lang = app.ui.language;
+    let t = Tokens::get(ui.ctx());
+    let root = d.result.clone().unwrap_or(Json::Null);
+    ui.spacing_mut().item_spacing.y = 8.0;
+    if root.get("formula").and_then(Json::as_str).is_none() {
+        empty_panel(ui, lang.tr("The cell has no formula."));
+        close_footer(ui, open, "");
+        return;
+    }
+    // The cell, its formula and what it shows.
+    let cell = format!("{}!{}", root["sheet"].as_str().unwrap_or(""), root["cell"].as_str().unwrap_or(""));
+    egui::Frame::new().fill(t.input_bg).stroke(Stroke::new(1.0, t.input_border)).inner_margin(egui::Margin::symmetric(12, 8)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(&cell).font(theme::ui_bold(13.5)).color(t.text));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(egui::RichText::new(root["text"].as_str().unwrap_or("")).font(theme::ui_bold(15.0)).color(t.accent));
+            });
+        });
+        ui.add(
+            egui::Label::new(egui::RichText::new(root["formula"].as_str().unwrap_or("")).font(egui::FontId::monospace(12.5)).color(t.text_dim))
+                .wrap(),
+        );
+    });
+    // How it evaluates, innermost first.
+    let steps: Vec<Json> = d.values.get("evaluation").and_then(|e| e["steps"].as_array()).cloned().unwrap_or_default();
+    if !steps.is_empty() {
+        heading(ui, lang.tr("How it is calculated"));
+        let h = (steps.len().min(5) as f32) * 24.0 + 6.0;
+        panel(ui, h, |ui| {
+            egui::ScrollArea::vertical().id_salt("explain.steps").auto_shrink([false, false]).show(ui, |ui| {
+                ui.spacing_mut().item_spacing.y = 0.0;
+                for s in &steps {
+                    let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), 24.0), Sense::hover());
+                    let p = ui.painter();
+                    let v = s.get("value").map(step_value).unwrap_or_default();
+                    let val = p.text(pos2(row.right() - 10.0, row.center().y), egui::Align2::RIGHT_CENTER, &v, theme::ui_bold(12.5), t.accent);
+                    let clip = egui::Rect::from_min_max(row.min, pos2(val.left() - 10.0, row.max.y));
+                    p.with_clip_rect(clip).text(
+                        pos2(row.left() + 10.0, row.center().y),
+                        egui::Align2::LEFT_CENTER,
+                        s["expression"].as_str().unwrap_or(""),
+                        egui::FontId::monospace(12.0),
+                        t.text,
+                    );
+                }
+            });
+        });
+    }
+    // What it reads.
+    heading(ui, lang.tr("Depends on"));
+    let mut go: Option<String> = None;
+    panel(ui, 9.0 * ROW_H + 2.0, |ui| {
+        egui::ScrollArea::vertical().id_salt("explain.tree").auto_shrink([false, false]).show(ui, |ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            let children = root["precedents"].as_array().cloned().unwrap_or_default();
+            if children.is_empty() {
+                ui.add_space(8.0);
+                ui.vertical_centered(|ui| hint(ui, lang.tr("It reads no other cells.")));
+            }
+            for (i, c) in children.iter().enumerate() {
+                tree_row(ui, c, 0, &format!("{i}"), &t, lang, &mut go);
+            }
+        });
+    });
+    if let Some(reference) = go {
+        app.run_or_alert("edit.goTo", json!({"reference": reference}));
+    }
+    close_footer(ui, open, lang.tr("A click goes to the cell"));
+}
+
+/// One node of the explanation tree and, when open, its children (a cell's formula reads, a
+/// range's formula cells). Nesting is the tree's own, bounded by the engine (depth ≤ 8).
+fn tree_row(ui: &mut egui::Ui, n: &Json, level: usize, path: &str, t: &Tokens, lang: crate::i18n::Language, go: &mut Option<String>) {
+    let s = |k: &str| n.get(k).and_then(Json::as_str).unwrap_or("").to_string();
+    let children = n.get("precedents").and_then(Json::as_array).cloned().unwrap_or_default();
+    let id = egui::Id::unique("mkmatrix.explain").with(path);
+    // The first level opens with the dialog.
+    let mut open = ui.data(|d| d.get_temp::<bool>(id)).unwrap_or(level < 1);
+    let sheet = s("sheet");
+    let (name, detail, value) = if let Some(range) = n.get("range").and_then(Json::as_str) {
+        let count = n["count"].as_u64().unwrap_or(0);
+        let fmt = |k: &str| n.get(k).and_then(Json::as_f64).map(general);
+        let mut detail = lang.tr(if count == 1 { "{count} value" } else { "{count} values" }).replace("{count}", &count.to_string());
+        if let (Some(min), Some(max)) = (fmt("min"), fmt("max")) {
+            detail.push_str(&format!("  ·  min {min}  ·  max {max}"));
+        }
+        (format!("{sheet}!{range}"), detail, fmt("sum").map(|s| format!("Σ {s}")).unwrap_or_default())
+    } else {
+        let mut detail = s("formula");
+        if n.get("cycle").is_some() {
+            detail = lang.tr("circular: already above").to_string();
+        } else if n.get("more").is_some() {
+            detail.push_str("  …");
+        }
+        (format!("{sheet}!{}", s("cell")), detail, s("text"))
+    };
+    let (row, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &name));
+    let p = ui.painter();
+    if resp.hovered() {
+        p.rect_filled(row, 0.0, t.hover);
+    }
+    let x0 = row.left() + 8.0 + level as f32 * 18.0;
+    if !children.is_empty() {
+        let icon = if open { Icon::Chevron } else { Icon::Right };
+        icons::paint(p, egui::Rect::from_center_size(pos2(x0 + 6.0, row.center().y), vec2(11.0, 11.0)), icon, t.text_dim);
+    }
+    let name_at = p.text(pos2(x0 + 16.0, row.center().y), egui::Align2::LEFT_CENTER, &name, theme::ui_bold(12.5), t.text);
+    let val = p.text(pos2(row.right() - 10.0, row.center().y), egui::Align2::RIGHT_CENTER, &value, theme::ui_bold(12.5), t.accent);
+    let clip = egui::Rect::from_min_max(pos2(name_at.right() + 10.0, row.top()), pos2(val.left() - 10.0, row.bottom()));
+    p.with_clip_rect(clip).text(pos2(clip.left(), row.center().y), egui::Align2::LEFT_CENTER, &detail, egui::FontId::monospace(11.5), t.text_dim);
+    if resp.clicked() {
+        // The chevron opens and closes; the rest of the row goes to the cell.
+        if !children.is_empty() && resp.interact_pointer_pos().is_some_and(|p| p.x < x0 + 14.0) {
+            open = !open;
+        } else {
+            *go = Some(name.clone());
+        }
+    }
+    ui.data_mut(|d| d.insert_temp(id, open));
+    if open {
+        for (i, c) in children.iter().enumerate() {
+            tree_row(ui, c, level + 1, &format!("{path}.{i}"), t, lang, go);
+        }
+    }
 }

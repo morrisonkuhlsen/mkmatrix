@@ -176,6 +176,10 @@ pub(super) fn formulas(app: &mut SheetApp, ui: &mut Ui) {
         if __k.clicked() {
             app.open_dialog("evaluateFormula", json!({}));
         }
+        // Beyond Excel: why a cell shows what it does, down to the data.
+        if small_button(ui, Icon::Trace, "Explain Formula", "Explain Formula", false).clicked() {
+            app.open_dialog("explainFormula", json!({}));
+        }
     });
     if big_button(ui, Icon::Search, "Watch\nWindow", "Watch Window", false).clicked() {
         app.grid.pane = Some("watch".into());

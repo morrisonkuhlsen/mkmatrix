@@ -968,6 +968,14 @@ impl Dialog {
                 d.result = app.session.run("formulas.errorChecking", json!({})).ok();
                 d
             }
+            "explainFormula" => {
+                let mut d = Dialog::custom("explainFormula", "Explain Formula", json!({}));
+                d.result = app.session.run("formulas.explain", json!({})).ok();
+                if let Ok(steps) = app.session.run("formulas.evaluateFormula", json!({})) {
+                    d.values.insert("evaluation".into(), steps);
+                }
+                d
+            }
             "evaluateFormula" => {
                 let mut d = Dialog::custom("evaluateFormula", "Evaluate Formula", json!({}));
                 d.result = app.session.run("formulas.evaluateFormula", json!({})).ok();
