@@ -283,6 +283,12 @@ pub fn families() -> Vec<String> {
     out
 }
 
+/// Whether `family` is installed, by any of its names; `None` until the background scan has
+/// finished. Never blocks, for use while painting.
+pub fn installed_now(family: &str) -> Option<bool> {
+    catalog_now().map(|cat| !faces_named(cat, family).is_empty())
+}
+
 /// The egui family name for one role of one family: `fnt:{family}:{b|n}{i|n}`.
 pub fn role_key(family: &str, bold: bool, italic: bool) -> String {
     format!("fnt:{family}:{}{}", if bold { 'b' } else { 'n' }, if italic { 'i' } else { 'n' })

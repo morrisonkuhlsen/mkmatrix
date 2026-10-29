@@ -2,7 +2,7 @@
 //!
 //! `cargo run --release -p mkmatrix-ui-egui --example snapshot -- [--sample sales] [--in file.xlsx]
 //!  [--size 1440x900] [--scale 2] [--cmd 'id={json}']... [--tab Insert] [--dark] [--language en|es|zh|ja|ko|ru|pt|de|cs|fr|tr]
-//!  [--dialog 'name={json}'] [--hf-edit header|footer] [--splash] [--backstage [page]] [--density normal|compact|minimal] [--ui 'id={json}']... [--pointer x,y] [--edit '=formula'] out.png`
+//!  [--dialog 'name={json}'] [--hf-edit header|footer] [--splash] [--backstage [page]] [--invoke ribbon.command] [--density normal|compact|minimal] [--ui 'id={json}']... [--pointer x,y] [--edit '=formula'] out.png`
 //!
 //! `--splash` renders the splash screen alone, at its own size.
 
@@ -26,6 +26,7 @@ fn main() {
     let mut hf_edit: Option<String> = None;
     let mut splash = false;
     let mut backstage = false;
+    let mut invoke: Option<&'static str> = None;
     let mut backstage_page = mkmatrix_ui_egui::backstage::Page::Home;
     let mut density: Option<String> = None;
     let mut ui_cmds: Vec<String> = vec![];
@@ -85,6 +86,11 @@ fn main() {
                 language = args.get(i).cloned();
             }
             "--splash" => splash = true,
+            "--invoke" => {
+                // Opens a ribbon control's popup as its key tip would (e.g. `home.numberFormat`).
+                i += 1;
+                invoke = args.get(i).map(|id| &*Box::leak(id.clone().into_boxed_str()));
+            }
             "--backstage" => {
                 backstage = true;
                 // An optional page id (`print`, `options`…) right after the flag.
@@ -181,6 +187,9 @@ fn main() {
                 }
                 if let Some(d) = &density {
                     let _ = app.run("view.density", json!({"mode": d}));
+                }
+                if invoke.is_some() {
+                    app.ui.keytip_invoke = invoke;
                 }
                 if backstage {
                     app.open_backstage(backstage_page);
