@@ -16,6 +16,18 @@ fn filter_blanks_include_empty_text_and_formula_results() {
 }
 
 #[test]
+fn filter_value_counts_count_the_rows_of_each_value() {
+    let mut s = Session::new();
+    s.new_workbook();
+    s.execute("range.setValues", json!({"range": "A1", "values": [["k"], ["a"], ["b"], ["A"], [null], ["a"]]})).unwrap();
+    s.execute("data.filter", json!({"range": "A1:A6"})).unwrap();
+    let counts = filter_value_counts(&s.doc().unwrap().wb, 0, 0);
+    let n = |v: &str| counts.iter().find(|(t, _, _)| t == v).map(|(_, _, n)| *n);
+    assert_eq!((n("a"), n("A"), n("b"), n("(Blanks)")), (Some(2), Some(1), Some(1), Some(1)), "{counts:?}");
+    assert_eq!(filter_values(&s.doc().unwrap().wb, 0, 0).len(), counts.len());
+}
+
+#[test]
 fn subtotal_honours_header_false() {
     // #131: with header:false the first data row was treated as a header and left out of its
     // group's subtotal and the grand total.
