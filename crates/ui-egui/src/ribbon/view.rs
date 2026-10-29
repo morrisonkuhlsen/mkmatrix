@@ -176,23 +176,6 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
             .response
             .labelled_by(label);
     });
-    // Interface language: settings live in the View tab, like Excel's Options. The label follows
-    // the current language so it stays readable; the choices are always shown in their own script.
-    controls::stack(ui, |ui| {
-        let label = controls::field_label(ui, lang.tr("Interface language"));
-        craft_ui::ComboBox::from_id_salt("ui_language")
-            .width(120.0)
-            .selected_text(egui::RichText::new(lang.name()).font(theme::ui_font(12.5)))
-            .show_ui(ui, |ui| {
-                for l in crate::i18n::Language::ALL {
-                    if ui.selectable_label(l == lang, l.name()).clicked() {
-                        act(app, "app.language.set", json!({"language": l.code()}));
-                    }
-                }
-            })
-            .response
-            .labelled_by(label);
-    });
 }
 
 /// View › Switch Windows: the open workbooks, the active one checked and unsaved ones marked;
