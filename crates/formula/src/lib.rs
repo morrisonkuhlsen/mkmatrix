@@ -8,6 +8,7 @@ pub mod ast;
 mod input;
 pub mod lexer;
 pub mod parser;
+pub mod pretty;
 pub mod printer;
 
 pub use ast::{Anchor, BinOp, Expr, RefKind, Reference, SheetSel, StructItem, StructRef, TrimMode, UnOp};

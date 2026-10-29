@@ -287,3 +287,65 @@ fn a_size_made_for_one_cell_doesnt_carry_over_and_the_chevron_takes_it_back() {
     assert_eq!((h.state().ui.floating_bar_lines, h.state().ui.floating_bar_width, h.state().floating_bar_expanded), (None, None, false));
     assert!((bar_rect(&h).height() - small.height()).abs() < 1.5, "a fresh bar fits its empty cell: {:?}", bar_rect(&h));
 }
+
+#[test]
+fn the_footer_names_the_cell_and_shows_the_value_as_typed() {
+    let mut h = harness();
+    click(&mut h, "D8");
+    h.key_press(egui::Key::F2);
+    h.run_steps(3);
+    let cell = h.state().name_box_text();
+    assert!(h.query_by_label(&cell).is_some(), "the footer names {cell}");
+    assert!(h.query_by_label("= 3").is_some(), "=SUM(1,2) shows its value");
+    // As the formula changes, so does the value: a draft, not the cell's.
+    h.state_mut().editor.as_mut().unwrap().text = "=SUM(1,2)*10".into();
+    h.run_steps(2);
+    assert!(h.query_by_label("= 30").is_some(), "the value follows the draft");
+    h.state_mut().editor.as_mut().unwrap().text = "=1/0".into();
+    h.run_steps(2);
+    assert!(h.query_by_label("= #DIV/0!").is_some(), "an error shows as one");
+}
+
+#[test]
+fn alt_shift_f_lays_a_long_formula_out_and_the_cell_keeps_it() {
+    let mut h = harness();
+    let f = "=IF(AND(1>0,2>0),SUM(10,20,30,40,50,60,70,80,90),IFERROR(1/0,\"none, really\"))";
+    h.state_mut().session.execute("cell.set", json!({"cell": "D8", "input": f})).unwrap();
+    click(&mut h, "D8");
+    h.key_press(egui::Key::F2);
+    h.run_steps(3);
+    h.key_press_modifiers(Modifiers::ALT | Modifiers::SHIFT, egui::Key::F);
+    h.run_steps(2);
+    let text = h.state().editor.as_ref().unwrap().text.clone();
+    assert!(text.starts_with("=IF(\n    AND(1>0,2>0),\n"), "laid out: {text:?}");
+    assert!(!text.contains('F') || text.matches('F').count() == f.matches('F').count(), "no stray F typed: {text:?}");
+    // And back on one line.
+    h.key_press_modifiers(Modifiers::ALT | Modifiers::SHIFT, egui::Key::F);
+    h.run_steps(2);
+    assert_eq!(h.state().editor.as_ref().unwrap().text, f);
+    // Laid out and confirmed, the cell holds the same formula and value.
+    h.key_press_modifiers(Modifiers::ALT | Modifiers::SHIFT, egui::Key::F);
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    let sh = h.state().session.active().unwrap().wb.active().unwrap();
+    let d8 = mkmatrix_engine::core::CellRef::parse("D8").unwrap();
+    assert_eq!(sh.cell(d8).unwrap().input_text(), f);
+    assert_eq!(sh.value(d8).display(), "450");
+}
+
+#[test]
+fn ctrl_shift_u_expands_the_floating_bar() {
+    let mut h = harness();
+    click(&mut h, "D8");
+    h.key_press(egui::Key::F2);
+    h.run_steps(3);
+    let small = bar_rect(&h);
+    assert_eq!(h.state_mut().run("view.expandFormulaBar", json!({})), Ok(json!({"on": true})));
+    h.run_steps(3);
+    assert!(bar_rect(&h).height() > small.height() + 40.0, "five rows: {:?}", bar_rect(&h));
+    assert!(!h.state().ui.formula_bar_expanded, "the docked bar's setting is left alone");
+    assert_eq!(h.state_mut().run("view.expandFormulaBar", json!({})), Ok(json!({"on": false})));
+    h.run_steps(3);
+    assert!((bar_rect(&h).height() - small.height()).abs() < 1.5);
+}

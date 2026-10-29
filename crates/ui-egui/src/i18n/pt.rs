@@ -46,6 +46,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Floating Formula Bar" => "Barra de Fórmulas Flutuante",
         "Move the formula bar" => "Mover a barra de fórmulas",
         "Resize the formula bar" => "Redimensionar a barra de fórmulas",
+        "Lay out the formula on several lines" => "Dispor a fórmula em várias linhas",
         // Home › Conditional Formatting.
         "Highlight Cells Rules" => "Realçar Regras das Células",
         "Greater Than…" => "É Maior do que…",
