@@ -214,6 +214,125 @@ pub(super) fn advanced_filter_form(ui: &mut egui::Ui, d: &mut Dialog, confirm: &
     ui.allocate_ui(vec2(ui.available_width(), ui.spacing().interact_size.y + 8.0), |ui| ok_cancel(ui, confirm, open));
 }
 
+/// Splits `text` as Text to Columns will with these delimiters: on any of them, runs of them
+/// counting as one when `consecutive` is on.
+fn split_preview(text: &str, delims: &[char], consecutive: bool) -> Vec<String> {
+    if delims.is_empty() {
+        return vec![text.to_string()];
+    }
+    let parts = text.split(|c| delims.contains(&c));
+    if consecutive { parts.filter(|p| !p.is_empty()).map(str::to_string).collect() } else { parts.map(str::to_string).collect() }
+}
+
+/// Data › Text to Columns, in Format Cells' style: the delimiters in two columns with Other and
+/// its character on one line, the destination, and a preview of the first rows split as OK will
+/// split them. The values are the dialog's `fields`, so the control channel sets the same.
+pub(super) fn text_to_columns(app: &SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool, open: &mut bool) {
+    use super::kit::{heading, panel, rule};
+    let lang = app.ui.language;
+    let t = crate::theme::Tokens::get(ui.ctx());
+    let flag = |d: &Dialog, k: &str| d.values.get(k).and_then(Json::as_bool).unwrap_or(false);
+    let text = |d: &Dialog, k: &str| d.values.get(k).and_then(Json::as_str).unwrap_or("").to_string();
+    let check = |ui: &mut egui::Ui, d: &mut Dialog, key: &str, label: &str| {
+        let mut on = flag(d, key);
+        if ui.checkbox(&mut on, lang.tr(label)).changed() {
+            d.values.insert(key.into(), json!(on));
+        }
+    };
+    let col_w = (ui.available_width() - 12.0) / 2.0;
+    ui.spacing_mut().item_spacing.y = 6.0;
+    heading(ui, lang.tr("Delimiters"));
+    ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing.x = 12.0;
+        for column in [[("tab", "Tab"), ("semicolon", "Semicolon")], [("comma", "Comma"), ("space", "Space")]] {
+            ui.vertical(|ui| {
+                ui.set_width(col_w);
+                for (key, label) in column {
+                    check(ui, d, key, label);
+                }
+            });
+        }
+    });
+    ui.horizontal(|ui| {
+        let id = ui.label(egui::RichText::new(lang.tr("Other:")).font(theme::ui_font(13.0))).id;
+        let mut other = text(d, "other");
+        let r = ui.add(egui::TextEdit::singleline(&mut other).char_limit(1).desired_width(32.0)).labelled_by(id);
+        if r.changed() {
+            d.values.insert("other".into(), json!(other));
+        }
+    });
+    check(ui, d, "treatConsecutive", "Treat consecutive delimiters as one");
+    ui.add_space(4.0);
+    heading(ui, lang.tr("Destination:"));
+    let mut dest = text(d, "destination");
+    if ui.add(egui::TextEdit::singleline(&mut dest).desired_width(ui.available_width())).accessible_name(lang.tr("Destination:")).changed() {
+        d.values.insert("destination".into(), json!(dest));
+    }
+
+    // The preview: the selection's first rows, split.
+    ui.add_space(4.0);
+    heading(ui, lang.tr("Data preview"));
+    let mut delims: Vec<char> =
+        [("tab", '\t'), ("semicolon", ';'), ("comma", ','), ("space", ' ')].into_iter().filter(|(k, _)| flag(d, k)).map(|(_, c)| c).collect();
+    delims.extend(text(d, "other").chars().next());
+    let consecutive = flag(d, "treatConsecutive");
+    let rows: Vec<Vec<String>> = app
+        .session
+        .active()
+        .and_then(|doc| {
+            let sh = doc.wb.active()?;
+            let r = doc.selection.current();
+            Some(
+                (r.start.row..=r.end.row.min(r.start.row.saturating_add(5)))
+                    .map(|row| {
+                        split_preview(
+                            &mkmatrix_engine::display::cell_text(&doc.wb, sh, mkmatrix_engine::core::CellRef::new(row, r.start.col)),
+                            &delims,
+                            consecutive,
+                        )
+                    })
+                    .collect(),
+            )
+        })
+        .unwrap_or_default();
+    let preview_h = 6.0 * 22.0 + 10.0;
+    panel(ui, preview_h, |ui| {
+        egui::ScrollArea::both().id_salt("textToColumns.preview").auto_shrink([false, false]).show(ui, |ui| {
+            egui::Grid::new("textToColumns.grid").spacing([0.0, 0.0]).min_row_height(22.0).show(ui, |ui| {
+                for row in &rows {
+                    for cell in row.iter().take(16) {
+                        let (r, _) = ui.allocate_exact_size(vec2(84.0, 22.0), egui::Sense::hover());
+                        let p = ui.painter();
+                        p.rect_stroke(r, 0.0, egui::Stroke::new(1.0, t.separator), egui::StrokeKind::Inside);
+                        p.with_clip_rect(r.shrink(1.0)).text(
+                            egui::pos2(r.left() + 6.0, r.center().y),
+                            egui::Align2::LEFT_CENTER,
+                            cell,
+                            theme::ui_font(12.5),
+                            t.text,
+                        );
+                    }
+                    ui.end_row();
+                }
+            });
+        });
+    });
+    rule(ui);
+    ok_cancel(ui, confirm, open);
+}
+
+#[cfg(test)]
+mod text_to_columns_tests {
+    use super::split_preview;
+
+    #[test]
+    fn the_preview_splits_as_the_command_does() {
+        assert_eq!(split_preview("a;b,,c", &[';', ','], false), ["a", "b", "", "c"]);
+        assert_eq!(split_preview("a;b,,c", &[';', ','], true), ["a", "b", "c"]);
+        assert_eq!(split_preview("a b", &[], false), ["a b"]);
+    }
+}
+
 /// Sort, in Format Cells' style: Add Level and My list has headers above a table of levels (Sort
 /// by / Then by, the column, what to sort on and the order as two joined buttons, a cross to drop
 /// the level), then the footer; OK runs `data.sort`.

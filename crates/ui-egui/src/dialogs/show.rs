@@ -3,7 +3,7 @@ use super::analysis::{analysis_toolpak, goal_seek, solver, solver_results};
 use super::charts::{recommended_charts, select_data};
 use super::command_search::command_search;
 use super::cond_format_rules::manage_rules;
-use super::data::{advanced_filter_form, data_validation_form, sort};
+use super::data::{advanced_filter_form, data_validation_form, sort, text_to_columns};
 use super::find::{find, go_to, go_to_special};
 use super::format_cells::format_cells;
 use super::insert_function::insert_function;
@@ -130,6 +130,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         "analysisToolPak" => 460.0,
         "solver" => 540.0,
         "zoom" => 280.0,
+        "textToColumns" => 480.0,
         "dataValidation" => 600.0,
         "advancedFilter" => 440.0,
         "goalSeek" => 400.0,
@@ -165,6 +166,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                 "goToSpecial" => go_to_special(app, ui, &mut d, &mut confirm, &mut open),
                 "zoom" => zoom(ui, &mut d, &mut confirm, &mut open),
                 "sort" => sort(app, ui, &mut d, &mut confirm),
+                "textToColumns" => text_to_columns(app, ui, &mut d, &mut confirm, &mut open),
                 "nameManager" => name_manager(app, ui, &mut d, &mut open),
                 "pasteName" => paste_name(app, ui, &mut d, &mut confirm, &mut open),
                 "manageRules" => manage_rules(app, ui, &mut open),

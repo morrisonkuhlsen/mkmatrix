@@ -10,6 +10,8 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Paste Formatting" => "Colar Formatação",
         "Transpose" => "Transpor",
         "Paste Link" => "Colar Vínculo",
+        "Delimiters" => "Delimitadores",
+        "Data preview" => "Visualização dos dados",
         "Source:" => "Fonte:",
         "Start date:" => "Data de início:",
         "End date:" => "Data de término:",
