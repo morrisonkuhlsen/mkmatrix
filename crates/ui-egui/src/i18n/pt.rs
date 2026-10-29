@@ -10,6 +10,25 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Paste Formatting" => "Colar Formatação",
         "Transpose" => "Transpor",
         "Paste Link" => "Colar Vínculo",
+        "Automation in this workbook. MK Matrix runs its own scripts; a file's VBA project is preserved but not executed." => {
+            "Automação nesta pasta de trabalho. O MK Matrix executa seus próprios scripts; o projeto VBA de um arquivo é preservado, mas não executado."
+        }
+        "Scripts in this workbook came from a file and are disabled." => {
+            "Os scripts desta pasta de trabalho vieram de um arquivo e estão desativados."
+        }
+        "Trust Scripts" => "Confiar nos Scripts",
+        "Let this workbook's scripts run for the rest of this session" => {
+            "Permitir que os scripts desta pasta de trabalho sejam executados até o fim desta sessão"
+        }
+        "VBA project (preserved, not run)" => "Projeto VBA (preservado, não executado)",
+        "{count} step" => "{count} passo",
+        "{count} steps" => "{count} passos",
+        "Rule" => "Regra",
+        "Applies to" => "Aplica-se a",
+        "Move Up" => "Mover para Cima",
+        "Move Down" => "Mover para Baixo",
+        "Delete Rule" => "Excluir Regra",
+        "{count} rules" => "{count} regras",
         "Paste name" => "Colar nome",
         "Paste List" => "Colar Lista",
         "Column" => "Coluna",

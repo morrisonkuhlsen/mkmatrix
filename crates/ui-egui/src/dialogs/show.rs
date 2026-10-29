@@ -124,11 +124,13 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         "nameManager" => 640.0,
         "sort" => 600.0,
         "pasteName" => 400.0,
-        "manageRules" | "journal" | "agents" | "macros" => 520.0,
+        "manageRules" => 600.0,
+        "journal" | "agents" | "macros" => 520.0,
         "recommendedCharts" => 600.0,
         "analysisToolPak" => 420.0,
         "solver" => 460.0,
-        "zoom" => 220.0,
+        "zoom" => 280.0,
+        "spelling" => 460.0,
         "pasteSpecial" => 500.0,
         _ => 380.0,
     };
@@ -160,7 +162,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                 "sort" => sort(app, ui, &mut d, &mut confirm),
                 "nameManager" => name_manager(app, ui, &mut d, &mut open),
                 "pasteName" => paste_name(app, ui, &mut d, &mut confirm, &mut open),
-                "manageRules" => manage_rules(app, ui),
+                "manageRules" => manage_rules(app, ui, &mut open),
                 "recommendedCharts" => recommended_charts(app, ui, &mut d, &mut confirm, &mut open),
                 "selectData" => select_data(app, ui, &mut d, &mut confirm, &mut open),
                 "commandSearch" => command_search(app, ui, &mut d, &mut confirm),
@@ -185,7 +187,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                         }
                     });
                 }
-                "macros" => macros(app, ui, &mut d),
+                "macros" => macros(app, ui, &mut d, &mut open),
                 "statistics" | "accessibility" | "errorChecking" | "evaluateFormula" | "comments" => {
                     let r = if d.name == "comments" {
                         app.session.active().and_then(|doc| doc.wb.active().map(|s| json!(s.comments.iter().map(|(c, m)| json!({"cell": c.a1(), "author": m.author, "text": m.text})).collect::<Vec<_>>())))
