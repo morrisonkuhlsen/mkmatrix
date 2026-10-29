@@ -66,7 +66,10 @@ fn go_to_format_cells_and_sort_can_be_dragged_too() {
         drag_title_bar(&mut h, name, vec2(-100.0, 60.0));
         h.run_steps(10);
         let after = dialog_rect(&h, name);
-        assert_eq!(after.min - before.min, vec2(-100.0, 60.0), "{name} went from {before:?} to {after:?}");
+        // A dialog opens centred, so an odd fraction of a point in its height puts its corner
+        // off the pixel grid; egui snaps the corner to a pixel once it is moved.
+        let moved = after.min - before.min;
+        assert!((moved - vec2(-100.0, 60.0)).length() <= 0.5, "{name} went from {before:?} to {after:?}");
     }
 }
 

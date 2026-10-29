@@ -113,12 +113,14 @@ pub(crate) fn field_label(ui: &mut Ui, text: &str) -> egui::Id {
 
 /// A column of checkboxes (View › Show): stacked in the ribbon, and in the single row too, two
 /// compact rows filling its height, so the boxes line up under each other instead of trailing off
-/// in one line.
+/// in one line. Spaced like a [`stack`].
 pub(crate) fn check_column<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> egui::InnerResponse<R> {
     if !single_row(ui) {
         return ui.vertical(add);
     }
-    ui.vertical(|ui| {
+    let margin = (ITEM_GAP - ROW_SPACING) / 2.0;
+    ui.add_space(margin);
+    let r = ui.vertical(|ui| {
         let s = ui.spacing_mut();
         s.item_spacing.y = 1.0;
         s.interact_size.y = 14.0;
@@ -127,7 +129,9 @@ pub(crate) fn check_column<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> eg
         s.icon_spacing = 4.0;
         ui.style_mut().override_font_id = Some(theme::ui_font(12.0));
         add(ui)
-    })
+    });
+    ui.add_space(margin);
+    r
 }
 
 /// Translates a label or tooltip for the language of the frame being drawn (English if untranslated).

@@ -226,7 +226,7 @@ pub(super) fn sort(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confir
     let mut remove = None;
     // The only level can't be removed.
     let removable = levels.len() > 1;
-    egui::Grid::new("sort_levels").num_columns(5).spacing([10.0, 8.0]).min_col_width(0.0).show(ui, |ui| {
+    egui::Grid::new("sort_levels").num_columns(5).spacing([10.0, 8.0]).min_col_width(0.0).min_row_height(28.0).show(ui, |ui| {
         // Muted headings, as `kit::heading` draws them (which can't sit in a grid).
         let heading = |ui: &mut egui::Ui, text: &str| ui.label(egui::RichText::new(text).font(theme::ui_bold(11.5)).color(t.text_dim));
         ui.label("");
