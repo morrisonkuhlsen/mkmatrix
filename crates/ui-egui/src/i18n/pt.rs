@@ -10,6 +10,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Paste Formatting" => "Colar Formatação",
         "Transpose" => "Transpor",
         "Paste Link" => "Colar Vínculo",
+        "Type to filter…" => "Digite para filtrar…",
         "Printer" => "Impressora",
         "Only print the active sheets" => "Imprimir somente as planilhas ativas",
         "Print every sheet in the workbook" => "Imprimir todas as planilhas da pasta de trabalho",

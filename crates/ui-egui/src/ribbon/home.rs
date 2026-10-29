@@ -1,6 +1,6 @@
 use super::controls::{
-    ComboResult, act, active_style, anchor_keytip, control_keytip, editable_combo, invoke, keytip, list_combo, menu_items, popup_command, sep, stack,
-    theme_colors, tool, wide,
+    ComboResult, Mark, RowExtra, act, active_style, anchor_keytip, control_keytip, editable_combo, invoke, keytip, list_combo, marked_combo,
+    menu_items, popup_command, sep, stack, theme_colors, tool, wide,
 };
 use super::galleries::{cell_style_gallery, table_gallery};
 use super::*;
@@ -677,17 +677,31 @@ fn number_combo(app: &mut SheetApp, ui: &mut Ui, st: &Style) {
     let resp = ui.add_sized([150.0, 24.0], egui::Button::new(egui::RichText::new(lang.tr(&current)).font(theme::ui_font(12.5))));
     control_keytip(app, ui, &resp, "home.numberFormat");
     let forced = invoke(app, "home.numberFormat");
-    let names = ["General", "Number", "Currency", "Accounting", "Short Date", "Long Date", "Time", "Percentage", "Fraction", "Scientific", "Text"];
-    let items: Vec<(&str, String)> = names
-        .iter()
-        .map(|n| {
-            let code = mkmatrix_engine::cmd::format::format_code_for(n);
-            let preview = app.session.active().map(|d| mkmatrix_engine::display::format(&sample, code, &d.wb).text).unwrap_or_default();
-            (*n, format!("{:<12}   {preview}", lang.tr(n)))
-        })
-        .chain(std::iter::once(("__more", format!("{:>12}", lang.tr("More Number Formats…")))))
-        .collect();
-    if let ComboResult::Picked(value) = editable_combo(ui, &resp, "number", &current, &items, forced) {
+    // Each format with its symbol, as Excel's list shows them, and the active cell in it.
+    let formats: [(&str, Mark); 11] = [
+        ("General", Mark::Text("123")),
+        ("Number", Mark::Text("12")),
+        ("Currency", Mark::Icon(Icon::Currency)),
+        ("Accounting", Mark::Icon(Icon::Comma)),
+        ("Short Date", Mark::Icon(Icon::Calendar)),
+        ("Long Date", Mark::Icon(Icon::Calendar)),
+        ("Time", Mark::Icon(Icon::Clock)),
+        ("Percentage", Mark::Icon(Icon::Percent)),
+        ("Fraction", Mark::Text("½")),
+        ("Scientific", Mark::Text("10²")),
+        ("Text", Mark::Text("ABC")),
+    ];
+    let mut items: Vec<(&str, String)> = Vec::new();
+    let mut extras: Vec<RowExtra> = Vec::new();
+    for (n, mark) in formats {
+        let code = mkmatrix_engine::cmd::format::format_code_for(n);
+        let preview = app.session.active().map(|d| mkmatrix_engine::display::format(&sample, code, &d.wb).text).unwrap_or_default();
+        items.push((n, lang.tr(n).to_string()));
+        extras.push(RowExtra { value: n, mark, note: preview.chars().take(28).collect() });
+    }
+    items.push(("__more", lang.tr("More Number Formats…").to_string()));
+    extras.push(RowExtra { value: "__more", mark: Mark::Icon(Icon::More), note: String::new() });
+    if let ComboResult::Picked(value) = marked_combo(ui, &resp, "number", &current, &items, forced, &extras) {
         match value.as_str() {
             "__more" => app.open_dialog("formatCells", json!({"tab": "Number"})),
             n => act(app, "home.numberFormat", json!({"format": n})),
