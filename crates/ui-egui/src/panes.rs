@@ -45,8 +45,12 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
             });
         });
         ui.separator();
+        // Comments keeps its search and filters fixed above its own scrolling list.
+        if pane == "comments" {
+            crate::comments_pane::show(app, ui);
+            return;
+        }
         egui::ScrollArea::vertical().show(ui, |ui| match pane.as_str() {
-            "comments" => comments(app, ui),
             "watch" => watch(app, ui),
             "selection" => selection(app, ui),
             "formatChart" => format_chart(app, ui),
@@ -54,63 +58,6 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
             _ => {}
         });
     });
-}
-
-/// Lists comments and replies, links each to its cell, and runs delete/resolve/reopen/reply commands.
-fn comments(app: &mut SheetApp, ui: &mut Ui) {
-    let Some(d) = app.session.active() else { return };
-    let Some(sh) = d.wb.active() else { return };
-    let list: Vec<(String, mkmatrix_engine::model::Comment)> = sh.comments.iter().map(|(c, m)| (c.a1(), m.clone())).collect();
-    if list.is_empty() {
-        ui.label(egui::RichText::new("No comments on this sheet yet. Select a cell and choose New Comment.").italics());
-    }
-    let t = crate::theme::Tokens::get(ui.ctx());
-    for (cell, c) in list {
-        egui::Frame::NONE
-            .fill(if c.resolved { t.window } else { t.menu_bg })
-            .corner_radius(6.0)
-            .inner_margin(8.0)
-            .stroke(egui::Stroke::new(1.0, t.separator))
-            .show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                ui.horizontal_wrapped(|ui| {
-                    if ui.link(egui::RichText::new(&cell).strong()).clicked() {
-                        let _ = app.run("selection.set", json!({"cell": cell}));
-                        app.grid.ensure_visible = true;
-                    }
-                    ui.label(egui::RichText::new(&c.author).color(t.text_dim));
-                    if c.resolved {
-                        ui.label(egui::RichText::new("Resolved").small().color(t.accent));
-                    }
-                });
-                ui.label(&c.text);
-                for (a, txt) in &c.replies {
-                    ui.label(egui::RichText::new(format!("↳ {a}: {txt}")).color(t.text));
-                }
-                let key = egui::Id::unique(("reply", &cell));
-                let mut draft: String = ui.ctx().data_mut(|m| m.get_temp(key)).unwrap_or_default();
-                // Buttons first, right to left, so the reply field gets exactly the width they leave:
-                // a field sized by a guess wider than the row pushes the resizable pane wider every frame.
-                ui.horizontal(|ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("Delete").clicked() {
-                            app.run_or_alert("review.deleteComment", json!({"cell": cell}));
-                        }
-                        if ui.small_button(if c.resolved { "Reopen" } else { "Resolve" }).clicked() {
-                            app.run_or_alert("review.resolveComment", json!({"cell": cell, "resolved": !c.resolved}));
-                        }
-                        let send = ui.small_button("Send").clicked();
-                        let r = ui.add(egui::TextEdit::singleline(&mut draft).hint_text("Reply…").desired_width(ui.available_width()));
-                        if (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) || send) && !draft.is_empty() {
-                            app.run_or_alert("review.replyComment", json!({"cell": cell, "text": draft}));
-                            draft.clear();
-                        }
-                    });
-                });
-                ui.ctx().data_mut(|m| m.insert_temp(key, draft));
-            });
-        ui.add_space(6.0);
-    }
 }
 
 /// Adds the active cell, lists watch values and formulas, and removes watched entries.

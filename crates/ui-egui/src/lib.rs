@@ -13,6 +13,7 @@ mod by_hand_ui;
 mod cell_pictures;
 pub mod chartview;
 pub mod code_editor;
+pub mod comments_pane;
 pub mod control;
 mod craft_fonts_policy;
 pub mod credits;
