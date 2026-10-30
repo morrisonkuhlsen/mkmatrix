@@ -988,6 +988,26 @@ fn calc_options(s: &mut Session, p: &Json) -> Result<Json> {
 mod tests {
     use super::*;
 
+    /// Each localized formula syntax names real functions, gives each one name of its own, and
+    /// never takes another function's English name (which would make that one unreachable).
+    #[test]
+    fn localized_function_names_are_real_distinct_and_free() {
+        use mkmatrix_formula::FormulaLocale;
+        let english: std::collections::BTreeSet<String> =
+            function_list().iter().filter_map(|f| f["name"].as_str().map(str::to_uppercase)).chain(["TRUE".into(), "FALSE".into()]).collect();
+        for locale in [FormulaLocale::Es, FormulaLocale::Pt] {
+            let mut seen = std::collections::BTreeSet::new();
+            for (en, local) in locale.function_aliases() {
+                assert!(english.contains(*en), "{locale:?}: {en} isn't a function");
+                assert!(seen.insert(local.to_uppercase()), "{locale:?}: {local} is given twice");
+                assert!(
+                    local.eq_ignore_ascii_case(en) || !english.contains(&local.to_uppercase()),
+                    "{locale:?}: {local} ({en}) is another function's English name"
+                );
+            }
+        }
+    }
+
     #[test]
     fn explain_walks_down_to_the_data() {
         let mut s = Session::new();

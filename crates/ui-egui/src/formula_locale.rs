@@ -170,4 +170,18 @@ mod tests {
         assert_eq!(description("SUMIFS", Es, Language::Es).as_deref(), Some("Adds the cells that meet every condition."));
         assert_eq!(sig("IF", En, Language::En), "IF(logical_test, [value_if_true], [value_if_false])");
     }
+
+    /// Portuguese: its names, `;` and its argument names; a function without Portuguese help
+    /// keeps its English name and help.
+    #[test]
+    fn portuguese_function_help() {
+        use FormulaLocale::Pt;
+        let pt = Language::PtBr;
+        assert_eq!(pt.formula_locale(), Pt);
+        assert_eq!(sig("soma", Pt, pt), "SOMA(número1; [número2]; ...)");
+        assert_eq!(sig("PROCV", Pt, pt), "PROCV(valor_procurado; matriz_tabela; núm_índice_coluna; [procurar_intervalo])");
+        assert_eq!(sig("SE", Pt, pt), "SE(teste_lógico; [valor_se_verdadeiro]; [valor_se_falso])");
+        assert_eq!(description("SOMA", Pt, pt).as_deref(), Some("Soma todos os números dos argumentos."));
+        assert_eq!(description("XNPV", Pt, pt), description("XNPV", FormulaLocale::En, Language::En));
+    }
 }

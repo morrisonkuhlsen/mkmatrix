@@ -174,14 +174,18 @@ fn canonical_engine_templates_enter_the_selected_formula_language() {
 }
 
 #[test]
-fn portuguese_interface_retains_its_canonical_formula_fallback() {
+fn portuguese_interface_has_its_own_formula_syntax() {
+    // Since #91 Portuguese has a formula syntax of its own: English names still work, with
+    // Portuguese separators, and the bar shows the Portuguese names.
     let mut app = app();
     app.run("app.language.set", json!({"code":"pt-BR"})).unwrap();
     assert_eq!(app.ui.language, Language::PtBr);
-    assert!(enter(&mut app, "=SUM(1.5,2.25)"));
+    assert!(enter(&mut app, "=SUM(1,5;2,25)"));
     app.begin_edit(None, true);
-    assert_eq!(app.editor.as_ref().unwrap().text, "=SUM(1.5,2.25)");
-    assert!(!enter(&mut app, "=SUMA(1;2)"));
+    assert_eq!(app.editor.as_ref().unwrap().text, "=SOMA(1,5;2,25)");
+    // Spanish names are not Portuguese: an unknown function.
+    assert!(enter(&mut app, "=SUMA(1;2)"));
+    assert_eq!(app.session.active().unwrap().wb.active().unwrap().value(CellRef::new(0, 0)), Value::Error(CellError::Name));
     let restored: UiState = serde_json::from_str(&serde_json::to_string(&app.ui).unwrap()).unwrap();
     assert_eq!(restored.language, Language::PtBr);
 }
@@ -230,4 +234,27 @@ fn turkish_interface_retains_its_canonical_formula_fallback() {
     assert!(!enter(&mut app, "=TOPLA(1;2)"));
     let restored: UiState = serde_json::from_str(&serde_json::to_string(&app.ui).unwrap()).unwrap();
     assert_eq!(restored.language, Language::Tr);
+}
+
+/// Portuguese entry (#91): Portuguese names, `;` and the decimal comma in the cell and the bar;
+/// English in the workbook, the file and the API.
+#[test]
+fn portuguese_entry_display_and_xlsx_roundtrip() {
+    let mut app = app();
+    app.run("app.language.set", json!({"language":"pt"})).unwrap();
+    assert!(enter(&mut app, "=SE(VERDADEIRO;SOMA(1,5;2,25);PROCV(1;B1:C2;2;FALSO))"));
+    assert_eq!(formula(&app), "IF(TRUE,SUM(1.5,2.25),VLOOKUP(1,B1:C2,2,FALSE))");
+    assert_eq!(app.session.active().unwrap().wb.active().unwrap().value(CellRef::new(0, 0)), Value::Number(3.75));
+    let saved = app.run("file.save", json!({"format":"xlsx"})).unwrap();
+    app.run("file.open", json!({"name":"pt.xlsx", "base64":saved["base64"]})).unwrap();
+    app.begin_edit(None, true);
+    assert_eq!(app.editor.as_ref().unwrap().text, "=SE(VERDADEIRO;SOMA(1,5;2,25);PROCV(1;B1:C2;2;FALSO))");
+    assert!(app.commit_edit(0, 0, false, false));
+    assert_eq!(formula(&app), "IF(TRUE,SUM(1.5,2.25),VLOOKUP(1,B1:C2,2,FALSE))");
+    // Lower case and accents: `=média(…)` is AVERAGE.
+    assert!(enter(&mut app, "=média(2;4)"));
+    assert_eq!(formula(&app), "AVERAGE(2,4)");
+    // The API keeps English syntax whatever the interface language.
+    assert!(app.run("cell.set", json!({"cell":"A2","input":"=SOMA(1;2)"})).is_err());
+    assert!(app.run("cell.set", json!({"cell":"A2","input":"=SUM(1,2)"})).is_ok());
 }
