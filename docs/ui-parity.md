@@ -1,6 +1,6 @@
 # UI parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-29 · **Change:** minor (PivotTable report filter dropdown) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-30 · **Change:** minor (PivotTable header dropdowns and ⊕/⊖, #71) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
 
 Interaction, controls and feel, against Excel. Part of [target-app-parity.md](target-app-parity.md).
 **UI/UX fidelity: ~55% ready, 50–80 h** (estimated). Ribbon command coverage is measured
@@ -195,6 +195,7 @@ scrollbar bugs 2–4 · pixel/feel pass against observed Excel 7–12.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-30 | minor | A PivotTable's header cells (Row Labels, Column Labels, or each field's name in Outline and Tabular form) have the AutoFilter's dropdown, drawn as filtering while one of their fields hides items: its menu sorts (`pivot.sort`) and filters (`pivot.filter`) one field at a time, picked above the list when the area holds several (Excel's Select field). Each outer row or column item has a ⊕/⊖ before its label that runs `pivot.collapse`. The engine lists the buttons of a current report (`pivot::buttons`), cached per workbook revision; refresh widens the columns to fit them (#71) |
 | 2026-10-29 | minor | Column headings are letters again by default (A, B, C…), matching the A1 references formulas use; View › Numbered Columns still heads them 1, 2, 3… with the Name Box as (row, column), and inside a named matrix the Name Box shows the element, `X(3,2)` |
 | 2026-10-29 | minor | Save Changes? and the message box read symmetrically: the question centred over a centred row of buttons of one width (Don't Save · Cancel · Save; OK alone), the default in the accent (`dialogs::kit::centered_buttons`) |
 | 2026-10-29 | minor | The Name Box shows the selected block once the button is released (`C3:E6`, or `(3, 3):(6, 5)` with numbered columns), as Google Sheets does; the size (`4R x 3C`) while it is dragged out; a merged cell still reads as its first cell |

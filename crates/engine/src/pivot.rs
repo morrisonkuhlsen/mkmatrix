@@ -26,11 +26,11 @@ mod output;
 use charts::rebind_charts;
 pub use charts::{chart_link, chart_series, clear_output, links_to, parse_chart_link};
 use compute::compute_from;
-pub use compute::{NOT_A_VALUE_CELL, detail_cells, detail_records};
+pub use compute::{NOT_A_VALUE_CELL, buttons, detail_cells, detail_records};
 pub use items::{distinct_labels, func_caption, item_label, report_filter_items};
 #[cfg(test)]
 use output::data_cols_exceed_sheet;
-pub use output::{CellKind, OutCell, Output, RowKind};
+pub use output::{Button, ButtonKind, CellKind, OutCell, Output, RowKind};
 use output::{cell_style, look};
 
 /// Largest source block read (cells).
@@ -281,7 +281,18 @@ pub fn refresh(wb: &mut Workbook, sheet: usize, idx: usize, replace: bool) -> Re
             cells.push((CellRef::new(origin.row + ri as u32, origin.col + ci as u32), Cell { value: oc.value.clone(), formula: None, style: id }));
         }
     }
-    // Column widths that fit the labels.
+    // Column widths that fit the labels, and the dropdown or ⊕/⊖ beside them.
+    let room: HashMap<CellRef, f32> = out
+        .buttons
+        .iter()
+        .map(|b| {
+            let w = match b.kind {
+                ButtonKind::Field { .. } => 16.0,
+                ButtonKind::Toggle { .. } => 12.0,
+            };
+            (CellRef::new(origin.row.saturating_add(b.row), origin.col.saturating_add(b.col)), w)
+        })
+        .collect();
     let mut widths: HashMap<u32, f32> = HashMap::new();
     for (c, cell) in &cells {
         if cell.value.is_empty() {
@@ -289,7 +300,10 @@ pub fn refresh(wb: &mut Workbook, sheet: usize, idx: usize, replace: bool) -> Re
         }
         let st = wb.styles.get(cell.style);
         let text = crate::display::format(&cell.value, st.num_fmt.as_str(), wb).text;
-        let wpt = crate::cmd::format::approx_text_width(&text, st.font.size, st.font.bold) + st.align.indent as f32 * 9.0 + 14.0;
+        let wpt = crate::cmd::format::approx_text_width(&text, st.font.size, st.font.bold)
+            + st.align.indent as f32 * 9.0
+            + 14.0
+            + room.get(c).copied().unwrap_or(0.0);
         let e = widths.entry(c.col).or_insert(0.0);
         *e = e.max(wpt.min(320.0));
     }

@@ -22,6 +22,7 @@ mod geo;
 mod interact;
 mod keyboard;
 mod menus;
+pub mod pivot_buttons;
 mod quadrant;
 mod selection;
 mod show;
@@ -254,6 +255,9 @@ pub struct GridState {
     /// the whole report. `None` when the report can't be computed or is out of date: every cell
     /// of it offers Show Details, and running it says why.
     pub show_details_cells: Option<((u64, u64, usize, usize), Option<std::collections::HashSet<(u32, u32)>>)>,
+    /// The active sheet's PivotTable buttons (header dropdowns, ⊕/⊖), per (doc uid, revision,
+    /// sheet): see `pivot_buttons`.
+    pub pivot_buttons: Option<((u64, u64, usize), Vec<pivot_buttons::PivotButton>)>,
     pub header_menu: Option<(Pos2, bool)>,
     /// Page Layout view pagination, cached per (doc uid, revision, sheet, rows, columns).
     pub paper: Option<crate::paper_view::PaperCache>,

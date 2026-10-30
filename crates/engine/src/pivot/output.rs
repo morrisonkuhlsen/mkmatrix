@@ -30,6 +30,24 @@ pub enum RowKind {
     Placeholder,
 }
 
+/// A control a report draws on its sheet.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub enum ButtonKind {
+    /// An area's header cell (Row Labels, Column Labels, or a field's name in Outline and Tabular
+    /// form): its dropdown sorts and filters `fields`, the first unless the menu picks another.
+    Field { fields: Vec<String>, rows: bool },
+    /// An outer item's ⊕/⊖: `pivot.collapse` hides or shows the items under it.
+    Toggle { field: String, item: String, collapsed: bool },
+}
+
+/// A [`ButtonKind`] at (`row`, `col`) relative to the report's top-left.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct Button {
+    pub row: u32,
+    pub col: u32,
+    pub kind: ButtonKind,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct OutCell {
     pub value: Value,
@@ -58,6 +76,8 @@ pub struct Output {
     pub chart_cols: Vec<(u32, String)>,
     /// Grid column holding the innermost row labels (`None` without row fields).
     pub label_col: Option<u32>,
+    /// The field dropdowns and ⊕/⊖ toggles on the report.
+    pub buttons: Vec<Button>,
 }
 
 impl Output {
@@ -74,6 +94,7 @@ pub(super) struct Grid {
     pub(super) rows: Vec<Vec<OutCell>>,
     pub(super) kinds: Vec<RowKind>,
     pub(super) width: usize,
+    pub(super) buttons: Vec<Button>,
 }
 
 impl Grid {
@@ -84,6 +105,9 @@ impl Grid {
         self.rows.push(vec![OutCell::empty(); self.width]);
         self.kinds.push(kind);
         Ok(self.rows.len() - 1)
+    }
+    pub(super) fn button(&mut self, r: usize, c: usize, kind: ButtonKind) {
+        self.buttons.push(Button { row: r as u32, col: c as u32, kind });
     }
     pub(super) fn set(&mut self, r: usize, c: usize, value: Value, kind: CellKind, indent: u8, fmt: Option<String>) {
         if let Some(cell) = self.rows.get_mut(r).and_then(|row| row.get_mut(c)) {

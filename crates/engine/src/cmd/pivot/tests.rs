@@ -191,6 +191,53 @@ fn report_filter_cells_and_their_items() {
     assert!(crate::pivot::report_filter_items(wb, &wb.active().unwrap().pivots[0], si, "Nope").is_err());
 }
 
+/// The report's buttons, as (cell, kind) on the sheet.
+fn buttons(s: &Session) -> Vec<(String, crate::pivot::ButtonKind)> {
+    let wb = &s.doc().unwrap().wb;
+    let p = pt(s);
+    let origin = p.last_range.unwrap().start;
+    crate::pivot::buttons(wb, &p, wb.active_sheet())
+        .unwrap()
+        .into_iter()
+        .map(|b| (CellRef::new(origin.row + b.row, origin.col + b.col).a1(), b.kind))
+        .collect()
+}
+
+#[test]
+fn header_dropdowns_and_item_toggles() {
+    use crate::pivot::ButtonKind::{Field, Toggle};
+    let toggle = |field: &str, item: &str, collapsed: bool| Toggle { field: field.into(), item: item.into(), collapsed };
+    let mut s = sales();
+    s.execute("insert.pivotTable", json!({"rows": ["Region", "Product"], "values": ["Sales"]})).unwrap();
+    // Compact: Row Labels picks between the row fields; each region (an outer item) has its ⊕/⊖.
+    let b = buttons(&s);
+    assert_eq!(b.first(), Some(&("A3".into(), Field { fields: vec!["Region".into(), "Product".into()], rows: true })));
+    assert!(b.contains(&("A4".into(), toggle("Region", "East", false))));
+    assert_eq!(b.iter().filter(|(_, k)| matches!(k, Toggle { .. })).count(), 3, "East, North and West; no product has one");
+    s.execute("pivot.collapse", json!({"field": "Region", "items": ["East"]})).unwrap();
+    assert!(buttons(&s).contains(&("A4".into(), toggle("Region", "East", true))));
+    // Tabular: one dropdown per field heading; the parent's label shares its first child's line.
+    s.execute("pivot.collapse", json!({"field": "Region", "collapse": false})).unwrap();
+    s.execute("pivot.layout", json!({"layout": "tabular"})).unwrap();
+    let b = buttons(&s);
+    assert!(b.contains(&("A3".into(), Field { fields: vec!["Region".into()], rows: true })));
+    assert!(b.contains(&("B3".into(), Field { fields: vec!["Product".into()], rows: true })));
+    assert!(b.contains(&("A4".into(), toggle("Region", "East", false))));
+    assert!(!b.iter().any(|(c, _)| c == "B4"), "Apples is innermost");
+    // Column Labels: the column field's dropdown, and its outer items' toggles.
+    let mut s = sales();
+    s.execute("insert.pivotTable", json!({"rows": ["Product"], "columns": ["Region", "Units"], "values": ["Sales"]})).unwrap();
+    let b = buttons(&s);
+    assert!(b.contains(&("B3".into(), Field { fields: vec!["Region".into(), "Units".into()], rows: false })));
+    assert!(b.contains(&("B4".into(), toggle("Region", "East", false))));
+    // An out-of-date report has none.
+    let source = s.doc().unwrap().wb.sheets.iter().position(|sh| sh.pivots.is_empty()).unwrap();
+    s.execute("cell.set", json!({"sheet": source, "cell": "E2", "input": "1000"})).unwrap();
+    let wb = &s.doc().unwrap().wb;
+    let sheet = wb.sheets.iter().position(|sh| !sh.pivots.is_empty()).unwrap();
+    assert!(crate::pivot::buttons(wb, &wb.sheets[sheet].pivots[0], sheet).is_err());
+}
+
 #[test]
 fn show_values_as() {
     let mut s = sales();

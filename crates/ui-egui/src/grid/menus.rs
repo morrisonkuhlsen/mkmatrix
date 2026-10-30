@@ -5,7 +5,8 @@ use super::*;
 use crate::icons::{self, Icon};
 
 /// Draws the filter-header popup: sort, search/select-all, apply/clear, a lazily installed table autofilter, new-open search focus and dismissal.
-/// On a PivotTable's report filter cell the same menu lists the field's items and applies through `pivot.filter` (no sort: the report orders itself).
+/// On a PivotTable's report filter cell the same menu lists the field's items and applies through `pivot.filter` (no sort: the report orders itself);
+/// on an area's header cell (Row Labels, Column Labels, a field's name) it also sorts through `pivot.sort`, one field at a time (#71).
 pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_open: bool) {
     let Some((col, row, at)) = app.grid.filter_menu else { return };
     let Some(d) = app.session.active() else { return };
@@ -15,6 +16,16 @@ pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_
     let _ = geo;
     // A report filter: (the PivotTable's id, the field).
     let pivot = sh.pivot_filter_at(CellRef::new(row, col)).and_then(|(i, f)| Some((sh.pivots.get(i)?.id, f.source_col.clone())));
+    // An area header: (the PivotTable's id, the area's fields). The menu acts on one field, picked
+    // above the list when the area holds several (Excel's Select field).
+    let header = super::pivot_buttons::field_at(app, CellRef::new(row, col)).filter(|_| pivot.is_none());
+    let field_key = egui::Id::unique(("filter_field", col, row));
+    let picked: Option<String> = ui.ctx().data_mut(|d| d.get_temp(field_key));
+    let pivot = pivot.or_else(|| {
+        let (id, fields) = header.as_ref()?;
+        let field = picked.filter(|f| fields.contains(f)).or_else(|| fields.first().cloned())?;
+        Some((*id, field))
+    });
     // Tables get an autofilter on demand.
     let table_range = filter_table_range(sh, col, row).filter(|_| pivot.is_none());
     if sh.autofilter.is_none()
@@ -54,7 +65,7 @@ pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_
         .or_else(|| wb.sheet(si).map(|sh| mkmatrix_engine::display::cell_text(&wb, sh, CellRef::new(row, col))))
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| lang.tr("Column {col}").replace("{col}", &col_to_letters(col)));
-    let key = egui::Id::unique(("filter_sel", col));
+    let key = egui::Id::unique(("filter_sel", col, pivot.as_ref().map(|(_, field)| field.clone())));
     let search_key = egui::Id::unique(("filter_search", col));
     let buttons_key = egui::Id::unique(("filter_buttons", col));
     // Enter is the menu's OK, as in Excel: taken before the search box (which would only drop its
@@ -80,9 +91,23 @@ pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_
                 ui.painter().with_clip_rect(r).text(r.left_center(), egui::Align2::LEFT_CENTER, &title, theme::ui_bold(13.5), t.text);
                 ui.label(egui::RichText::new(distinct).font(theme::ui_font(11.5)).color(t.text_dim));
             });
+            // The header's fields, when it holds more than one.
+            if let (Some((_, fields)), Some((_, field))) = (&header, &pivot)
+                && fields.len() > 1
+            {
+                let options: Vec<(&str, &str)> = fields.iter().map(|f| (f.as_str(), f.as_str())).collect();
+                if let Some(f) = crate::dialogs::kit::segments(ui, field, &options, W / fields.len() as f32) {
+                    let f = f.to_owned();
+                    ui.ctx().data_mut(|d| {
+                        d.insert_temp(field_key, f);
+                        d.remove::<Vec<(String, bool)>>(key);
+                        d.remove::<String>(search_key);
+                    });
+                }
+            }
             // Sort, side by side.
             let mut sort_buttons = Vec::new();
-            if pivot.is_none() {
+            if pivot.is_none() || header.is_some() {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 8.0;
                     let half = (W - 8.0) / 2.0;
@@ -90,7 +115,13 @@ pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_
                         [(Icon::SortAsc, "Ascending", "Sort Ascending", "asc"), (Icon::SortDesc, "Descending", "Sort Descending", "desc")]
                     {
                         let r = sort_button(ui, icon, lang.tr(short), lang.tr(name), half, &t);
-                        if r.clicked() {
+                        if r.clicked()
+                            && let Some((id, field)) = &pivot
+                        {
+                            // The report orders the field's items itself.
+                            app.run_or_alert("pivot.sort", json!({"pivot": id, "field": field, "order": order}));
+                            close = true;
+                        } else if r.clicked() {
                             // The filter's range, under its header row (a guess would take an all-text
                             // header for data).
                             let key = json!([{"column": col_to_letters(col), "order": order}]);
@@ -229,6 +260,7 @@ pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_
             d.remove::<Vec<(String, bool)>>(key);
             d.remove::<String>(search_key);
             d.remove::<Vec<egui::Id>>(buttons_key);
+            d.remove::<String>(field_key);
         });
         app.grid.filter_menu = None;
     }
