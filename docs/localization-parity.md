@@ -1,6 +1,6 @@
 # Localization parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-29 · **Change:** minor (Brazilian Portuguese formula syntax, #91) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-30 · **Change:** minor (Portuguese interface gaps, #27) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
 
 Per-language status against Excel, which ships its UI in dozens of languages (Windows language
 packs cover 100+), with localized function names, argument separators, number and date formats,
@@ -114,6 +114,7 @@ language (none so far) and of localized function names.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-30 | minor | Brazilian Portuguese gaps closed (#27): 134 strings that showed in English (menu items such as Salvar como…, Imprimir…, Classificar…, Preencher para Baixo; borders, colours, cell styles, shapes, chart types, printing and update messages), and the formula bar's shape mismatches (`X@y: 8×3 @ 8×1, 3 contra 8`, `não é quadrada`), now worded through `tr`. A test fails when a menu item, a `tr("…")` literal, or a string another catalog translates and the source still uses has no Portuguese entry |
 | 2026-10-29 | minor | Brazilian Portuguese formula syntax (#91): `FormulaLocale::Pt` with 107 Portuguese names (SOMA, PROCV, SE, MÉDIA, CONT.SE, SEERRO, ÍNDICE, CORRESP, PGTO…), VERDADEIRO/FALSO, `;` separators and decimal commas at the formula bar and cell editor; the Portuguese interface selects it. Localized names compare case-blind in any script; the Spanish code path is now shared by both. Portuguese function help for 30 common functions, descriptions written for MK Matrix. A test checks every localized table names real functions, once each, and never another function's English name. Names taken from public documentation; nothing from Office's files or other spreadsheets' sources |
 | 2026-10-23 | minor | Missing translations are reported, never a failure: `cargo xtask i18n-report` prints, per language, the strings other catalogs translate and it lacks (plus Spanish function help rows keyed by English the function catalog no longer has) and always passes; `cargo xtask ci` runs it first. Coverage and per-language parity tests and tests of one language's exact wording are gone; UI tests take the expected text from the catalog. Duplicate-key, placeholder, context-prefix and line-shape checks stay |
 | 2026-10-21 | minor | Romanian interface (`ro`, Română): 970 labels covering every key of the other catalogs (`crates/ui-egui/src/i18n/ro.rs`), `ro-*` system locales, the View-tab switcher and `app.language.set`; context keys show no prefix (File › Options test). English formulas and formats; AI-assisted draft pending native-speaker review |

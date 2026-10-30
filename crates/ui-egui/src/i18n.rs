@@ -395,6 +395,98 @@ mod tests {
         }
     }
 
+    /// Brazilian Portuguese covers the interface (#27): `tr` only matches whole strings, so a label
+    /// added without its `pt` entry shows in English. Checked: every menu item, every literal
+    /// handed to `tr(…)`, and every string another catalog translates that the source still uses
+    /// (gallery names, borders, printing messages reach `tr` through helpers).
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn portuguese_translates_every_interface_label() {
+        use std::path::Path;
+        // Not interface text: brand names, test fixtures, shortcut tooltips (`widgets` translates
+        // the label before the shortcut), punctuation and LaTeX.
+        let exempt = |k: &str| {
+            ["Morrison Kühlsen", "Sheet1!A1", "Not in any catalog|Untranslated"].contains(&k)
+                || k.contains("(⌘")
+                || k.starts_with('\\')
+                || !k.chars().any(char::is_alphabetic)
+        };
+        let unescape = |raw: &str| raw.replace("\\\"", "\"").replace("\\n", "\n").replace("\\\\", "\\");
+        // The string literals on a line, raw (escapes kept).
+        fn literals(line: &str) -> Vec<(usize, String)> {
+            let (mut out, mut chars) = (Vec::new(), line.char_indices());
+            while let Some((i, c)) = chars.next() {
+                if c != '"' {
+                    continue;
+                }
+                let mut raw = String::new();
+                while let Some((_, c)) = chars.next() {
+                    match c {
+                        '\\' => {
+                            raw.push(c);
+                            if let Some((_, next)) = chars.next() {
+                                raw.push(next);
+                            }
+                        }
+                        '"' => break,
+                        _ => raw.push(c),
+                    }
+                }
+                out.push((i, raw));
+            }
+            out
+        }
+        fn sources(dir: &Path, out: &mut Vec<(String, String)>) {
+            for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    sources(&path, out);
+                } else if path.extension().is_some_and(|e| e == "rs") {
+                    out.push((path.display().to_string(), std::fs::read_to_string(&path).unwrap_or_default()));
+                }
+            }
+        }
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut files = Vec::new();
+        sources(&src, &mut files);
+        let is_catalog = |path: &str| Path::new(path).parent().is_some_and(|p| p.ends_with("i18n"));
+        let code_lines = |text: &str| text.lines().filter(|l| !l.trim_start().starts_with("//")).map(str::to_owned).collect::<Vec<_>>();
+        // Keys other catalogs translate: match arms (`"key" => …`) and table rows (`("key", …)`).
+        let mut others = std::collections::BTreeSet::new();
+        for (path, text) in files.iter().filter(|(p, _)| is_catalog(p) && !p.ends_with("pt.rs") && !p.ends_with("_functions.rs")) {
+            for line in code_lines(text) {
+                let t = line.trim_start();
+                let (row, body) = match t.strip_prefix('(') {
+                    Some(rest) => (true, rest),
+                    None => (false, t),
+                };
+                if body.starts_with('"')
+                    && let Some((0, key)) = literals(body).into_iter().next()
+                    && body[key.len() + 2..].trim_start().starts_with(if row { "," } else { "=>" })
+                {
+                    others.insert(key);
+                }
+            }
+            assert!(!others.is_empty(), "no keys read from {path}");
+        }
+        let mut wanted = std::collections::BTreeSet::new();
+        for (_, text) in files.iter().filter(|(p, _)| !is_catalog(p) && !p.ends_with("i18n.rs")) {
+            for line in code_lines(text) {
+                for (at, raw) in literals(&line) {
+                    if line[..at].trim_end().ends_with("tr(") || others.contains(&raw) {
+                        wanted.insert(unescape(&raw));
+                    }
+                }
+            }
+        }
+        for (title, entries) in crate::menus::tree() {
+            wanted.insert(title.to_owned());
+            wanted.extend(entries.iter().map(|(label, _)| (*label).to_owned()).filter(|l| l != "-"));
+        }
+        let missing: Vec<_> = wanted.iter().filter(|k| !exempt(k) && pt::translate(k).is_none()).collect();
+        assert!(missing.is_empty(), "{} interface strings have no Portuguese translation:\n{missing:#?}", missing.len());
+    }
+
     #[test]
     fn translations_never_show_the_context_prefix() {
         // `tr` returns a found translation as it is, so a catalog that keeps `context|` in its
