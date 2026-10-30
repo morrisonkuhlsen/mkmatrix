@@ -26,7 +26,7 @@ mod pass_host;
 use graph::Intervals;
 pub use graph::{FxHasher, Graph, Key};
 use graph::{HashMap, HashSet, Node};
-use pass_host::{PassHost, spills_as_before};
+use pass_host::{PassHost, reading_order, spills_as_before};
 
 /// Calculation state kept beside a workbook.
 #[derive(Clone, Debug)]
@@ -279,6 +279,14 @@ impl Calc {
         }
         for (si, r) in &cleared {
             seeds.extend(r.iter().map(|c| (*si, c)));
+            // The spill of a formula just removed may have held back an array anchored anywhere
+            // before the area's end (one anchored later gives way to it, see `spill_blocked`).
+            for &(s, c) in self.graph.nodes.keys() {
+                if s == *si && c.row <= r.end.row && c.col <= r.end.col && wb.sheet(s).is_some_and(|sh| sh.value(c) == Value::Error(CellError::Spill))
+                {
+                    seeds.push((s, c));
+                }
+            }
         }
         let t0 = prof_now();
         let dirty = self.dirty_closure(wb, &seeds);
@@ -404,6 +412,24 @@ impl Calc {
                 if let Some(arr) = new {
                     let end = CellRef::new(k.1.row.saturating_add(arr.rows as u32 - 1), k.1.col.saturating_add(arr.cols as u32 - 1));
                     let range = RangeRef::new(k.1, end);
+                    // An array anchored later in reading order gives way (see `spill_blocked`): its
+                    // spill is taken back, and it is calculated again, to `#SPILL!`.
+                    let later: Vec<(CellRef, RangeRef)> = sheet
+                        .spill_ranges
+                        .iter()
+                        .filter(|(o, r)| **o != k.1 && r.intersects(&range) && reading_order(**o) > reading_order(k.1))
+                        .map(|(o, r)| (*o, *r))
+                        .collect();
+                    for (o, r) in later {
+                        for c in r.iter() {
+                            sheet.spill.remove(&c);
+                        }
+                        sheet.spill_ranges.remove(&o);
+                        let mut deps = Vec::new();
+                        self.graph.dependents_of_range(k.0, r, &mut deps);
+                        spill_changes.extend(deps);
+                        spill_changes.push((k.0, o));
+                    }
                     let blocked = end.row >= mkmatrix_core::MAX_ROWS
                         || end.col >= mkmatrix_core::MAX_COLS
                         || range.iter().any(|c| c != k.1 && (sheet.cells.has(c) || sheet.spill.contains_key(&c)))

@@ -104,7 +104,11 @@ impl<'a> PassHost<'a> {
 
 /// Whether an array result at `k` can't spill: it is in a table, or its area runs off the sheet,
 /// overlaps merged cells, holds other cells, or another formula's spill (unless that formula is
-/// recalculated in this pass, and so may spill elsewhere now).
+/// recalculated in this pass, and so may spill elsewhere now, or its anchor comes after this one).
+///
+/// Two arrays that want the same cells: the one anchored first in reading order (row, then
+/// column) spills and the other is `#SPILL!`, whichever was there first, so a full
+/// recalculation, which lays the arrays out in that order, gives the same sheet (#103).
 fn spill_blocked(host: &PassHost<'_>, (sheet, anchor): Key, a: &Array) -> bool {
     let Some(sh) = host.wb.sheet(sheet) else { return false };
     let end =
@@ -113,7 +117,10 @@ fn spill_blocked(host: &PassHost<'_>, (sheet, anchor): Key, a: &Array) -> bool {
     let own = sh.spill_ranges.get(&anchor);
     let spilled_over = |c: CellRef| {
         !own.is_some_and(|o| o.contains(c))
-            && sh.spill_ranges.iter().any(|(o, r)| *o != anchor && r.contains(c) && !host.exprs.contains_key(&(sheet, *o)))
+            && sh
+                .spill_ranges
+                .iter()
+                .any(|(o, r)| *o != anchor && r.contains(c) && !host.exprs.contains_key(&(sheet, *o)) && reading_order(*o) < reading_order(anchor))
     };
     end.row >= mkmatrix_core::MAX_ROWS
         || end.col >= mkmatrix_core::MAX_COLS
@@ -121,6 +128,12 @@ fn spill_blocked(host: &PassHost<'_>, (sheet, anchor): Key, a: &Array) -> bool {
         || sh.tables.iter().any(|t| t.range.contains(anchor))
         || sh.cells.iter_range(range).any(|(c, cell)| c != anchor && (!cell.value.is_empty() || cell.formula.is_some()))
         || sh.spill.range(range.start..=range.end).any(|(c, _)| range.contains(*c) && spilled_over(*c))
+}
+
+/// A cell's place in reading order: row, then column. Of two arrays wanting the same cells,
+/// the first in this order spills.
+pub(super) fn reading_order(c: CellRef) -> (u32, u32) {
+    (c.row, c.col)
 }
 
 /// Whether `arr`, anchored at `anchor`, would spill exactly what the sheet already holds over

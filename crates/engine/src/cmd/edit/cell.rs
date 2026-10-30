@@ -137,14 +137,22 @@ pub(super) fn cell_set(s: &mut Session, p: &Json) -> Result<Json> {
                 std::sync::Arc::make_mut(f).array = Some(range);
             }
             let sh = cx.sheet_mut(sheet)?;
-            // The array takes the whole range: other cells in it lose their contents.
-            for c in range.iter().skip(1).take(1_000_000) {
-                if let Some(old) = sh.cells.get(c).filter(|x| !x.value.is_empty() || x.formula.is_some()) {
-                    let style = old.style;
-                    sh.set_cell(c, Cell { style, ..Cell::default() });
-                }
+            // The array takes the whole range: other cells in it lose their contents. Only the
+            // cells that exist are visited (a whole-sheet selection is billions of positions),
+            // and each one cleared is recalculated: a formula there loses its spill (#103).
+            let cleared: Vec<(CellRef, StyleId)> = sh
+                .cells
+                .iter_range(range)
+                .filter(|(c, x)| *c != range.start && (!x.value.is_empty() || x.formula.is_some()))
+                .map(|(c, x)| (c, x.style))
+                .collect();
+            for (c, style) in &cleared {
+                sh.set_cell(*c, Cell { style: *style, ..Cell::default() });
             }
             sh.set_cell(range.start, cell);
+            for (c, _) in cleared {
+                cx.touch(sheet, c);
+            }
             cx.touch(sheet, range.start);
             return Ok(Json::Null);
         }
