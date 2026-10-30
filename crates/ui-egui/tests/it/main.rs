@@ -70,6 +70,7 @@ mod matrix_actions;
 mod menu_hover;
 mod merged_cells;
 mod more_colors;
+mod name_box_selection;
 mod native_print;
 mod nowrap_line_breaks;
 mod number_format_list;
