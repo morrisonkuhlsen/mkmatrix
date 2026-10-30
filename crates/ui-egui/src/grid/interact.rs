@@ -390,6 +390,18 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
             app.grid.filter_menu = Some((c.col, c.row, geo.mirror_pos(p)));
             return;
         }
+        // A PivotTable's header dropdown opens the same menu; an item's ⊕/⊖ hides or shows the
+        // items under it.
+        if let Some(b) = super::pivot_buttons::hit(app, geo, wb, sh, p) {
+            match b.kind {
+                mkmatrix_engine::pivot::ButtonKind::Field { .. } => app.grid.filter_menu = Some((c.col, c.row, geo.mirror_pos(p))),
+                mkmatrix_engine::pivot::ButtonKind::Toggle { field, item, collapsed } => {
+                    let _ = app.session.run("selection.set", json!({"cell": c.a1()}));
+                    app.run_or_alert("pivot.collapse", json!({"pivot": b.pivot, "field": field, "items": [item], "collapse": !collapsed}));
+                }
+            }
+            return;
+        }
         // A dialog's formula box in point mode (New Formatting Rule) takes the reference; the
         // selection, which the dialog acts on, stays.
         if let Some(d) = app.dialog.as_mut().filter(|d| d.picks_references()) {

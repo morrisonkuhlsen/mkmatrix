@@ -214,6 +214,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     // Everything up to the headers is painted in logical (left-to-right) coordinates.
     let mirror_from = painter.add(egui::Shape::Noop);
     let mut cf = CfCache::new();
+    super::pivot_buttons::refresh(app);
     let quads = if geo.paper.is_some() {
         crate::paper_view::paint_pages(app, &painter, &geo, &wb, si, sh, &sel, outline, &mut cf, &t)
     } else {
@@ -372,7 +373,7 @@ fn paint_panes(
             continue;
         }
         let p = painter.with_clip_rect(*clip);
-        paint_quadrant(&p, geo, wb, si, sh, *rows, *cols, cf, t);
+        paint_quadrant(&p, geo, wb, si, sh, *rows, *cols, cf, t, super::pivot_buttons::cached(app));
         paint_selection(&p, geo, sh, sel, outline, t, app, *rows, *cols);
     }
     paint_preview(app, &painter.with_clip_rect(geo.cells), geo, sh, t);

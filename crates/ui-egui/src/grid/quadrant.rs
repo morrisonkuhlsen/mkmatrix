@@ -3,6 +3,7 @@ use super::cell_paint::{
     rotated_text_pos, shrink_font, wrapped_cell_text_y,
 };
 use super::geo::Geo;
+use super::pivot_buttons::{self, PivotButton};
 use super::tables::{filter_button_rect, paint_filter_button};
 use super::*;
 
@@ -76,8 +77,17 @@ pub(crate) fn paint_quadrant(
     cols: (u32, u32),
     cf: &mut CfCache,
     t: &Tokens,
+    pivot: &[PivotButton],
 ) {
     let z = geo.z;
+    // PivotTable items with a ⊕/⊖ before their label: collapsed or not.
+    let toggles: std::collections::HashMap<CellRef, bool> = pivot
+        .iter()
+        .filter_map(|b| match b.kind {
+            mkmatrix_engine::pivot::ButtonKind::Toggle { collapsed, .. } => Some((b.cell, collapsed)),
+            mkmatrix_engine::pivot::ButtonKind::Field { .. } => None,
+        })
+        .collect();
     let (r0, r1) = rows;
     let (c0, c1) = cols;
     let range = RangeRef::new(CellRef::new(r0, c0), CellRef::new(r1, c1));
@@ -201,6 +211,10 @@ pub(crate) fn paint_quadrant(
             }
         }
         let mut text_left = rect.left();
+        if let Some(&collapsed) = toggles.get(&c) {
+            pivot_buttons::paint_toggle(p, pivot_buttons::toggle_rect(geo, wb, sh, c), collapsed);
+            text_left += pivot_buttons::toggle_size(z) + 3.0 * z;
+        }
         if let Some(l) = cfl
             && let Some((set, idx)) = &l.icon
         {
@@ -509,4 +523,5 @@ pub(crate) fn paint_quadrant(
         }
         paint_filter_button(p, filter_button_rect(geo, sh, c), active);
     }
+    pivot_buttons::paint_fields(p, geo, sh, range, pivot);
 }

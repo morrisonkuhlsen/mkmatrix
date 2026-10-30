@@ -1,5 +1,7 @@
 use super::items::{Acc, FieldItems, build_tree, collect_siblings, is_collapsed, item_label};
-use super::output::{AggMap, CellKind, ColKind, ColSpec, Ctx, Grid, Line, LineKind, Output, RowKind, ValSrc, data_cols_exceed_sheet, flatten_cols};
+use super::output::{
+    AggMap, Button, ButtonKind, CellKind, ColKind, ColSpec, Ctx, Grid, Line, LineKind, Output, RowKind, ValSrc, data_cols_exceed_sheet, flatten_cols,
+};
 use super::*;
 
 /// Why Show Details turns a cell down when it isn't a value cell of a PivotTable (the front end
@@ -31,6 +33,14 @@ pub fn detail_cells(wb: &Workbook, pt: &PivotTable, pivot_sheet: usize) -> Resul
     let out = compute_from(wb, pt, &src, Some(&mut probe))?;
     check_current(wb, pt, pivot_sheet, &out)?;
     Ok(probe.cells.unwrap_or_default().into_iter().map(|(r, c)| (r as u32, c as u32)).collect())
+}
+
+/// The field dropdowns and ⊕/⊖ toggles of a report that is current (see [`Output::buttons`]).
+pub fn buttons(wb: &Workbook, pt: &PivotTable, pivot_sheet: usize) -> Result<Vec<Button>, String> {
+    let src = read_source(wb, &pt.source, pivot_sheet)?;
+    let out = compute_from(wb, pt, &src, None)?;
+    check_current(wb, pt, pivot_sheet, &out)?;
+    Ok(out.buttons)
 }
 
 /// An error when the report on the sheet is not what `out` computes. Excel reads its PivotTable
@@ -271,7 +281,7 @@ pub(super) fn compute_from(wb: &Workbook, pt: &PivotTable, src: &Source, mut pro
         width = width.max(1);
     }
     let width = width.max(1);
-    let mut g = Grid { rows: vec![], kinds: vec![], width };
+    let mut g = Grid { rows: vec![], kinds: vec![], width, buttons: vec![] };
 
     // ---- report filters
     for (c, f, _, _) in &shown_filters {
@@ -301,25 +311,34 @@ pub(super) fn compute_from(wb: &Workbook, pt: &PivotTable, src: &Source, mut pro
             chart_rows: vec![],
             chart_cols: vec![],
             label_col: None,
+            buttons: vec![],
         });
     }
 
     let val_name = |vi: usize| vals.get(vi).map(|(_, v)| v.name.clone()).unwrap_or_default();
     let headers_on = pt.show_headers;
+    let row_names: Vec<String> = row_fields.iter().map(|f| f.source_col.clone()).collect();
+    let col_names: Vec<String> = col_fields.iter().map(|f| f.source_col.clone()).collect();
     let row_header = |g: &mut Grid, r: usize| {
         if row_levels == 0 || !headers_on {
             return;
         }
         if compact {
             g.set(r, 0, Value::text("Row Labels"), CellKind::Header, 0, None);
+            if !row_names.is_empty() {
+                g.button(r, 0, ButtonKind::Field { fields: row_names.clone(), rows: true });
+            }
         } else {
             // One column per row field, Σ Values ("Values") at its place.
-            let mut names: Vec<&str> = row_fields.iter().map(|f| f.source_col.as_str()).collect();
+            let mut names: Vec<(&str, bool)> = row_names.iter().map(|n| (n.as_str(), true)).collect();
             if let Some(p) = vpos {
-                names.insert(p.min(names.len()), "Values");
+                names.insert(p.min(names.len()), ("Values", false));
             }
-            for (i, name) in names.into_iter().enumerate() {
+            for (i, (name, field)) in names.into_iter().enumerate() {
                 g.set(r, i, Value::text(name), CellKind::Header, 0, None);
+                if field {
+                    g.button(r, i, ButtonKind::Field { fields: vec![name.to_owned()], rows: true });
+                }
             }
         }
     };
@@ -344,6 +363,7 @@ pub(super) fn compute_from(wb: &Workbook, pt: &PivotTable, src: &Source, mut pro
         if headers_on {
             let caption = if compact { "Column Labels".to_string() } else { col_fields.first().map(|f| f.source_col.clone()).unwrap_or_default() };
             g.set(cap, l, Value::text(caption), CellKind::Header, 0, None);
+            g.button(cap, l, ButtonKind::Field { fields: col_names.clone(), rows: false });
         }
         let levels = cols.len() + usize::from(k > 1 && !on_rows);
         let first_level = g.rows.len();
@@ -362,6 +382,17 @@ pub(super) fn compute_from(wb: &Workbook, pt: &PivotTable, src: &Source, mut pro
                             let Some(item) = col_items.get(lv).and_then(|fi| fi.get(it)) else { continue };
                             let fmt = if item.formatted { cols.get(lv).map(|(cc, _)| fmt_of(*cc)) } else { None };
                             g.set(first_level + lv, c, item.value.clone(), CellKind::ColLabel, 0, fmt);
+                            // An outer column item shows or hides the items under it.
+                            if lv + 1 < cols.len()
+                                && let Some(f) = col_fields.get(lv)
+                            {
+                                let kind = ButtonKind::Toggle {
+                                    field: f.source_col.clone(),
+                                    item: item.label.clone(),
+                                    collapsed: is_collapsed(f, &item.label),
+                                };
+                                g.button(first_level + lv, c, kind);
+                            }
                         }
                     }
                     if k > 1
@@ -489,6 +520,22 @@ pub(super) fn compute_from(wb: &Workbook, pt: &PivotTable, src: &Source, mut pro
         if line.leaf && k > 0 {
             chart_rows.push(r as u32);
         }
+        // An outer row item's ⊕/⊖. A line's labels are the last items of its path (Tabular form
+        // carries the parents' labels on the first child's line); Σ Values in Rows interleaves
+        // value names among them, so those reports go without.
+        if matches!(line.kind, LineKind::Item(_)) && vpos.is_none() {
+            let first = line.path.len().saturating_sub(line.labels.len());
+            for (i, (col, ..)) in line.labels.iter().enumerate() {
+                let depth = first + i;
+                if depth + 1 >= rows.len() {
+                    continue;
+                }
+                let (Some(f), Some(&it)) = (row_fields.get(depth), line.path.get(depth)) else { continue };
+                let label = ctx.row_items.get(depth).map(|fi| fi.label(it)).unwrap_or_default();
+                let collapsed = is_collapsed(f, &label);
+                g.button(r, *col, ButtonKind::Toggle { field: f.source_col.clone(), item: label, collapsed });
+            }
+        }
         for (c, v, indent, fmt) in &line.labels {
             g.set(r, *c, v.clone(), ck.0, *indent, fmt.clone());
         }
@@ -552,5 +599,5 @@ pub(super) fn compute_from(wb: &Workbook, pt: &PivotTable, src: &Source, mut pro
             g.set(r, l + j, shown, ck.1, 0, data_fmt.get(*vi).cloned().flatten());
         }
     }
-    Ok(Output { width: g.width as u32, grid: g.rows, row_kinds: g.kinds, body_offset, chart_rows, chart_cols, label_col })
+    Ok(Output { width: g.width as u32, grid: g.rows, row_kinds: g.kinds, body_offset, chart_rows, chart_cols, label_col, buttons: g.buttons })
 }

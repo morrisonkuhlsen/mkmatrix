@@ -83,6 +83,7 @@ mod page_setup_margins;
 mod paste_names;
 mod paste_special_dialog;
 mod pivot_fields_drag;
+mod pivot_header_menu;
 mod pivot_pane;
 mod pivot_report_filter;
 mod pivot_show_details;
