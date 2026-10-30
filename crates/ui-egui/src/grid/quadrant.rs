@@ -133,7 +133,7 @@ pub(crate) fn paint_quadrant(
         if let Some(f) = lk.fill {
             p.rect_filled(rect.expand(0.0), 0.0, f);
         } else if in_merge(c).is_some() {
-            p.rect_filled(rect.shrink(0.5), 0.0, Color32::WHITE);
+            p.rect_filled(rect.shrink(0.5), 0.0, t.grid_bg);
         }
         looks.push((anchor, rect, lk, cfl));
     }
@@ -141,13 +141,9 @@ pub(crate) fn paint_quadrant(
     // reads as a matrix of cells: each filled cell's (or merge's outer) edges, where the
     // gridlines above fall.
     if sh.show_gridlines {
-        // Black at 30/255 reads as the gridline grey (#E1E1E1) on white and as a darker shade of
-        // any fill, so it shows on yellow as on teal.
-        let stroke = Stroke::new(1.0, Color32::from_black_alpha(30));
         for (_, rect, lk, _) in &looks {
-            if lk.fill.is_none() {
-                continue;
-            }
+            let Some(fill) = lk.fill else { continue };
+            let stroke = Stroke::new(1.0, theme::gridline_over(fill));
             let (x0, x1) = (rect.left().round() - 0.5, rect.right().round() - 0.5);
             let (y0, y1) = (rect.top().round() - 0.5, rect.bottom().round() - 0.5);
             for (from, to) in [((x0, y0), (x1, y0)), ((x0, y1), (x1, y1)), ((x0, y0), (x0, y1)), ((x1, y0), (x1, y1))] {
@@ -216,10 +212,11 @@ pub(crate) fn paint_quadrant(
             let s = (11.0 * z * 1.2).clamp(8.0, 24.0);
             let b = Rect::from_center_size(rect.center(), vec2(s, s));
             let on = v == Value::Bool(true);
-            p.rect_filled(b, 2.0, if on { Tokens::light().accent } else { Color32::WHITE });
-            p.rect_stroke(b, 2.0, Stroke::new(1.0, if on { Tokens::light().accent } else { Color32::from_gray(110) }), StrokeKind::Inside);
+            // Ticked: an accent box with its on-accent check; empty: a field-coloured box.
+            p.rect_filled(b, 2.0, if on { t.accent } else { t.input_bg });
+            p.rect_stroke(b, 2.0, Stroke::new(1.0, if on { t.accent } else { t.text_dim }), StrokeKind::Inside);
             if on {
-                crate::icons::paint_on_sheet(p, b.shrink(1.5), crate::icons::Icon::Check, Color32::WHITE);
+                crate::icons::paint_on_sheet(p, b.shrink(1.5), crate::icons::Icon::Check, t.on_accent);
             }
             continue;
         }
@@ -434,14 +431,14 @@ pub(crate) fn paint_quadrant(
             if line.is_none() {
                 continue;
             }
-            let col = col32(line.color, wb, if t.dark { t.cell_text } else { Color32::BLACK });
+            let col = col32(line.color, wb, t.cell_text);
             paint_border(p, pts, line.style, col);
         }
         if !b.diag_down.is_none() {
-            paint_border(p, [rect.left_top(), rect.right_bottom()], b.diag_down.style, col32(b.diag_down.color, wb, Color32::BLACK));
+            paint_border(p, [rect.left_top(), rect.right_bottom()], b.diag_down.style, col32(b.diag_down.color, wb, t.cell_text));
         }
         if !b.diag_up.is_none() {
-            paint_border(p, [rect.left_bottom(), rect.right_top()], b.diag_up.style, col32(b.diag_up.color, wb, Color32::BLACK));
+            paint_border(p, [rect.left_bottom(), rect.right_top()], b.diag_up.style, col32(b.diag_up.color, wb, t.cell_text));
         }
         // Comment / note indicator.
         if let Some(cm) = sh.comments.get(c) {

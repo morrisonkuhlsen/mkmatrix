@@ -271,6 +271,13 @@ pub fn contrast(a: Color32, b: Color32) -> f32 {
     (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
 }
 
+/// The gridline MK Matrix keeps over a filled cell: a shade of the fill itself, darker on a light
+/// fill and lighter on a dark one, so it shows on pale yellow as on navy, in either theme. On
+/// white, the darker shade is the gridline grey (#E1E1E1).
+pub fn gridline_over(fill: Color32) -> Color32 {
+    if luminance(fill) > 0.18 { Color32::from_black_alpha(30) } else { Color32::from_white_alpha(36) }
+}
+
 /// Installs light and dark token visuals in both theme slots, keeps the 2-3 px widget and 8-10 px window/menu corner radii from 0.36, and sets spacing, text styles and the active theme.
 pub fn apply(ctx: &egui::Context, dark: bool) {
     // Install both palettes before System can switch between the style slots.
@@ -379,6 +386,8 @@ mod contrast_tests {
         add("selection border on sheet", t.sel_border, t.grid_bg, GLYPH);
         add("sheet control text", t.sheet_control_text, t.sheet_control_bg, TEXT);
         add("sheet control border on sheet", t.sheet_control_border, t.grid_bg, GLYPH);
+        add("in-cell checkbox (ticked) on sheet", t.accent, t.grid_bg, GLYPH);
+        add("in-cell checkbox (empty) border on sheet", t.text_dim, t.grid_bg, GLYPH);
         v
     }
 
@@ -402,6 +411,22 @@ mod contrast_tests {
         assert!((contrast(Color32::WHITE, Color32::WHITE) - 1.0).abs() < 0.001);
         // #767676 on white is the classic 4.54:1 grey.
         assert!((contrast(rgb(0x767676), Color32::WHITE) - 4.54).abs() < 0.01);
+    }
+
+    #[test]
+    fn gridlines_over_a_fill_show_in_both_themes() {
+        // The line over a fill is `gridline_over` composited on it (premultiplied, sRGB).
+        let over = |fill: Color32, line: Color32| {
+            let k = 1.0 - f32::from(line.a()) / 255.0;
+            let mix = |f: u8, l: u8| (f32::from(l) + f32::from(f) * k).round().clamp(0.0, 255.0) as u8;
+            Color32::from_rgb(mix(fill.r(), line.r()), mix(fill.g(), line.g()), mix(fill.b(), line.b()))
+        };
+        for t in [Tokens::light(), Tokens::dark()] {
+            for fill in [t.grid_bg, t.accent_soft, t.accent, rgb(0x1E3A5F), rgb(0xFFF2CC), rgb(0x808080), Color32::BLACK] {
+                let line = over(fill, gridline_over(fill));
+                assert!(contrast(line, fill) > 1.08, "dark={}: {fill:?} hides its gridlines ({line:?})", t.dark);
+            }
+        }
     }
 
     #[test]
