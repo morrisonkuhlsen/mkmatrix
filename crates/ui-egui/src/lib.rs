@@ -109,8 +109,10 @@ pub struct UiState {
     #[serde(deserialize_with = "lenient_interface_scale")]
     pub interface_scale: u16,
     /// Columns headed 1, 2, 3… rather than A, B, C (View ▸ Numbered Columns), and the Name Box
-    /// showing the active cell as (row, column), as a matrix's element a(i,j). On by default in
-    /// MK Matrix; formulas and files keep A1 references either way.
+    /// showing the active cell as (row, column), as a matrix's element a(i,j). Off by default:
+    /// formulas and files keep A1 references either way, so letters in the headings match what
+    /// is typed (`=M16` is the cell under M). Inside a named matrix the Name Box still shows the
+    /// element's place, `X(3,2)`.
     pub numbered_columns: bool,
     /// How much room the bars above and below the sheet take (View › Interface › Density).
     #[serde(deserialize_with = "lenient_density")]
@@ -222,7 +224,7 @@ impl Default for UiState {
             keytip_invoke: None,
             language: i18n::Language::En,
             interface_scale: 100,
-            numbered_columns: true,
+            numbered_columns: false,
             density: Density::Normal,
             matrix_brackets: true,
             floating_formula_bar: false,
