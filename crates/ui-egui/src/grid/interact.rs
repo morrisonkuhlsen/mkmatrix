@@ -286,8 +286,12 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
         return;
     }
 
-    // Press: decide the drag mode.
-    if resp.drag_started() || (primary_clicked && app.grid.drag == Drag::None) {
+    // Press: decide the drag mode. A click on a cell may find the selection drag of a click
+    // pressed and released in the frame before still open (it closes a frame later): that is the
+    // first click of a double-click, not a drag in progress. (On the fill handle or the border it
+    // stays a click of its own.)
+    let after_click = app.grid.drag == Drag::Select && pos.is_some_and(|p| !on_handle(p) && !on_cur_border(p));
+    if resp.drag_started() || (primary_clicked && (app.grid.drag == Drag::None || after_click)) {
         // Where the press began (a drag is only recognised after the pointer has moved).
         let Some(p) = pointer.press_origin().map(|p| geo.mirror_pos(p)).or(pos) else { return };
         // The outline band's − / + and level buttons act on release, like buttons.
@@ -477,8 +481,10 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
             app.grid.drag = Drag::Move { grab: c, to: None };
             return;
         }
-        // Double-click edits.
-        let now = crate::now_ms();
+        // Double-click edits. Timed on egui's input clock, as its own double-click is, not the wall
+        // clock: the gap between two clicks is the gap between their frames, which a UI test sets
+        // however fast it runs (#90).
+        let now = ctx.input(|i| i.time) * 1000.0;
         if let Some((last, at)) = app.grid.last_click
             && last == c
             && now - at < 450.0

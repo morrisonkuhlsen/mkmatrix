@@ -17,6 +17,7 @@ mod cell_pictures;
 mod cf_menu;
 mod cf_rule_pick;
 mod chart_resize;
+mod click_active_cell;
 mod clipboard;
 mod comments_pane;
 mod commit_after_pointing;

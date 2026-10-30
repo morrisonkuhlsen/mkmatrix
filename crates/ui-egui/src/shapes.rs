@@ -6,6 +6,8 @@
 use mkmatrix_engine::formula::{BinOp, Expr, UnOp};
 use mkmatrix_engine::model::Workbook;
 
+use crate::i18n::Language;
+
 /// A block's rows and columns.
 pub type Shape = (u32, u32);
 
@@ -16,9 +18,10 @@ pub enum Verdict {
     Mismatch(String),
 }
 
-/// The verdict for formula text (with its `=`) on sheet `si`; `None` when it isn't a formula, doesn't
-/// parse yet, or holds nothing whose shape is known beyond a single value.
-pub fn of_formula(text: &str, wb: &Workbook, si: usize) -> Option<Verdict> {
+/// The verdict for formula text (with its `=`) on sheet `si`, a mismatch worded in `lang`; `None`
+/// when it isn't a formula, doesn't parse yet, or holds nothing whose shape is known beyond a single
+/// value.
+pub fn of_formula(text: &str, wb: &Workbook, si: usize, lang: Language) -> Option<Verdict> {
     let body = text.strip_prefix('=')?;
     let expr = mkmatrix_engine::formula::parse_closing_parens(body, mkmatrix_engine::formula::parse).ok()?;
     let matrices = crate::matrices::on_sheet(wb, si);
@@ -26,7 +29,7 @@ pub fn of_formula(text: &str, wb: &Workbook, si: usize) -> Option<Verdict> {
     match shape(&expr, &matrices, &mut depth) {
         Ok(Some(s)) if s != (1, 1) || has_matrix(&expr) => Some(Verdict::Fits(s)),
         Ok(_) => None,
-        Err(why) => Some(Verdict::Mismatch(why)),
+        Err(why) => Some(Verdict::Mismatch(why.text(lang))),
     }
 }
 
@@ -40,12 +43,39 @@ fn fmt(s: Shape) -> String {
     format!("{}×{}", s.0, s.1)
 }
 
+/// Why two shapes can't combine, worded only once the language is known.
+enum Why {
+    /// `what`: `a op b` whose inner sizes `n` and `m` differ.
+    Inner { what: String, a: Shape, op: &'static str, b: Shape, n: u32, m: u32 },
+    /// `what`: elementwise over two shapes that don't broadcast.
+    Sizes { what: String, a: Shape, b: Shape },
+    /// `what` needs a square matrix.
+    NotSquare { what: String, s: Shape },
+}
+
+impl Why {
+    fn text(&self, lang: Language) -> String {
+        match self {
+            Why::Inner { what, a, op, b, n, m } => lang
+                .tr("{what}: {a} {op} {b}, {n} vs {m}")
+                .replace("{what}", what)
+                .replace("{a}", &fmt(*a))
+                .replace("{op}", op)
+                .replace("{b}", &fmt(*b))
+                .replace("{n}", &n.to_string())
+                .replace("{m}", &m.to_string()),
+            Why::Sizes { what, a, b } => lang.tr("{what}: {a} vs {b}").replace("{what}", what).replace("{a}", &fmt(*a)).replace("{b}", &fmt(*b)),
+            Why::NotSquare { what, s } => lang.tr("{what}: {shape} isn't square").replace("{what}", what).replace("{shape}", &fmt(*s)),
+        }
+    }
+}
+
 /// The deepest a formula's nesting is followed.
 const MAX_DEPTH: usize = 64;
 
 /// `Ok(Some(shape))` when known, `Ok(None)` when not (a name that isn't a matrix, most functions),
 /// `Err(why)` when two shapes can't combine.
-fn shape(e: &Expr, matrices: &[(String, mkmatrix_engine::core::RangeRef)], depth: &mut usize) -> Result<Option<Shape>, String> {
+fn shape(e: &Expr, matrices: &[(String, mkmatrix_engine::core::RangeRef)], depth: &mut usize) -> Result<Option<Shape>, Why> {
     *depth += 1;
     if *depth > MAX_DEPTH {
         return Ok(None);
@@ -65,12 +95,7 @@ fn shape(e: &Expr, matrices: &[(String, mkmatrix_engine::core::RangeRef)], depth
             let (Some(x), Some(y)) = (shape(a, matrices, depth)?, shape(b, matrices, depth)?) else { return Ok(None) };
             let (sym, ok, out, inner) =
                 if *op == BinOp::MatMul { ("@", x.1 == y.0, (x.0, y.1), (x.1, y.0)) } else { ("\\", x.0 == y.0, (x.1, y.1), (x.0, y.0)) };
-            if ok {
-                Ok(Some(out))
-            } else {
-                let what = mkmatrix_engine::formula::print(e);
-                Err(format!("{what}: {} {sym} {}, {} vs {}", fmt(x), fmt(y), inner.0, inner.1))
-            }
+            if ok { Ok(Some(out)) } else { Err(Why::Inner { what: mkmatrix_engine::formula::print(e), a: x, op: sym, b: y, n: inner.0, m: inner.1 }) }
         }
         Expr::Binary(BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Pow, a, b) => {
             let (Some(x), Some(y)) = (shape(a, matrices, depth)?, shape(b, matrices, depth)?) else { return Ok(None) };
@@ -79,7 +104,7 @@ fn shape(e: &Expr, matrices: &[(String, mkmatrix_engine::core::RangeRef)], depth
             } else if x == (1, 1) {
                 Ok(Some(y))
             } else {
-                Err(format!("{}: {} vs {}", mkmatrix_engine::formula::print(e), fmt(x), fmt(y)))
+                Err(Why::Sizes { what: mkmatrix_engine::formula::print(e), a: x, b: y })
             }
         }
         Expr::Call(name, args) => call(name, args, matrices, depth),
@@ -89,19 +114,19 @@ fn shape(e: &Expr, matrices: &[(String, mkmatrix_engine::core::RangeRef)], depth
     result
 }
 
-fn call(name: &str, args: &[Expr], matrices: &[(String, mkmatrix_engine::core::RangeRef)], depth: &mut usize) -> Result<Option<Shape>, String> {
-    let arg = |i: usize, depth: &mut usize| -> Result<Option<Shape>, String> { args.get(i).map_or(Ok(None), |a| shape(a, matrices, depth)) };
-    let square = |s: Shape, what: &str| if s.0 == s.1 { Ok(Some(s)) } else { Err(format!("{what}: {} isn't square", fmt(s))) };
+fn call(name: &str, args: &[Expr], matrices: &[(String, mkmatrix_engine::core::RangeRef)], depth: &mut usize) -> Result<Option<Shape>, Why> {
+    let arg = |i: usize, depth: &mut usize| -> Result<Option<Shape>, Why> { args.get(i).map_or(Ok(None), |a| shape(a, matrices, depth)) };
+    let square = |s: Shape, what: &str| if s.0 == s.1 { Ok(Some(s)) } else { Err(Why::NotSquare { what: what.to_owned(), s }) };
     Ok(match name {
         "MX.T" => arg(0, depth)?.map(|(r, c)| (c, r)),
         "MX.MUL" => match (arg(0, depth)?, arg(1, depth)?) {
             (Some(x), Some(y)) if x.1 == y.0 => Some((x.0, y.1)),
-            (Some(x), Some(y)) => return Err(format!("MX.MUL: {} @ {}, {} vs {}", fmt(x), fmt(y), x.1, y.0)),
+            (Some(x), Some(y)) => return Err(Why::Inner { what: "MX.MUL".into(), a: x, op: "@", b: y, n: x.1, m: y.0 }),
             _ => None,
         },
         "MX.SOLVE" => match (arg(0, depth)?, arg(1, depth)?) {
             (Some(x), Some(y)) if x.0 == y.0 => Some((x.1, y.1)),
-            (Some(x), Some(y)) => return Err(format!("MX.SOLVE: {} \\ {}, {} vs {}", fmt(x), fmt(y), x.0, y.0)),
+            (Some(x), Some(y)) => return Err(Why::Inner { what: "MX.SOLVE".into(), a: x, op: "\\", b: y, n: x.0, m: y.0 }),
             _ => None,
         },
         "MX.INV" => match arg(0, depth)? {
@@ -145,7 +170,7 @@ mod tests {
     }
 
     fn v(text: &str) -> Option<Verdict> {
-        of_formula(text, &book(), 0)
+        of_formula(text, &book(), 0, Language::En)
     }
 
     #[test]
@@ -165,6 +190,14 @@ mod tests {
         assert_eq!(v("=X@y"), Some(Verdict::Mismatch("X@y: 8×3 @ 8×1, 3 vs 8".into())));
         assert!(matches!(v("=MX.INV(X)"), Some(Verdict::Mismatch(m)) if m.contains("isn't square")));
         assert!(matches!(v("=X+y"), Some(Verdict::Mismatch(_))));
+    }
+
+    #[test]
+    fn mismatches_are_worded_in_the_interface_language() {
+        let pt = |text: &str| of_formula(text, &book(), 0, Language::PtBr);
+        assert_eq!(pt("=X@y"), Some(Verdict::Mismatch("X@y: 8×3 @ 8×1, 3 contra 8".into())));
+        assert_eq!(pt("=MX.INV(X)"), Some(Verdict::Mismatch("MX.INV: 8×3 não é quadrada".into())));
+        assert_eq!(pt("=X+y"), Some(Verdict::Mismatch("X+y: 8×3 contra 8×1".into())));
     }
 
     #[test]

@@ -325,7 +325,7 @@ impl SheetApp {
     pub fn editing_shape(&self) -> Option<crate::shapes::Verdict> {
         let ed = self.editor.as_ref().filter(|e| e.is_formula())?;
         let d = self.session.active()?;
-        crate::shapes::of_formula(&ed.text, &d.wb, d.wb.active_sheet())
+        crate::shapes::of_formula(&ed.text, &d.wb, d.wb.active_sheet(), self.ui.language)
     }
 }
 
