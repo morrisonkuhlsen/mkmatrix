@@ -29,6 +29,7 @@ mod sensitivity;
 mod shared_formulas;
 mod sheet_name_quoting;
 mod sparse_clear_invalidation;
+mod spill_conflicts;
 mod spill_reads_its_own_area;
 mod sql_function;
 mod stored_list_shape;

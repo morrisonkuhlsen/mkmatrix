@@ -261,6 +261,7 @@ impl Harness {
     fn step(&mut self, i: usize, id: &str, params: &Json) -> Result<(), Failure> {
         let before = self.wb();
         let bottom = self.bottom();
+        let undo_steps = self.s.doc().map_or(0, |d| d.undo.len());
         let r = self.s.execute(id, params.clone());
         self.s.take_ui_requests();
         // The history's oldest step changed under an edit: the undo limits dropped it.
@@ -277,8 +278,12 @@ impl Harness {
         }
         let after = self.wb();
         let spec = find_command(id).expect("generated ids are registered");
+        // Repeat records no step of its own: the command it runs again does. So a Repeat that
+        // changed cells must have left one more step to undo.
+        let repeated_with_a_step = id == "edit.repeat" && self.s.doc().map_or(0, |d| d.undo.len()) > undo_steps;
         if !spec.undoable
             && !matches!(id, "edit.undo" | "edit.redo")
+            && !repeated_with_a_step
             && let Some(diff) = content_diff(&before, &after)
         {
             return Err(fail(i, "not undoable", format!("non-undoable `{id}` changed cell content: {diff}")));
