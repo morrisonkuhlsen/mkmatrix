@@ -6,6 +6,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 mod assets;
+mod bench;
 mod i18n_report;
 mod ico;
 mod keytips;
@@ -27,6 +28,9 @@ commands:
                   only if docs/parity-checklist.md exists)
   test            workspace tests (cargo nextest when installed, else cargo test), then doctests
   assets          check that every icon/image/font/sample file is attributed in ATTRIBUTION.md
+  bench [--rows N] [--check] [--write]
+                  time the fixed performance scenarios (release build; N defaults to 100,000);
+                  --check: fail past bench/limits.json; --write: record the run in docs/bench.md
   i18n-report     list the interface strings each language doesn't translate yet (always passes)
   layers          enforce the crate dependency layering (AGENTS.md \"Layering\")
   wasm            cargo check --target wasm32-unknown-unknown for the L0-L5 crates (+ mkmatrix-web), one call
@@ -46,6 +50,7 @@ fn main() -> ExitCode {
     let rest: Vec<&str> = args.iter().skip(1).map(String::as_str).collect();
     let result = match args.first().map(String::as_str) {
         Some("assets") => assets::run(&root()),
+        Some("bench") => bench::run(&root(), &rest),
         Some("i18n-report") => i18n_report::run(&root()),
         Some("layers") => cmd_layers(),
         Some("wasm") => cmd_wasm(),
