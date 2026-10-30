@@ -75,10 +75,16 @@ impl<'h> Evaluator<'h> {
         };
         match mkmatrix_formula::parse(&text) {
             Ok(Expr::Ref(_)) if !a1_ok => err(CellError::Ref),
-            Ok(e @ (Expr::Ref(_) | Expr::Name(_) | Expr::Struct(_))) => match self.eval(&e) {
-                r @ Ev::R(_) => r,
-                _ => err(CellError::Ref),
-            },
+            // INDIRECT's text names cells as written: a shared formula's offset doesn't move it.
+            Ok(e @ (Expr::Ref(_) | Expr::Name(_) | Expr::Struct(_))) => {
+                let shift = std::mem::take(&mut self.shift);
+                let r = self.eval(&e);
+                self.shift = shift;
+                match r {
+                    r @ Ev::R(_) => r,
+                    _ => err(CellError::Ref),
+                }
+            }
             _ => err(CellError::Ref),
         }
     }

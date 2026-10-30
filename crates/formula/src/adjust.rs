@@ -60,7 +60,9 @@ fn shift_line(v: u32, abs: bool, d: i64, max: u32) -> Option<u32> {
     if (0..max as i64).contains(&n) { Some(n as u32) } else { None }
 }
 
-fn shift_ref(r: &Reference, dr: i64, dc: i64) -> Option<Reference> {
+/// `r` with its relative parts moved by `(dr, dc)` (as [`shift_relative`] moves each reference);
+/// `None` when that leaves the sheet.
+pub fn shift_ref(r: &Reference, dr: i64, dc: i64) -> Option<Reference> {
     let kind = match &r.kind {
         RefKind::Cell(a) => RefKind::Cell(shift_anchor(a, dr, dc)?),
         RefKind::Range(a, b) => RefKind::Range(shift_anchor(a, dr, dc)?, shift_anchor(b, dr, dc)?),

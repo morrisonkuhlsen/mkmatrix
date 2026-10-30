@@ -166,9 +166,16 @@ pub fn fill(cx: &mut Ctx, sheet: usize, src: RangeRef, target: RangeRef, mode: F
                 FillMode::ValuesOnly | FillMode::Series | FillMode::Alternate | FillMode::Copy | FillMode::Extend | FillMode::Dates(_) => {
                     let style = if mode == FillMode::ValuesOnly { sh.cell(*t).map(|c| c.style).unwrap_or_default() } else { cell.style };
                     if let Some(f) = &cell.formula {
-                        if let Some(e) = f.expr() {
-                            let shifted = mkmatrix_formula::adjust::shift_relative(e, t.row as i64 - sc.row as i64, t.col as i64 - sc.col as i64);
-                            cell.formula = Some(Arc::new(Formula::from_expr(shifted)));
+                        // The filled formulas share the source's tree (or the one it shares),
+                        // each with its own offset; one whose reference would leave the sheet
+                        // gets a tree of its own, with `#REF!` there.
+                        if let Some((tree, r0, c0)) = f.eval_tree() {
+                            let (dr, dc) = (t.row as i64 - sc.row as i64, t.col as i64 - sc.col as i64);
+                            let formula = Formula::shared(&tree, r0 + dr, c0 + dc).unwrap_or_else(|| {
+                                let own = mkmatrix_formula::adjust::shift_relative((*tree).clone(), r0, c0);
+                                Formula::from_expr(mkmatrix_formula::adjust::shift_relative(own, dr, dc))
+                            });
+                            cell.formula = Some(Arc::new(formula));
                             cell.value = Value::Empty;
                         }
                     } else if let Some(v) = match per_cell.get(src_i) {

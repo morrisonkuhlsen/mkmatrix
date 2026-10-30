@@ -9,11 +9,18 @@ use serde::{Deserialize, Serialize};
 use crate::style::StyleId;
 
 /// A parsed formula. `text` is the canonical formula text without the leading `=`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+///
+/// Its tree is either its own (`expr`) or shared with the formulas filled from the same one
+/// (`shared`): a column of `=B1*C1`, `=B2*C2`… keeps one tree and each cell's offset from it,
+/// instead of a tree per cell. Either way [`Formula::expr`] gives this cell's tree, and equality
+/// compares the text.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Formula {
     pub text: String,
     #[serde(skip)]
     pub expr: Option<Arc<Expr>>,
+    #[serde(skip)]
+    pub shared: Option<Shared>,
     /// Legacy array formula (Ctrl+Shift+Enter) covering this range; the formula lives in the
     /// top-left cell.
     pub array: Option<RangeRef>,
@@ -25,26 +32,82 @@ pub struct Formula {
     pub dynamic: bool,
 }
 
+/// A tree shared by formulas filled from one: the first formula's tree, and how far this cell's
+/// references move from it (relative parts only, as filling moves them).
+#[derive(Clone, Debug)]
+pub struct Shared {
+    pub tree: Arc<Expr>,
+    pub rows: i64,
+    pub cols: i64,
+}
+
+impl PartialEq for Formula {
+    /// The same formula: the same text, array range and dynamic mark (the text is printed from
+    /// the tree, so the tree adds nothing, however it is stored).
+    fn eq(&self, other: &Formula) -> bool {
+        self.text == other.text && self.array == other.array && self.dynamic == other.dynamic
+    }
+}
+
 impl Formula {
     /// Parses `text` (with or without `=`). Unparseable formulas keep their text and evaluate to
     /// `#NAME?`.
     pub fn new(text: &str) -> Formula {
         let body = text.strip_prefix('=').unwrap_or(text);
         match mkmatrix_formula::parse(body) {
-            Ok(e) => Formula { text: mkmatrix_formula::print(&e), expr: Some(Arc::new(e)), array: None, dynamic: false },
-            Err(_) => Formula { text: body.to_string(), expr: None, array: None, dynamic: false },
+            Ok(e) => Formula::from_expr(e),
+            Err(_) => Formula { text: body.to_string(), expr: None, shared: None, array: None, dynamic: false },
         }
     }
     pub fn from_expr(e: Expr) -> Formula {
-        Formula { text: mkmatrix_formula::print(&e), expr: Some(Arc::new(e)), array: None, dynamic: false }
+        Formula { text: mkmatrix_formula::print(&e), expr: Some(Arc::new(e)), shared: None, array: None, dynamic: false }
+    }
+    /// `tree` (the formula filled from) with its relative references moved by `(rows, cols)`,
+    /// sharing `tree` instead of keeping a tree of its own. `None` when a reference would leave
+    /// the sheet: that formula has `#REF!` in place of it and gets a tree of its own.
+    pub fn shared(tree: &Arc<Expr>, rows: i64, cols: i64) -> Option<Formula> {
+        let mut leaves = false;
+        tree.walk(&mut |e| {
+            if let Expr::Ref(r) = e {
+                leaves |= mkmatrix_formula::adjust::shift_ref(r, rows, cols).is_none();
+            }
+        });
+        if leaves {
+            return None;
+        }
+        let moved = mkmatrix_formula::adjust::shift_relative((**tree).clone(), rows, cols);
+        Some(Formula {
+            text: mkmatrix_formula::print(&moved),
+            expr: None,
+            shared: Some(Shared { tree: Arc::clone(tree), rows, cols }),
+            array: None,
+            dynamic: false,
+        })
     }
     /// The parsed expression, re-parsing after deserialization.
     pub fn expr(&self) -> Option<Expr> {
-        self.expr.as_deref().cloned().or_else(|| mkmatrix_formula::parse(&self.text).ok())
+        match (&self.expr, &self.shared) {
+            (Some(e), _) => Some((**e).clone()),
+            (None, Some(s)) => Some(mkmatrix_formula::adjust::shift_relative((*s.tree).clone(), s.rows, s.cols)),
+            (None, None) => mkmatrix_formula::parse(&self.text).ok(),
+        }
     }
-    /// The parsed expression without copying it (re-parses after deserialization).
+    /// The parsed expression without copying it when the formula has its own (re-parses after
+    /// deserialization; builds it for a shared one).
     pub fn expr_arc(&self) -> Option<Arc<Expr>> {
-        self.expr.clone().or_else(|| mkmatrix_formula::parse(&self.text).ok().map(Arc::new))
+        match (&self.expr, &self.shared) {
+            (Some(e), _) => Some(Arc::clone(e)),
+            _ => self.expr().map(Arc::new),
+        }
+    }
+    /// What to evaluate: a tree and how far its relative references move (0, 0 for a formula's
+    /// own tree). A shared tree isn't copied.
+    pub fn eval_tree(&self) -> Option<(Arc<Expr>, i64, i64)> {
+        match (&self.expr, &self.shared) {
+            (Some(e), _) => Some((Arc::clone(e), 0, 0)),
+            (None, Some(s)) => Some((Arc::clone(&s.tree), s.rows, s.cols)),
+            (None, None) => mkmatrix_formula::parse(&self.text).ok().map(|e| (Arc::new(e), 0, 0)),
+        }
     }
 }
 

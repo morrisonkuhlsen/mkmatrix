@@ -29,14 +29,20 @@ use rules::{read_cf, read_validation};
 
 struct Shared {
     anchor: CellRef,
-    expr: Option<Expr>,
+    expr: Option<Arc<Expr>>,
     text: String,
 }
+
+/// Formulas read so far on this sheet, by their R1C1 text (the same for `=B1*C1` in G1 and
+/// `=B2*C2` in G2): the first one's tree and cell, which later ones of the same shape share.
+/// Bounded, so a sheet of all-different formulas doesn't grow it past a fixed size.
+const MAX_SHAPES: usize = 65_536;
 
 #[derive(Default)]
 struct RowState {
     next_row: u32,
     shared: HashMap<u32, Shared>,
+    shapes: HashMap<String, (Arc<Expr>, CellRef)>,
     /// Dynamic-array spill ranges and legacy array ranges: cached values inside them (other than
     /// the anchor) are not stored, so the formula can fill them again.
     dynamic: Vec<RangeRef>,
@@ -538,9 +544,9 @@ fn read_formula_text(cx: &mut Ctx<'_>, st: &mut RowState, f: &El, pos: CellRef, 
         "shared" => {
             let si = f.attr_u32("si")?;
             if !text.is_empty() {
-                let expr = mkmatrix_formula::parse(text).ok();
+                let expr = mkmatrix_formula::parse(text).ok().map(Arc::new);
                 st.shared.insert(si, Shared { anchor: pos, expr, text: text.to_string() });
-                Some(Formula::new(text))
+                Some(share_shape(st, pos, Formula::new(text)))
             } else {
                 let Some(sh) = st.shared.get(&si) else {
                     cx.warn("a shared formula refers to a missing master cell; kept the cached value");
@@ -550,7 +556,8 @@ fn read_formula_text(cx: &mut Ctx<'_>, st: &mut RowState, f: &El, pos: CellRef, 
                     Some(e) => {
                         let dr = pos.row as i64 - sh.anchor.row as i64;
                         let dc = pos.col as i64 - sh.anchor.col as i64;
-                        Formula::from_expr(mkmatrix_formula::adjust::shift_relative(e.clone(), dr, dc))
+                        Formula::shared(e, dr, dc)
+                            .unwrap_or_else(|| Formula::from_expr(mkmatrix_formula::adjust::shift_relative((**e).clone(), dr, dc)))
                     }
                     None => Formula::new(&sh.text),
                 })
@@ -578,10 +585,26 @@ fn read_formula_text(cx: &mut Ctx<'_>, st: &mut RowState, f: &El, pos: CellRef, 
             if text.is_empty() {
                 None
             } else {
-                Some(Formula::new(text))
+                Some(share_shape(st, pos, Formula::new(text)))
             }
         }
     }
+}
+
+/// `own` (just read at `pos`) sharing the tree of an earlier formula of the same shape, when its
+/// text comes out exactly the same that way; else `own`, remembered for the formulas after it.
+fn share_shape(st: &mut RowState, pos: CellRef, own: Formula) -> Formula {
+    let Some(expr) = own.expr.clone() else { return own };
+    let shape = mkmatrix_formula::print_r1c1(&expr, pos);
+    if let Some((tree, at)) = st.shapes.get(&shape) {
+        let moved = Formula::shared(tree, pos.row as i64 - at.row as i64, pos.col as i64 - at.col as i64);
+        if let Some(f) = moved.filter(|f| f.text == own.text) {
+            return f;
+        }
+    } else if st.shapes.len() < MAX_SHAPES {
+        st.shapes.insert(shape, (expr, pos));
+    }
+    own
 }
 
 /// `2024-03-15`, `2024-03-15T10:30:00Z`, `10:30:00` → serial.

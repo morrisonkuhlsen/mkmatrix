@@ -139,6 +139,11 @@ pub struct Evaluator<'h> {
     /// runs out of work after the same number of calls that a legitimately wide one could
     /// make, instead of an amount of work that squares with array nesting (#2382).
     fuel: u64,
+    /// How far the relative references of the tree being evaluated move (rows, columns): a
+    /// shared formula's tree is its first cell's (see `Formula::eval_tree`). Zero for anything
+    /// that isn't the formula's own text: a defined name, INDIRECT's text, a LAMBDA's body
+    /// (moved when the LAMBDA is made), another cell's criteria formula.
+    pub shift: (i64, i64),
 }
 
 struct FnCtx<'a, 'h> {
@@ -187,6 +192,7 @@ impl Ctx for FnCtx<'_, '_> {
             calls: self.ev.calls,
             stack_top: self.ev.stack_top,
             fuel: self.ev.fuel,
+            shift: (0, 0),
         };
         let v = matches!(ev.value(&shifted).scalar().to_bool(), Ok(true));
         // The child's spend counts against this cell's budget.
@@ -210,7 +216,7 @@ impl Ctx for FnCtx<'_, '_> {
 
 impl<'h> Evaluator<'h> {
     pub fn new(host: &'h mut dyn Host, sheet: usize, at: CellRef) -> Self {
-        Evaluator { host, sheet, at, env: Vec::new(), depth: 0, calls: 0, stack_top: 0, fuel: LAMBDA_FUEL }
+        Evaluator { host, sheet, at, env: Vec::new(), depth: 0, calls: 0, stack_top: 0, fuel: LAMBDA_FUEL, shift: (0, 0) }
     }
 
     /// Evaluates to a value (references are dereferenced; multi-cell → array).
@@ -232,7 +238,10 @@ impl<'h> Evaluator<'h> {
     }
 
     pub fn reference_areas(&self, r: &Reference) -> Result<Vec<Area>, CellError> {
-        let range = r.range();
+        let range = match self.shift {
+            (0, 0) => r.range(),
+            (rows, cols) => mkmatrix_formula::adjust::shift_ref(r, rows, cols).ok_or(CellError::Ref)?.range(),
+        };
         Ok(self.resolve_sheet(&r.sheet)?.into_iter().map(|sheet| Area { sheet, range }).collect())
     }
 
@@ -380,9 +389,12 @@ impl<'h> Evaluator<'h> {
                         expr
                     };
                     let saved = self.sheet;
-                    // Unqualified references in a name refer to the scope sheet.
+                    // Unqualified references in a name refer to the scope sheet; the name's
+                    // text doesn't move with a shared formula's offset.
                     self.sheet = scope;
+                    let shift = std::mem::take(&mut self.shift);
                     let r = self.eval(&expr);
+                    self.shift = shift;
                     self.sheet = saved;
                     r
                 }
