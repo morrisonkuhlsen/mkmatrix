@@ -275,7 +275,9 @@ impl SheetApp {
         }
     }
 
-    /// Current selection's top-left cell text as A1 (for the Name Box).
+    /// The Name Box's text: a named range the selection matches, the size while a range is being
+    /// dragged out (`4R x 3C`), the selected block (`C3:E6`), or the active cell (`C3`, a named
+    /// matrix's element `X(3,2)`, or `(3, 3)` with numbered columns).
     pub fn name_box_text(&self) -> String {
         let Some(d) = self.session.active() else { return String::new() };
         let sel = &d.selection;
@@ -297,12 +299,22 @@ impl SheetApp {
         if self.grid.drag_select && !cur.is_single() {
             return format!("{}R x {}C", cur.height(), cur.width());
         }
+        let numbered = |c: CellRef| format!("({}, {})", u64::from(c.row) + 1, u64::from(c.col) + 1);
+        // A block (not one merged cell): the whole range, `C3:E6`.
+        let merged = sh.is_some_and(|sh| sh.merges.contains(&cur));
+        if !cur.is_single() && !merged {
+            return if self.ui.numbered_columns && !cur.is_full_cols() && !cur.is_full_rows() {
+                format!("{}:{}", numbered(cur.start), numbered(cur.end))
+            } else {
+                cur.a1()
+            };
+        }
         // Inside a named matrix: the cell's place in it, `X(3,2)`.
         if let Some(text) = crate::matrices::name_box(&d.wb, d.wb.active_sheet(), sel.active) {
             return text;
         }
         if self.ui.numbered_columns {
-            return format!("({}, {})", u64::from(sel.active.row) + 1, u64::from(sel.active.col) + 1);
+            return numbered(sel.active);
         }
         sel.active.a1()
     }
