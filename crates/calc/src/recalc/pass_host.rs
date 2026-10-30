@@ -1,6 +1,10 @@
 use super::graph::{HashMap, HashSet, Key};
 use super::*;
 
+/// A formula to evaluate: its tree and how far the tree's relative references move (non-zero
+/// for a shared formula, see `Formula::eval_tree`).
+pub(super) type Tree = (std::sync::Arc<Expr>, i64, i64);
+
 /// Formulas a formula may calculate on demand one inside the other (each needing one another's
 /// value before it is done). Each level takes stack, so a chain deeper than this is suspended and
 /// calculated from the top instead (see [`PassHost::calculate`]): long dependency chains calculate
@@ -13,7 +17,7 @@ const MAX_ITERATION_WORK: usize = 10_000_000;
 
 pub(super) struct PassHost<'a> {
     wb: &'a Workbook,
-    exprs: &'a HashMap<Key, std::sync::Arc<Expr>>,
+    exprs: &'a HashMap<Key, Tree>,
     pub(super) results: HashMap<Key, Value>,
     pending: HashSet<Key>,
     in_progress: HashSet<Key>,
@@ -65,7 +69,7 @@ pub(super) struct PassHost<'a> {
 }
 
 impl<'a> PassHost<'a> {
-    pub(super) fn new(wb: &'a Workbook, exprs: &'a HashMap<Key, std::sync::Arc<Expr>>, rng: &'a mut u64, now: f64) -> Self {
+    pub(super) fn new(wb: &'a Workbook, exprs: &'a HashMap<Key, Tree>, rng: &'a mut u64, now: f64) -> Self {
         PassHost {
             wb,
             exprs,
@@ -221,10 +225,11 @@ impl PassHost<'_> {
         if self.iterate {
             self.stack.push(k);
         }
-        let expr = std::sync::Arc::clone(expr);
+        let (expr, rows, cols) = (std::sync::Arc::clone(&expr.0), expr.1, expr.2);
         let outer_out_of_stack = std::mem::replace(&mut self.out_of_stack, false);
         let v = {
             let mut ev = Evaluator::new(self, k.0, k.1);
+            ev.shift = (rows, cols);
             ev.value(&expr)
         };
         let out_of_stack = std::mem::replace(&mut self.out_of_stack, outer_out_of_stack);

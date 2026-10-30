@@ -333,9 +333,9 @@ impl Calc {
             }
             // Row-major order is a good topological guess; on-demand evaluation fixes the rest.
             dirty.sort_by_key(|(s, c)| (*s, c.row, c.col));
-            let mut exprs: HashMap<Key, std::sync::Arc<Expr>> = HashMap::with_capacity_and_hasher(dirty.len(), Default::default());
+            let mut exprs: HashMap<Key, pass_host::Tree> = HashMap::with_capacity_and_hasher(dirty.len(), Default::default());
             for k in &dirty {
-                if let Some(e) = wb.sheet(k.0).and_then(|s| s.cell(k.1)).and_then(|c| c.formula.as_ref()).and_then(|f| f.expr_arc()) {
+                if let Some(e) = wb.sheet(k.0).and_then(|s| s.cell(k.1)).and_then(|c| c.formula.as_ref()).and_then(|f| f.eval_tree()) {
                     exprs.insert(*k, e);
                 }
             }
@@ -744,7 +744,7 @@ pub(crate) mod tests {
         let mut put = |wb: &mut Workbook, at: String, text: String| {
             let at = CellRef::parse(&at).unwrap();
             wb.sheet_mut(0).unwrap().cells.set(at, Cell::formula(Formula::new(&text)));
-            exprs.insert((0, at), std::sync::Arc::new(mkmatrix_formula::parse(&text[1..]).unwrap()));
+            exprs.insert((0, at), (std::sync::Arc::new(mkmatrix_formula::parse(&text[1..]).unwrap()), 0, 0));
         };
         // A1 reads A2, ..., A64 (the 64th formula deep) reads a wide range of formulas.
         for r in 1..64 {
@@ -770,7 +770,7 @@ pub(crate) mod tests {
         let mut exprs = HashMap::default();
         for (at, formula) in pending {
             let expr = mkmatrix_formula::parse(formula.strip_prefix('=').unwrap_or(formula)).ok()?;
-            exprs.insert((0, CellRef::parse(at)?), std::sync::Arc::new(expr));
+            exprs.insert((0, CellRef::parse(at)?), (std::sync::Arc::new(expr), 0, 0));
         }
 
         // A cell in `pending` is calculated the first time something reads it, which is the state

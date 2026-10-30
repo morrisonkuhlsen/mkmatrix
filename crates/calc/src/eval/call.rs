@@ -253,7 +253,13 @@ impl<'h> Evaluator<'h> {
                     }
                 }
                 let Some(body) = args.last() else { return err(CellError::Value) };
-                Ev::L(Arc::new(Lambda { params, body: body.clone(), env: self.env.clone() }))
+                // The body keeps this formula's references wherever it is called from: a shared
+                // formula's offset is applied now, and the body runs unshifted.
+                let body = match self.shift {
+                    (0, 0) => body.clone(),
+                    (rows, cols) => mkmatrix_formula::adjust::shift_relative(body.clone(), rows, cols),
+                };
+                Ev::L(Arc::new(Lambda { params, body, env: self.env.clone() }))
             }
             "ISOMITTED" => {
                 let r = matches!(args.first(), Some(Expr::Name(n)) if self.env.iter().rev().find(|(k, _)| mkmatrix_formula::same_name(k, n)).is_some_and(|(_, v)| matches!(v, Ev::V(Value::Empty))));

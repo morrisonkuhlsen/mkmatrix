@@ -30,6 +30,55 @@ pub(super) type HashSet<K> = std::collections::HashSet<K, BuildHasherDefault<FxH
 
 pub type Key = (usize, CellRef);
 
+/// The formulas that read one cell. Most cells are read by a single formula (a filled column's
+/// `=B1*C1`, `=B2*C2`…), so that one is kept inline; a set is only allocated for the second.
+#[derive(Clone, Debug)]
+enum Readers {
+    One(Key),
+    Many(HashSet<Key>),
+}
+
+impl Readers {
+    fn insert(&mut self, k: Key) {
+        match self {
+            Readers::One(only) if *only == k => {}
+            Readers::One(only) => {
+                let mut set = HashSet::default();
+                set.insert(*only);
+                set.insert(k);
+                *self = Readers::Many(set);
+            }
+            Readers::Many(set) => {
+                set.insert(k);
+            }
+        }
+    }
+    /// Removes `k`; whether no reader is left.
+    fn remove(&mut self, k: &Key) -> bool {
+        match self {
+            Readers::One(only) => only == k,
+            Readers::Many(set) => {
+                set.remove(k);
+                match (set.len(), set.iter().next().copied()) {
+                    (0, _) => true,
+                    // Back to one reader: no set kept for it.
+                    (1, Some(last)) => {
+                        *self = Readers::One(last);
+                        false
+                    }
+                    _ => false,
+                }
+            }
+        }
+    }
+    fn for_each(&self, mut f: impl FnMut(Key)) {
+        match self {
+            Readers::One(k) => f(*k),
+            Readers::Many(set) => set.iter().copied().for_each(f),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub(super) struct Node {
     pub(super) areas: Vec<Area>,
@@ -168,7 +217,7 @@ impl<T: Copy + Ord> Intervals<T> {
 pub struct Graph {
     pub(super) nodes: HashMap<Key, Node>,
     /// single cell → dependents
-    cell_deps: HashMap<Key, HashSet<Key>>,
+    cell_deps: HashMap<Key, Readers>,
     /// (sheet, col) → row intervals of the ranges (up to `WIDE` columns) that cover the column
     col_deps: HashMap<(usize, u32), Intervals<Key>>,
     /// sheet → row intervals of wider ranges, with their columns: (first, last, dependent)
@@ -215,7 +264,12 @@ impl Graph {
         self.remove(k);
         let (cells, cols, wide) = Self::entries(&node.areas);
         for c in cells {
-            self.cell_deps.entry(c).or_default().insert(k);
+            match self.cell_deps.get_mut(&c) {
+                Some(readers) => readers.insert(k),
+                None => {
+                    self.cell_deps.insert(c, Readers::One(k));
+                }
+            }
         }
         for (s, c, r0, r1) in cols {
             self.col_deps.entry((s, c)).or_default().insert(r0, r1, k);
@@ -235,11 +289,10 @@ impl Graph {
         let Some(old) = self.nodes.remove(&k) else { return };
         let (cells, cols, wide) = Self::entries(&old.areas);
         for c in cells {
-            if let Some(v) = self.cell_deps.get_mut(&c) {
-                v.remove(&k);
-                if v.is_empty() {
-                    self.cell_deps.remove(&c);
-                }
+            if let Some(v) = self.cell_deps.get_mut(&c)
+                && v.remove(&k)
+            {
+                self.cell_deps.remove(&c);
             }
         }
         for (s, c, r0, r1) in cols {
@@ -281,7 +334,7 @@ impl Graph {
     /// Formulas that read cell `c` of `sheet`.
     pub fn dependents(&self, sheet: usize, c: CellRef, out: &mut Vec<Key>) {
         if let Some(v) = self.cell_deps.get(&(sheet, c)) {
-            out.extend(v.iter().copied());
+            v.for_each(|k| out.push(k));
         }
         if let Some(v) = self.col_deps.get(&(sheet, c.col)) {
             v.query(c.row, c.row, &mut |k| out.push(*k));
@@ -300,13 +353,13 @@ impl Graph {
         if range.count() <= 4096 {
             for c in range.iter() {
                 if let Some(v) = self.cell_deps.get(&(sheet, c)) {
-                    out.extend(v.iter().copied());
+                    v.for_each(|k| out.push(k));
                 }
             }
         } else {
             for ((s, c), v) in &self.cell_deps {
                 if *s == sheet && range.contains(*c) {
-                    out.extend(v.iter().copied());
+                    v.for_each(|k| out.push(k));
                 }
             }
         }

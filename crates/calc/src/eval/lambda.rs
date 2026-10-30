@@ -36,7 +36,10 @@ impl<'h> Evaluator<'h> {
         self.calls += 1;
         let saved = std::mem::replace(&mut self.env, l.env.clone());
         self.env.extend(bound);
+        // The body's references were moved when the LAMBDA was made.
+        let shift = std::mem::take(&mut self.shift);
         let r = self.eval(&l.body);
+        self.shift = shift;
         self.env = saved;
         self.calls -= 1;
         r
