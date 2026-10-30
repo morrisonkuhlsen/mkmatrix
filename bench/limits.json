@@ -8,8 +8,8 @@
     "sort": 3.0,
     "save xlsx": 3.0,
     "open xlsx (fresh process)": 6.0,
-    "peak memory: build to save": 900,
-    "peak memory: open": 550,
+    "peak memory: build to save": 650,
+    "peak memory: open": 350,
     "xlsx size": 8
   }
 }
