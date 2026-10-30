@@ -26,3 +26,18 @@ jobs:
       packages: >-
         pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev
         libgtk-3-dev libfontconfig1-dev libfreetype-dev mesa-vulkan-drivers
+
+  bench:
+    # Performance regressions: the 100,000-row scenarios of `cargo xtask bench` (release build),
+    # checked against bench/limits.json. Generous limits: only a real slowdown fails.
+    name: Benchmark limits
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust toolchain
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: cargo xtask bench --check
+        run: cargo xtask bench --check
