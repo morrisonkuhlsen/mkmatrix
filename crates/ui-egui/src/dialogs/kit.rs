@@ -214,6 +214,30 @@ pub(crate) fn button(ui: &mut egui::Ui, text: &str, primary: bool) -> egui::Resp
     ui.add_sized(vec2(w.max(84.0), 28.0), b)
 }
 
+/// A confirmation's buttons (Save Changes?, a message box): one width for all, the widest
+/// label's, centred as a row with even gaps, so the dialog reads symmetrically. `labels` pairs
+/// each label with whether it is the default (in the accent). The index of the one clicked.
+pub(crate) fn centered_buttons(ui: &mut egui::Ui, labels: &[(&str, bool)]) -> Option<usize> {
+    const GAP: f32 = 8.0;
+    let t = Tokens::get(ui.ctx());
+    let widest = labels.iter().map(|(l, _)| ui.painter().layout_no_wrap((*l).to_string(), theme::ui_font(13.0), t.text).size().x).fold(0.0, f32::max);
+    let w = (widest + 28.0).max(96.0);
+    let row = w * labels.len() as f32 + GAP * labels.len().saturating_sub(1) as f32;
+    let mut clicked = None;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = GAP;
+        ui.add_space(((ui.available_width() - row) / 2.0).max(0.0));
+        for (i, (label, primary)) in labels.iter().enumerate() {
+            let text = egui::RichText::new(*label).font(theme::ui_font(13.0));
+            let b = if *primary { egui::Button::new(text.color(t.on_accent)).fill(t.accent) } else { egui::Button::new(text) };
+            if ui.add_sized(vec2(w, 28.0), b).clicked() {
+                clicked = Some(i);
+            }
+        }
+    });
+    clicked
+}
+
 /// The footer: a rule across, then `left` (a hint, a count, a button of its own) and Cancel / OK
 /// on the right.
 pub(crate) fn footer(ui: &mut egui::Ui, confirm: &mut bool, open: &mut bool, left: impl FnOnce(&mut egui::Ui)) {
