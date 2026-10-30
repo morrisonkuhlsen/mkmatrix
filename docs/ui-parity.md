@@ -195,6 +195,7 @@ scrollbar bugs 2–4 · pixel/feel pass against observed Excel 7–12.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-29 | minor | Column headings are letters again by default (A, B, C…), matching the A1 references formulas use; View › Numbered Columns still heads them 1, 2, 3… with the Name Box as (row, column), and inside a named matrix the Name Box shows the element, `X(3,2)` |
 | 2026-10-29 | minor | Save Changes? and the message box read symmetrically: the question centred over a centred row of buttons of one width (Don't Save · Cancel · Save; OK alone), the default in the accent (`dialogs::kit::centered_buttons`) |
 | 2026-10-29 | minor | A PivotTable's report filter (a field in the Filters area) has the filter dropdown on its value cell, drawn as filtering while it shows only some items; a click or Alt+Down opens the AutoFilter's menu with the field's items and how many source records hold each (no sort buttons), and Apply or Clear Filter re-run the report through `pivot.filter` (#85) |
 | 2026-10-29 | minor | Save Changes? and the warning/error message box use the dialogs' footer: a rule, Don't Save on the left, Cancel and Save on the right (OK alone in the message box), buttons sized by their label, the default in the accent; the message lines up with the buttons' left edge |
