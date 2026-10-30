@@ -42,6 +42,20 @@ fn click_cell(h: &mut Harness, cell: &str) {
     h.run_steps(2);
 }
 
+/// Two clicks a frame (a quarter second) apart: within the double-click interval.
+fn double_click_cell(h: &mut Harness, cell: &str) {
+    let pos = cell_center(h, cell);
+    for _ in 0..2 {
+        h.input_mut().events.extend([
+            Event::PointerMoved(pos),
+            Event::PointerButton { pos, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE },
+            Event::PointerButton { pos, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE },
+        ]);
+        h.step();
+    }
+    h.run_steps(2);
+}
+
 fn text(h: &mut Harness, text: &str) {
     h.input_mut().events.push(Event::Text(text.into()));
     h.run_steps(2);
@@ -86,8 +100,7 @@ fn f2_and_double_click_edit_the_existing_merged_content() {
     assert_eq!(value(&h, "A1"), Value::from("before!"));
 
     click_cell(&mut h, "D4");
-    click_cell(&mut h, "B2");
-    click_cell(&mut h, "B2");
+    double_click_cell(&mut h, "B2");
     let editor = h.state().editor.as_ref().unwrap();
     assert_eq!(editor.cell.a1(), "A1");
     assert_eq!(editor.text, "before!");
