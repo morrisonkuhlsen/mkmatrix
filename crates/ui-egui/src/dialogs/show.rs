@@ -297,26 +297,22 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                 let title = d.values.get("title").and_then(Json::as_str).unwrap_or("this workbook");
                 ui.set_min_width(360.0);
                 ui.add_space(8.0);
-                ui.add(egui::Label::new(lang.tr("Do you want to save the changes you made to {title}?").replace("{title}", title)).wrap());
+                // Symmetric: the question centred over a centred row of three buttons of one width,
+                // Save (the default) in the accent.
+                ui.vertical_centered(|ui| {
+                    ui.add(egui::Label::new(lang.tr("Do you want to save the changes you made to {title}?").replace("{title}", title)).wrap());
+                });
                 ui.add_space(6.0);
                 let quitting = d.values.get("quit").and_then(Json::as_bool) == Some(true);
-                // The dialogs' footer: a rule, Don't Save on the left, Cancel and Save (the default,
-                // in the accent) on the right.
-                let mut answer = None;
                 super::kit::rule(ui);
-                ui.horizontal(|ui| {
-                    if super::kit::button(ui, lang.tr("Don't Save"), false).clicked() {
-                        answer = Some(crate::SaveAnswer::DontSave);
-                    }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if super::kit::button(ui, lang.tr("Save"), true).clicked() || ui.input(|i| i.key_pressed(Key::Enter)) {
-                            answer = Some(crate::SaveAnswer::Save);
-                        }
-                        if super::kit::button(ui, lang.tr("Cancel"), false).clicked() {
-                            answer = Some(crate::SaveAnswer::Cancel);
-                        }
-                    });
-                });
+                let choice = super::kit::centered_buttons(ui, &[(lang.tr("Don't Save"), false), (lang.tr("Cancel"), false), (lang.tr("Save"), true)]);
+                let answer = match choice {
+                    Some(0) => Some(crate::SaveAnswer::DontSave),
+                    Some(1) => Some(crate::SaveAnswer::Cancel),
+                    Some(_) => Some(crate::SaveAnswer::Save),
+                    None if ui.input(|i| i.key_pressed(Key::Enter)) => Some(crate::SaveAnswer::Save),
+                    None => None,
+                };
                 if let Some(answer) = answer
                     && app.answer_save_changes(answer, quitting, ui.ctx())
                 {
