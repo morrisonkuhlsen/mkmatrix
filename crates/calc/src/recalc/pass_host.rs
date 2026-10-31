@@ -15,6 +15,13 @@ const MAX_NESTED: usize = 64;
 /// evaluated again), however high Maximum Iterations is.
 const MAX_ITERATION_WORK: usize = 10_000_000;
 
+#[cfg(test)]
+thread_local! {
+    /// Makes `visit_range` decline every block, so tests can compare what walking a reference
+    /// gives with what copying it gives.
+    pub(crate) static DECLINE_WALKS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 pub(super) struct PassHost<'a> {
     wb: &'a Workbook,
     exprs: &'a HashMap<Key, Tree>,
@@ -553,15 +560,30 @@ impl Host for PassHost<'_> {
         }
         out
     }
-    fn visit_range(&mut self, sheet: usize, range: RangeRef, f: &mut dyn FnMut(&Value) -> bool) -> bool {
+    fn visit_range(&mut self, sheet: usize, range: RangeRef, f: &mut dyn FnMut(CellRef, &Value) -> bool) -> bool {
+        #[cfg(test)]
+        if DECLINE_WALKS.with(std::cell::Cell::get) {
+            return false;
+        }
         let wb = self.wb;
         let Some(sh) = wb.sheet(sheet) else { return false };
-        // Formula cells first, in row-major order like `range_values`: reading one calculates it
-        // and the pass remembers the value, so the walk below gets the same value again without
-        // this method holding any.
-        for (c, cell) in sh.cells.iter_range(range) {
-            if cell.formula.is_some() {
+        // Formula cells of this pass first, in row-major order like `range_values`: reading one
+        // calculates it and the pass remembers the value, so the walk below gets the same value
+        // again without this method holding any. When fewer formulas are pending than the block
+        // has cells, looking them up is cheaper than walking the block for them.
+        let cells = u64::from(range.height()).saturating_mul(u64::from(range.width()));
+        let mine = |k: &Key| k.0 == sheet && range.contains(k.1);
+        if (self.pending.len() as u64) < cells {
+            let mut due: Vec<CellRef> = self.pending.iter().filter(|k| mine(k)).map(|k| k.1).collect();
+            due.sort_unstable_by_key(|c| (c.row, c.col));
+            for c in due {
                 let _ = self.cell_value(sheet, c);
+            }
+        } else {
+            for (c, cell) in sh.cells.iter_range(range) {
+                if cell.formula.is_some() && self.pending.contains(&(sheet, c)) {
+                    let _ = self.cell_value(sheet, c);
+                }
             }
         }
         // Spilled values sit between the stored cells (and the formulas just calculated may have
@@ -569,8 +591,19 @@ impl Host for PassHost<'_> {
         if self.spills.keys().any(|a| a.0 == sheet) || sh.spill.range(range.start..=range.end).any(|(c, _)| range.contains(*c)) {
             return false;
         }
+        // Whether any formula of the block was (or is still to be) calculated in this pass; when
+        // few were, looking for them beats asking about every formula cell of the block.
+        let live =
+            (self.results.len().saturating_add(self.pending.len()) as u64) >= cells || self.results.keys().any(mine) || self.pending.iter().any(mine);
         for (c, cell) in sh.cells.iter_range(range) {
-            let go = if cell.formula.is_some() { f(&self.cell_value(sheet, c)) } else { f(&cell.value) };
+            // A formula this pass calculated reads its new value; any other stored cell reads
+            // what it holds, as `cell_value` would answer for it (no spill covers the block).
+            let k = (sheet, c);
+            let go = if live && cell.formula.is_some() && (self.results.contains_key(&k) || self.pending.contains(&k)) {
+                f(c, &self.cell_value(sheet, c))
+            } else {
+                f(c, &cell.value)
+            };
             if !go {
                 break;
             }

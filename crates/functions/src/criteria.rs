@@ -41,7 +41,7 @@ enum Operand {
 
 /// A parsed criterion.
 #[derive(Clone, Debug)]
-pub(crate) struct Criterion {
+pub struct Criterion {
     op: Op,
     operand: Operand,
     /// The criterion was a bare `""` (or empty cell text): matches blanks and empty strings.
@@ -178,27 +178,27 @@ impl Criterion {
     }
 
     /// Whether a cell value satisfies the criterion.
-    pub(crate) fn matches(&self, v: &Value) -> bool {
+    pub fn matches(&self, v: &Value) -> bool {
         let v = match v {
-            Value::Array(a) => a.data.first().cloned().unwrap_or(Value::Empty),
-            other => other.clone(),
+            Value::Array(a) => a.data.first().unwrap_or(&Value::Empty),
+            other => other,
         };
         if self.bare_empty {
-            return matches!(&v, Value::Empty) || matches!(&v, Value::Text(t) if t.is_empty());
+            return matches!(v, Value::Empty) || matches!(v, Value::Text(t) if t.is_empty());
         }
         match &self.operand {
-            Operand::Blank => self.matches_blank(&v),
-            Operand::Number(n) => self.matches_number(&v, *n),
-            Operand::Bool(b) => match &v {
+            Operand::Blank => self.matches_blank(v),
+            Operand::Number(n) => self.matches_number(v, *n),
+            Operand::Bool(b) => match v {
                 Value::Bool(x) => cmp_op(self.op, x.cmp(b)),
                 _ => self.op == Op::Ne,
             },
-            Operand::Error(e) => match &v {
+            Operand::Error(e) => match v {
                 Value::Error(x) => cmp_op(self.op, x.code().cmp(&e.code())),
                 _ => self.op == Op::Ne,
             },
-            Operand::Text(pat) => self.matches_text(&v, pat),
-            Operand::CutText(kept) => self.matches_cut_text(&v, kept),
+            Operand::Text(pat) => self.matches_text(v, pat),
+            Operand::CutText(kept) => self.matches_cut_text(v, kept),
         }
     }
 }
@@ -369,7 +369,7 @@ pub(crate) fn lookup_equal(needle: &Value, hay: &Value, wild: bool) -> bool {
             if wild {
                 wildcard_match(p, t)
             } else {
-                compare_text(p, t) == Ordering::Equal
+                text_equal(p, t)
             }
         }
         (Value::Number(a), Value::Number(b)) => a == b,
@@ -377,6 +377,62 @@ pub(crate) fn lookup_equal(needle: &Value, hay: &Value, wild: bool) -> bool {
         (Value::Error(a), Value::Error(b)) => a == b,
         (Value::Empty, Value::Empty) => true,
         _ => false,
+    }
+}
+
+/// Case-insensitive equality, as `compare_text(a, b) == Equal`. ASCII text compares byte by byte;
+/// anything else lower-cases character by character, since a non-ASCII character can lower-case
+/// to an ASCII one (the Kelvin sign `K` is `k`).
+fn text_equal(a: &str, b: &str) -> bool {
+    if a.is_ascii() && b.is_ascii() {
+        return a.eq_ignore_ascii_case(b);
+    }
+    compare_text(a, b) == Ordering::Equal
+}
+
+/// The needle of an exact lookup (MATCH and VLOOKUP with an exact match, XLOOKUP and XMATCH in
+/// their exact modes), for hosts that search a reference cell by cell instead of building an
+/// array: `matches` answers as those functions compare each entry.
+#[derive(Clone, Debug)]
+pub struct ExactKey {
+    needle: Value,
+    wild: bool,
+    /// ASCII needle text, for comparing ASCII entries byte by byte.
+    ascii: bool,
+}
+
+impl ExactKey {
+    /// The key for a lookup value as the functions take it: a blank looks up 0, an error (or an
+    /// array, which these functions lift over) has no key. `wild` as the function allows
+    /// wildcards (MATCH, VLOOKUP and XLOOKUP's mode 2); they apply only to text that has them.
+    pub fn new(needle: &Value, wild: bool) -> Option<ExactKey> {
+        let needle = match needle {
+            Value::Error(_) | Value::Array(_) => return None,
+            Value::Empty => Value::Number(0.0),
+            v => v.clone(),
+        };
+        let wild = wild && matches!(&needle, Value::Text(t) if has_wildcards(t));
+        let ascii = matches!(&needle, Value::Text(t) if t.is_ascii());
+        Some(ExactKey { needle, wild, ascii })
+    }
+
+    /// Whether a looked-up entry equals the key.
+    pub fn matches(&self, v: &Value) -> bool {
+        match (&self.needle, v) {
+            (Value::Text(p), Value::Text(t)) if self.ascii && !self.wild && t.is_ascii() => p.eq_ignore_ascii_case(t),
+            (n, v) => lookup_equal(n, v, self.wild),
+        }
+    }
+}
+
+/// The criteria of an *IFS function's pairs (COUNTIFS, SUMIFS, AVERAGEIFS…), parsed as the
+/// function parses them: a single pair rejects a text criterion over 255 UTF-16 units with
+/// `#VALUE!`, two or more pairs match its first 255.
+pub fn ifs_criteria(values: &[Value]) -> Result<Vec<Criterion>, CellError> {
+    if values.len() == 1 {
+        values.iter().map(|v| Criterion::parse_arg(&v.scalar())).collect()
+    } else {
+        Ok(values.iter().map(|v| Criterion::parse_arg_truncated(&v.scalar())).collect())
     }
 }
 

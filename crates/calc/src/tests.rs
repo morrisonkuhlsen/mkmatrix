@@ -1730,6 +1730,151 @@ fn sum_count_average_follow_edits_inside_the_range() {
     }
 }
 
+/// Functions that walk a reference instead of copying it (aggregates, COUNTIF and the *IFS
+/// criteria functions, exact MATCH, VLOOKUP and XLOOKUP) answer exactly what copying it answers:
+/// blanks that a criterion matches, whole-column references trimmed to the used range, errors in
+/// the target, wildcards and case, arrays they lift over, blocks the host can't walk, and formulas
+/// in the block calculated in the same pass.
+#[test]
+fn walking_a_reference_answers_as_copying_it() {
+    let formulas = [
+        "=SUM(B:B)",
+        "=AVERAGE(E:E)",
+        "=COUNT(B1:C12)",
+        "=SUM(E1:E12)",
+        "=COUNTIF(C:C,\">2\")",
+        "=COUNTIF(C:C,\"\")",
+        "=COUNTIF(C:C,\"<>3\")",
+        "=COUNTIF(A:A,\"app*\")",
+        "=COUNTIF(C1:C30,\"\")",
+        "=COUNTIF(B1:C12,\">1\")",
+        "=SUM(COUNTIF(C:C,{\">1\",\"<5\"}))",
+        "=COUNTIF(D:D,\"\")",
+        "=COUNTIFS(C:C,\">1\",B:B,\"<>\")",
+        "=COUNTIFS(C:C,\"\",B:B,\"\")",
+        "=COUNTIFS(C1:C12,\">1\",B1:B11,\">1\")",
+        "=COUNTIFS(C:C,REPT(\"a\",300))",
+        "=COUNTIFS(C:C,REPT(\"a\",300),B:B,\">0\")",
+        "=COUNTIFS(A1:A12,\"<>apple\",C1:C12,\"\")",
+        "=SUMIFS(B:B,C:C,\">1\")",
+        "=SUMIFS(B:B,C:C,\">=0\")",
+        "=SUMIFS(B:B,C:C,\">=-5\")",
+        "=SUMIFS(B1:B12,C1:C12,\"<0\")",
+        "=SUMIFS(B1:C12,C1:D12,\">1\")",
+        "=SUMIFS(B:B,A:A,\"item*\")",
+        "=SUMIFS(B:B,C:C,\"\")",
+        "=SUMIFS(E:E,C:C,\">1\",A:A,\"<>apple\")",
+        "=SUMIFS(C:C,C:C,\">1\")",
+        "=SUMIFS(B2:B12,C1:C11,\">1\")",
+        "=AVERAGEIFS(B:B,C:C,\">100\")",
+        "=AVERAGEIFS(B:B,C:C,\">1\",A:A,\"<>apple\")",
+        "=MATCH(\"apple\",A:A,0)",
+        "=MATCH(\"APPLE\",A:A,0)",
+        "=MATCH(\"app?e\",A:A,0)",
+        "=MATCH(\"k\",A:A,0)",
+        "=MATCH(5,B:B,0)",
+        "=MATCH(\"5\",B:B,0)",
+        "=MATCH(99,B:B,0)",
+        "=MATCH(,C:C,0)",
+        "=MATCH(\"x\",A1:B5,0)",
+        "=MATCH(3,20:20,0)",
+        "=MATCH(1/0,A:A,0)",
+        "=SUM(MATCH({\"apple\",\"Item 2\"},A:A,0))",
+        "=MATCH(\"Item 3\",A:A)",
+        "=VLOOKUP(\"apple\",A:C,2,FALSE)",
+        "=VLOOKUP(\"nope\",A:C,2,FALSE)",
+        "=VLOOKUP(\"apple\",A:C,9,FALSE)",
+        "=VLOOKUP(\"apple\",A:C,0,FALSE)",
+        "=VLOOKUP(\"Item 3\",A:D,4,FALSE)",
+        "=VLOOKUP(\"Item 4\",A:C,3,FALSE)",
+        "=VLOOKUP(\"Item 1\",A:C,2,0)",
+        "=XLOOKUP(\"apple\",A:A,B:B)",
+        "=XLOOKUP(\"apple\",A:A,B:B,\"none\",0,-1)",
+        "=XLOOKUP(\"app*\",A:A,B:B,\"none\",2)",
+        "=XLOOKUP(\"zzz\",A:A,B:B,\"none\")",
+        "=XLOOKUP(3,C:C,A:A)",
+        "=XLOOKUP(\"Item 5\",A1:A12,C1:C12,,0,2)",
+        "=XLOOKUP(7,20:20,21:21)",
+        "=SUM(G:G)",
+        "=COUNTIF(G:G,\">2\")",
+        "=MATCH(3,G:G,0)",
+    ];
+    let run = |decline: bool| {
+        crate::recalc::DECLINE_WALKS.with(|d| d.set(decline));
+        let mut t = T::new();
+        // Column A: labels (with "apple" twice in two cases and the Kelvin sign, which lower-cases
+        // to "k"); B: numbers, a number as text, a logical and an error; C: numbers with blanks;
+        // D: an empty text; E: formulas over B; G: a spill; rows 20-21: a horizontal table.
+        for r in 1..=12u32 {
+            let label = match r {
+                6 => "apple".to_string(),
+                9 => "APPLE".to_string(),
+                11 => "\u{212A}".to_string(),
+                _ => format!("Item {r}"),
+            };
+            t.set(&format!("A{r}"), &label);
+            if r != 7 {
+                t.set(&format!("E{r}"), &format!("=B{r}*2"));
+            }
+        }
+        for (at, input) in [
+            ("B1", "5"),
+            ("B2", "1"),
+            ("B3", "'5"),
+            ("B4", "TRUE"),
+            ("B5", "8"),
+            ("B6", "2"),
+            ("B8", "=1/0"),
+            ("B9", "4"),
+            ("B10", "-3"),
+            ("B12", "6"),
+            ("C1", "3"),
+            ("C2", "0"),
+            ("C4", "2"),
+            ("C6", "3"),
+            ("C8", "-1"),
+            ("C9", "7"),
+            ("C12", "1"),
+            ("D3", "=\"\""),
+            ("G1", "=SEQUENCE(5)"),
+            ("B20", "1"),
+            ("D20", "3"),
+            ("F20", "7"),
+            ("B21", "x"),
+            ("D21", "y"),
+            ("F21", "z"),
+        ] {
+            t.set(at, input);
+        }
+        let at = |i: usize| format!("Z{}", i + 1);
+        for (i, f) in formulas.iter().enumerate() {
+            t.set(&at(i), f);
+        }
+        let first: Vec<Value> = (0..formulas.len()).map(|i| t.get(&at(i))).collect();
+        // An edit that dirties column E and every formula over it in one pass.
+        t.set("B2", "50");
+        t.set("C8", "4");
+        let second: Vec<Value> = (0..formulas.len()).map(|i| t.get(&at(i))).collect();
+        crate::recalc::DECLINE_WALKS.with(|d| d.set(false));
+        (first, second)
+    };
+    let (walked, copied) = (run(false), run(true));
+    for (i, f) in formulas.iter().enumerate() {
+        assert_eq!(walked.0.get(i), copied.0.get(i), "{f}");
+        assert_eq!(walked.1.get(i), copied.1.get(i), "{f} after the edit");
+    }
+    // The battery reaches the cases it is about.
+    let value = |i: usize| walked.0.get(i).cloned().unwrap_or_default();
+    let n = |f: &str| formulas.iter().position(|x| *x == f).map(value).unwrap_or_default();
+    assert_eq!(n("=MATCH(\"k\",A:A,0)"), Value::Number(11.0));
+    assert_eq!(n("=XLOOKUP(\"apple\",A:A,B:B,\"none\",0,-1)"), Value::Number(4.0));
+    assert_eq!(n("=SUMIFS(B:B,C:C,\">=0\")"), Value::Number(18.0));
+    assert_eq!(n("=SUMIFS(B:B,C:C,\">=-5\")"), Value::Error(CellError::Div0));
+    assert_eq!(n("=COUNTIF(C1:C30,\"\")"), Value::Number(23.0));
+    assert_eq!(n("=COUNTIFS(C1:C12,\">1\",B1:B11,\">1\")"), Value::Error(CellError::Value));
+    assert_eq!(n("=AVERAGEIFS(B:B,C:C,\">100\")"), Value::Error(CellError::Div0));
+}
+
 #[test]
 fn visit_range_declines_when_a_formula_in_the_block_spills_into_it() {
     // The sheet: D1 = SEQUENCE(3) and D4 = 10, and D1 has not been calculated yet when the
