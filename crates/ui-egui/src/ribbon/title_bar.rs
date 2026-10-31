@@ -63,11 +63,6 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                 app.toggle_autosave();
             }
             ui.add_space(6.0);
-            let __k = icon_button_mono(ui, Icon::Home, t.text_dim, "Home", vec2(26.0, ch));
-            control_keytip(app, ui, &__k, "start");
-            if __k.clicked() {
-                app.open_dialog("start", json!({}));
-            }
             if icon_button_mono(ui, Icon::Save, t.text_dim, "Save", vec2(26.0, ch)).clicked()
                 // File operations must include the cell the user is still editing (as the File > Save menu item already does).
                 && app.commit_edit(0, 0, false, false)
