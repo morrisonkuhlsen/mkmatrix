@@ -519,3 +519,75 @@ fn a_rule_with_an_unknown_type_operator_or_error_style_is_refused() {
     assert_eq!(sh.validations.len(), 3);
     assert!(check_validation(&s.doc().unwrap().wb, 0, CellRef::parse("A2").unwrap(), "0").is_some());
 }
+
+/// Every formula of the active workbook holds what a full recalculation of it gives.
+fn assert_matches_full_recalc(s: &Session, what: &str) {
+    let d = s.doc().unwrap();
+    let mut fresh = (*d.wb).clone();
+    mkmatrix_calc::Calc::new().recalc_all(&mut fresh);
+    for (si, sh) in d.wb.sheets.iter().enumerate() {
+        for (c, cell) in sh.cells.iter() {
+            if cell.formula.is_some() {
+                let again = fresh.sheet(si).map(|f| f.value(c)).unwrap_or_default();
+                assert_eq!(sh.value(c), again, "{what}: {} after the sort", c.a1());
+            }
+        }
+    }
+}
+
+/// A sort recalculates what reads the sorted block: incrementally when the block holds only
+/// constants that all stay (the graph and spills can't change), as a structural edit otherwise
+/// (blanks that move, formulas in the block, a spill reaching into it). Either way every formula
+/// ends up as a full recalculation has it, and undo puts the values back.
+#[test]
+fn sorting_recalculates_what_reads_the_block() {
+    let setup = |s: &mut Session, extra: &[(&str, &str)]| {
+        s.new_workbook();
+        let rows: Vec<Json> = (0..12).map(|i| json!([format!("k{}", (i * 7) % 12), (i * 5) % 12, i % 4])).collect();
+        s.execute("range.setValues", json!({"range": "A1", "values": rows})).unwrap();
+        for (cell, input) in [
+            ("D1", "=B1*C1"),
+            ("D2", "=B2*C2"),
+            ("D12", "=B12*C12"),
+            ("E1", "=B1"),
+            ("E2", "=E1+B2"),
+            ("E3", "=E2+B3"),
+            ("F1", "=SUM(B:B)"),
+            ("F2", "=XLOOKUP(\"k3\",A:A,B:B)"),
+            ("F3", "=INDIRECT(\"B\"&2)"),
+            ("F4", "=SUMIFS(B1:B12,C1:C12,\">1\")"),
+            ("F5", "=F2*2"),
+        ]
+        .iter()
+        .chain(extra)
+        {
+            s.execute("cell.set", json!({"cell": cell, "input": input})).unwrap();
+        }
+    };
+    let cases: [(&str, &[(&str, &str)]); 4] = [
+        ("constants only", &[]),
+        ("blanks that move", &[("B4", ""), ("C9", "")]),
+        ("a formula in the block", &[("C5", "=B5+1")]),
+        ("a spill reaching into the block", &[("C14", "=1"), ("A13", "=SEQUENCE(2)")]),
+    ];
+    for (what, extra) in cases {
+        let mut s = Session::new();
+        setup(&mut s, extra);
+        let before = s.doc().unwrap().wb.clone();
+        s.execute("data.sortAscending", json!({"range": "A1:C12", "column": "B"})).unwrap();
+        assert_matches_full_recalc(&s, what);
+        s.execute("data.sortDescending", json!({"range": "A1:C12", "column": "A"})).unwrap();
+        assert_matches_full_recalc(&s, what);
+        // An edit after the sort still reaches the formulas that read the moved values.
+        s.execute("cell.set", json!({"cell": "B3", "input": "100"})).unwrap();
+        assert_matches_full_recalc(&s, what);
+        for _ in 0..3 {
+            s.execute("edit.undo", json!({})).unwrap();
+        }
+        let after = &s.doc().unwrap().wb;
+        for c in ["D1", "E3", "F1", "F2", "F3", "F4"] {
+            let at = CellRef::parse(c).unwrap();
+            assert_eq!(after.sheet(0).unwrap().value(at), before.sheet(0).unwrap().value(at), "{what}: {c} after undo");
+        }
+    }
+}

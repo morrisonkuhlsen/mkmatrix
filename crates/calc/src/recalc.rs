@@ -202,6 +202,24 @@ impl Calc {
         self.run(wb, all, true);
     }
 
+    /// Recalculates what reads `block` after its constants were rearranged among its cells (a
+    /// sort): no formula was added, removed or moved, every cell that held a value still holds
+    /// one (and every empty cell is still empty), and no spill reaches into the block. Then the
+    /// dependency graph stands as it is and no spill is blocked or freed, so only the formulas
+    /// reading the block (and what reads them) are calculated again. The caller checks those
+    /// conditions; anything else goes through [`Calc::cells_changed`] or [`Calc::recalc_all`].
+    pub fn values_moved(&mut self, wb: &mut Workbook, sheet: usize, block: RangeRef) {
+        if wb.calc.mode == CalcMode::Manual {
+            // As for an edit: only the edited formulas themselves would be evaluated, and the
+            // block holds none.
+            return;
+        }
+        let mut seeds = Vec::new();
+        self.graph.dependents_of_range(sheet, block, &mut seeds);
+        let dirty = self.dirty_closure(wb, &seeds);
+        self.run(wb, dirty, false);
+    }
+
     /// Updates the graph for cells whose content changed and recalculates what depends on them.
     pub fn cells_changed(&mut self, wb: &mut Workbook, changed: &[Key]) {
         let mut cleared: Vec<(usize, RangeRef)> = Vec::new();
@@ -301,13 +319,19 @@ impl Calc {
     fn dirty_closure(&self, _wb: &Workbook, seeds: &[Key]) -> Vec<Key> {
         let mut seen: HashSet<Key> = HashSet::default();
         let mut queue: VecDeque<Key> = VecDeque::new();
+        let mut deps = Vec::new();
         for k in seeds {
-            if self.graph.nodes.contains_key(k) && seen.insert(*k) {
-                queue.push_back(*k);
+            // A formula seed is queued: its dependents are found when the queue reaches it, once
+            // however many times it is listed.
+            if self.graph.nodes.contains_key(k) {
+                if seen.insert(*k) {
+                    queue.push_back(*k);
+                }
+                continue;
             }
-            let mut deps = Vec::new();
+            deps.clear();
             self.graph.dependents(k.0, k.1, &mut deps);
-            for d in deps {
+            for d in deps.drain(..) {
                 if seen.insert(d) {
                     queue.push_back(d);
                 }
@@ -318,7 +342,6 @@ impl Calc {
                 queue.push_back(*k);
             }
         }
-        let mut deps = Vec::new();
         while let Some(k) = queue.pop_front() {
             deps.clear();
             self.graph.dependents(k.0, k.1, &mut deps);
