@@ -17,6 +17,7 @@ mod format;
 mod lambda;
 mod reference_fns;
 mod special;
+mod stream;
 
 use array::map_unary;
 pub use array::{binary_values, zip2};
@@ -110,9 +111,10 @@ pub trait Host {
     fn used_range(&mut self, sheet: usize) -> Option<RangeRef> {
         self.workbook().sheet(sheet).and_then(|s| s.used_range())
     }
-    /// Calls `f` on each stored value of a block, row-major (formula cells evaluated first),
-    /// until `f` returns false. `false` when this host can't (callers use `range_values`).
-    fn visit_range(&mut self, _sheet: usize, _range: RangeRef, _f: &mut dyn FnMut(&Value) -> bool) -> bool {
+    /// Calls `f` on each stored cell of a block with its value, row-major (formula cells
+    /// evaluated first), until `f` returns false. Blank cells in between are skipped. `false`
+    /// when this host can't (callers use `range_values`).
+    fn visit_range(&mut self, _sheet: usize, _range: RangeRef, _f: &mut dyn FnMut(CellRef, &Value) -> bool) -> bool {
         false
     }
     /// While a formula is calculated on demand inside another one: `stack_position()` where the
@@ -267,6 +269,18 @@ impl<'h> Evaluator<'h> {
         if a.range.is_single() {
             return self.host.cell_value(a.sheet, a.range.start);
         }
+        let range = match self.area_extent(a) {
+            Ok(range) => range,
+            Err(e) => return Value::Error(e),
+        };
+        let (h, w) = (range.height() as usize, range.width() as usize);
+        let data = self.host.range_values(a.sheet, range);
+        Array::new(h, w, data).map(Value::from).unwrap_or(Value::Error(CellError::Value))
+    }
+
+    /// The block `area_value` reads for a multi-cell area: the area itself, or the part of it
+    /// inside the sheet's used range; `#NUM!` when that is over `MAX_CELLS`.
+    pub fn area_extent(&mut self, a: &Area) -> Result<RangeRef, CellError> {
         // A reference keeps its size, so the array has its shape and its blanks count
         // (`=A1:A10`, `SUMPRODUCT(--(A1:A10=""))`).
         let cells = u64::from(a.range.height()) * u64::from(a.range.width());
@@ -275,12 +289,10 @@ impl<'h> Evaluator<'h> {
         let to_edge = a.range.end.row == MAX_ROWS - 1 || a.range.end.col == MAX_COLS - 1;
         let full_size = cells <= FULL_SIZE_CELLS || (!to_edge && cells <= FULL_SIZE_BOUNDED_CELLS);
         let range = if full_size { a.range } else { self.trim(a) };
-        let (h, w) = (range.height() as usize, range.width() as usize);
-        if (h as u64) * (w as u64) > MAX_CELLS {
-            return Value::Error(CellError::Num);
+        if u64::from(range.height()) * u64::from(range.width()) > MAX_CELLS {
+            return Err(CellError::Num);
         }
-        let data = self.host.range_values(a.sheet, range);
-        Array::new(h, w, data).map(Value::from).unwrap_or(Value::Error(CellError::Value))
+        Ok(range)
     }
 
     /// Trims the bottom/right of an area to the sheet's used range (keeps the top-left so
