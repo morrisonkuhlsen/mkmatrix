@@ -2782,6 +2782,7 @@ dependencies = [
  "mkmatrix-functions",
  "mkmatrix-model",
  "mkmatrix-numfmt",
+ "rayon",
 ]
 
 [[package]]
