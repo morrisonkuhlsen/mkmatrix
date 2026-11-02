@@ -2,47 +2,185 @@
 //!
 //! Cells live in bands of 64 rows, each band behind an `Arc`. Cloning a store (an undo snapshot)
 //! copies only the band pointers; editing a cell copies just its band.
+//!
+//! Inside a band, cells are packed by column: a column holds a bitmap of its stored rows and its
+//! cells in row order, one array per band instead of a tree node per cell. A cell's place in the
+//! array is the number of stored rows above it.
 
 use std::collections::BTreeMap;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use mkmatrix_core::{CellRef, RangeRef};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::cell::Cell;
 
 const BAND: u32 = 64;
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-struct Band {
-    /// row → (col → cell)
-    rows: BTreeMap<u32, BTreeMap<u32, Cell>>,
-    /// The first and last column holding a cell, worked out when `used_range` first asks and
-    /// forgotten when a cell is added or removed; derived, so neither saved nor compared.
-    #[serde(skip)]
-    cols: OnceLock<Option<(u32, u32)>>,
+/// One column's cells in one band.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct Column {
+    col: u32,
+    /// Bit `i` is set when the band's row `i` holds a cell.
+    rows: u64,
+    /// The stored cells, top to bottom: as many as `rows` has bits set.
+    cells: Vec<Cell>,
 }
 
-impl PartialEq for Band {
-    fn eq(&self, other: &Band) -> bool {
-        self.rows == other.rows
+impl Column {
+    /// Where the cell of band row `bit` is (or would go) in `cells`.
+    fn slot(&self, bit: u32) -> usize {
+        if self.rows == u64::MAX { bit as usize } else { (self.rows & ((1u64 << bit) - 1)).count_ones() as usize }
     }
+    fn has(&self, bit: u32) -> bool {
+        (self.rows >> bit) & 1 == 1
+    }
+    fn get(&self, bit: u32) -> Option<&Cell> {
+        if self.has(bit) { self.cells.get(self.slot(bit)) } else { None }
+    }
+}
+
+/// The columns holding cells, in column order; a column with no cells is removed.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct Band {
+    columns: Vec<Column>,
 }
 
 impl Band {
-    fn col_bounds(&self) -> Option<(u32, u32)> {
-        *self.cols.get_or_init(|| {
-            let first = self.rows.values().filter_map(|cols| cols.keys().next()).min()?;
-            let last = self.rows.values().filter_map(|cols| cols.keys().next_back()).max()?;
-            Some((*first, *last))
-        })
+    fn column(&self, col: u32) -> Option<&Column> {
+        self.columns.binary_search_by_key(&col, |x| x.col).ok().and_then(|i| self.columns.get(i))
+    }
+    fn get(&self, row: u32, col: u32) -> Option<&Cell> {
+        self.column(col)?.get(row % BAND)
+    }
+    /// The columns in `c0..=c1`.
+    fn columns_in(&self, c0: u32, c1: u32) -> &[Column] {
+        let from = self.columns.partition_point(|x| x.col < c0);
+        let to = self.columns.partition_point(|x| x.col <= c1);
+        self.columns.get(from..to).unwrap_or_default()
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+/// Cells of some bands inside a block, row-major.
+struct Cells<'a, I> {
+    bands: I,
+    block: (u32, u32, u32, u32),
+    /// The current band's columns inside the block, and its first row.
+    columns: &'a [Column],
+    base: u32,
+    /// The band rows inside the block still to visit, the current one, and the next column of it.
+    rows: u64,
+    bit: u32,
+    next: usize,
+}
+
+impl<'a, I: Iterator<Item = (u32, &'a Band)>> Cells<'a, I> {
+    /// `block` is first row, last row, first column, last column.
+    fn new(bands: I, block: (u32, u32, u32, u32)) -> Self {
+        Cells { bands, block, columns: &[], base: 0, rows: 0, bit: 0, next: 0 }
+    }
+}
+
+impl<'a, I: Iterator<Item = (u32, &'a Band)>> Iterator for Cells<'a, I> {
+    type Item = (CellRef, &'a Cell);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            while let Some(column) = self.columns.get(self.next) {
+                self.next += 1;
+                if let Some(cell) = column.get(self.bit) {
+                    return Some((CellRef::new(self.base + self.bit, column.col), cell));
+                }
+            }
+            if self.rows != 0 {
+                self.bit = self.rows.trailing_zeros();
+                self.rows &= self.rows - 1;
+                self.next = 0;
+                continue;
+            }
+            let (key, band) = self.bands.next()?;
+            let (r0, r1, c0, c1) = self.block;
+            self.base = key.saturating_mul(BAND);
+            self.columns = band.columns_in(c0, c1);
+            self.next = self.columns.len();
+            self.rows = 0;
+            if r0 <= self.base.saturating_add(BAND - 1) && r1 >= self.base {
+                let top = r0.saturating_sub(self.base);
+                let bottom = (r1 - self.base).min(BAND - 1);
+                let inside = (u64::MAX << top) & (u64::MAX >> (BAND - 1 - bottom));
+                self.rows = self.columns.iter().fold(0, |all, column| all | column.rows) & inside;
+            }
+        }
+    }
+}
+
+/// A whole band's cells, row-major.
+fn band_cells(key: u32, band: &Band) -> impl Iterator<Item = (CellRef, &Cell)> {
+    Cells::new(std::iter::once((key, band)), (0, u32::MAX, 0, u32::MAX))
+}
+
+/// How a store is saved: `{"bands":{"0":{"rows":{"4":{"0":cell}}}},"len":1}`.
+#[derive(Serialize, Deserialize)]
+struct SavedBand<C> {
+    rows: BTreeMap<u32, BTreeMap<u32, C>>,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct CellStore {
     bands: BTreeMap<u32, Arc<Band>>,
     len: usize,
+    /// Cells a file placed outside the sheet grid: left out when read, reported by `rebuild`.
+    dropped_on_read: usize,
+}
+
+impl PartialEq for CellStore {
+    fn eq(&self, other: &CellStore) -> bool {
+        self.len == other.len && self.bands == other.bands
+    }
+}
+
+impl Serialize for CellStore {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        #[derive(Serialize)]
+        struct Saved<'a> {
+            bands: BTreeMap<u32, SavedBand<&'a Cell>>,
+            len: usize,
+        }
+        let mut bands: BTreeMap<u32, SavedBand<&Cell>> = BTreeMap::new();
+        for (c, cell) in self.iter() {
+            bands.entry(c.row / BAND).or_insert_with(|| SavedBand { rows: BTreeMap::new() }).rows.entry(c.row).or_default().insert(c.col, cell);
+        }
+        Saved { bands, len: self.len }.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for CellStore {
+    /// Band keys and the count a file carries are derived state and aren't trusted: each cell goes
+    /// where its row says (#1008).
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<CellStore, D::Error> {
+        #[derive(Deserialize)]
+        struct Saved {
+            bands: BTreeMap<u32, SavedBand<Cell>>,
+            #[serde(rename = "len")]
+            _len: usize,
+        }
+        let saved = Saved::deserialize(deserializer)?;
+        let mut store = CellStore::new();
+        for band in saved.bands.into_values() {
+            for (row, cols) in band.rows {
+                for (col, cell) in cols {
+                    let at = CellRef::new(row, col);
+                    if at.is_valid() {
+                        store.set(at, cell);
+                    } else {
+                        store.dropped_on_read += 1;
+                    }
+                }
+            }
+        }
+        Ok(store)
+    }
 }
 
 impl CellStore {
@@ -56,15 +194,17 @@ impl CellStore {
         self.len == 0
     }
     pub fn get(&self, c: CellRef) -> Option<&Cell> {
-        self.bands.get(&(c.row / BAND))?.rows.get(&c.row)?.get(&c.col)
+        self.bands.get(&(c.row / BAND))?.get(c.row, c.col)
     }
     /// Mutable access (copies the band if shared).
     pub fn get_mut(&mut self, c: CellRef) -> Option<&mut Cell> {
         let band = self.bands.get_mut(&(c.row / BAND))?;
-        if !band.rows.get(&c.row).is_some_and(|r| r.contains_key(&c.col)) {
-            return None;
-        }
-        Arc::make_mut(band).rows.get_mut(&c.row)?.get_mut(&c.col)
+        band.get(c.row, c.col)?;
+        let band = Arc::make_mut(band);
+        let i = band.columns.binary_search_by_key(&c.col, |x| x.col).ok()?;
+        let column = band.columns.get_mut(i)?;
+        let slot = column.slot(c.row % BAND);
+        column.cells.get_mut(slot)
     }
     /// Stores a cell; a default (empty, unstyled) cell is removed instead.
     pub fn set(&mut self, c: CellRef, cell: Cell) {
@@ -73,90 +213,82 @@ impl CellStore {
             return;
         }
         let band = Arc::make_mut(self.bands.entry(c.row / BAND).or_default());
-        if band.rows.entry(c.row).or_default().insert(c.col, cell).is_none() {
-            band.cols = OnceLock::new();
+        let i = match band.columns.binary_search_by_key(&c.col, |x| x.col) {
+            Ok(i) => i,
+            Err(i) => {
+                band.columns.insert(i, Column { col: c.col, ..Column::default() });
+                i
+            }
+        };
+        let Some(column) = band.columns.get_mut(i) else { return };
+        let bit = c.row % BAND;
+        let slot = column.slot(bit);
+        if column.has(bit) {
+            if let Some(old) = column.cells.get_mut(slot) {
+                *old = cell;
+            }
+        } else {
+            column.cells.insert(slot, cell);
+            column.rows |= 1u64 << bit;
             self.len += 1;
         }
     }
-    /// Puts every cell in the band its row says and recounts the length — serialized band keys
-    /// and the cached count are derived state, and the ones a file carries are not trusted. Cells
-    /// outside the sheet grid are dropped; returns how many (#1008).
+    /// Drops the cells outside the sheet grid, those left out when the store was read included;
+    /// returns how many (#1008).
     pub fn rebuild(&mut self) -> usize {
-        let mut out = CellStore::new();
-        let mut dropped = 0;
-        for (_, band) in std::mem::take(&mut self.bands) {
-            for (row, cols) in band.rows.iter() {
-                for (col, cell) in cols.iter() {
-                    let at = CellRef::new(*row, *col);
-                    if at.is_valid() {
-                        out.set(at, cell.clone());
-                    } else {
-                        dropped += 1;
-                    }
-                }
-            }
+        let outside: Vec<CellRef> = self.iter().filter(|(c, _)| !c.is_valid()).map(|(c, _)| c).collect();
+        let dropped = std::mem::take(&mut self.dropped_on_read) + outside.len();
+        for c in outside {
+            self.remove(c);
         }
-        *self = out;
         dropped
     }
 
     pub fn remove(&mut self, c: CellRef) -> Option<Cell> {
         let key = c.row / BAND;
-        let band = self.bands.get_mut(&key)?;
-        if !band.rows.get(&c.row).is_some_and(|r| r.contains_key(&c.col)) {
-            return None;
+        let shared = self.bands.get_mut(&key)?;
+        shared.get(c.row, c.col)?;
+        let band = Arc::make_mut(shared);
+        let i = band.columns.binary_search_by_key(&c.col, |x| x.col).ok()?;
+        let column = band.columns.get_mut(i)?;
+        let bit = c.row % BAND;
+        let slot = column.slot(bit);
+        let old = column.cells.remove(slot);
+        column.rows &= !(1u64 << bit);
+        if column.cells.is_empty() {
+            band.columns.remove(i);
         }
-        let b = Arc::make_mut(band);
-        b.cols = OnceLock::new();
-        let row = b.rows.get_mut(&c.row)?;
-        let old = row.remove(&c.col);
-        if row.is_empty() {
-            b.rows.remove(&c.row);
-        }
-        if b.rows.is_empty() {
+        if band.columns.is_empty() {
             self.bands.remove(&key);
         }
-        if old.is_some() {
-            self.len -= 1;
-        }
-        old
+        self.len -= 1;
+        Some(old)
     }
-    /// Cells in `r`, row-major. Efficient for sparse data: skips empty bands and rows.
+    /// Cells in `r`, row-major. Efficient for sparse data: skips empty bands and columns.
     pub fn iter_range(&self, r: RangeRef) -> impl Iterator<Item = (CellRef, &Cell)> + '_ {
         let (b0, b1) = (r.start.row / BAND, r.end.row / BAND);
-        self.bands.range(b0..=b1).flat_map(move |(_, band)| {
-            band.rows
-                .range(r.start.row..=r.end.row)
-                .flat_map(move |(row, cols)| cols.range(r.start.col..=r.end.col).map(move |(col, cell)| (CellRef::new(*row, *col), cell)))
-        })
+        Cells::new(self.bands.range(b0..=b1).map(|(k, b)| (*k, &**b)), (r.start.row, r.end.row, r.start.col, r.end.col))
     }
     pub fn iter(&self) -> impl Iterator<Item = (CellRef, &Cell)> + '_ {
-        self.bands
-            .values()
-            .flat_map(|band| band.rows.iter().flat_map(|(row, cols)| cols.iter().map(move |(col, cell)| (CellRef::new(*row, *col), cell))))
+        Cells::new(self.bands.iter().map(|(k, b)| (*k, &**b)), (0, u32::MAX, 0, u32::MAX))
     }
     /// Cells of one row in `c0..=c1`.
     pub fn row(&self, row: u32, c0: u32, c1: u32) -> impl Iterator<Item = (u32, &Cell)> + '_ {
-        self.bands.get(&(row / BAND)).and_then(|b| b.rows.get(&row)).into_iter().flat_map(move |cols| cols.range(c0..=c1).map(|(c, cell)| (*c, cell)))
+        let columns = self.bands.get(&(row / BAND)).map_or(&[][..], |b| b.columns_in(c0, c1));
+        columns.iter().filter_map(move |column| Some((column.col, column.get(row % BAND)?)))
     }
     /// Smallest range containing every stored cell, `None` when empty.
     pub fn used_range(&self) -> Option<RangeRef> {
-        let first_band = self.bands.values().next()?;
-        let last_band = self.bands.values().next_back()?;
-        let r0 = *first_band.rows.keys().next()?;
-        let r1 = *last_band.rows.keys().next_back()?;
-        let mut c0 = u32::MAX;
-        let mut c1 = 0;
-        for (a, b) in self.bands.values().filter_map(|band| band.col_bounds()) {
-            c0 = c0.min(a);
-            c1 = c1.max(b);
-        }
-        if c0 == u32::MAX {
-            return None;
-        }
+        let stored = |band: &Band| band.columns.iter().fold(0u64, |all, column| all | column.rows);
+        let (first_key, first) = self.bands.iter().next()?;
+        let (last_key, last) = self.bands.iter().next_back()?;
+        let r0 = first_key.saturating_mul(BAND).saturating_add(stored(first).trailing_zeros());
+        let r1 = last_key.saturating_mul(BAND).saturating_add((BAND - 1).saturating_sub(stored(last).leading_zeros()));
+        let c0 = self.bands.values().filter_map(|b| b.columns.first()).map(|x| x.col).min()?;
+        let c1 = self.bands.values().filter_map(|b| b.columns.last()).map(|x| x.col).max()?;
         Some(RangeRef::new(CellRef::new(r0, c0), CellRef::new(r1, c1)))
     }
-    /// Last stored row in column `col` at or above `below_or_at` (for Ctrl+arrow navigation).
+    /// Whether `c` holds a value or a formula (a cell with only a style does not).
     pub fn has(&self, c: CellRef) -> bool {
         self.get(c).is_some_and(Cell::has_value)
     }
@@ -172,27 +304,22 @@ impl CellStore {
     /// fall through to `spill` in `value_ref`, so `last_contiguous_nonempty` asks `value_ref`
     /// about the row where this run stops.
     ///
-    /// Walks each band's row map with `BTreeMap::range` (one in-order pass per band) instead of
-    /// one `get` per row, so a long, densely-populated run costs roughly one tree-traversal step
-    /// per row rather than one binary search per row.
+    /// Looks each band's column up once, however long the run.
     pub fn contiguous_value_run(&self, from: CellRef, cap: u32) -> Option<u32> {
         let mut last = None;
         let mut expect = from.row;
         while expect <= cap {
-            let band_key = expect / BAND;
-            let Some(band) = self.bands.get(&band_key) else { break };
-            let band_hi = ((band_key + 1) * BAND - 1).min(cap);
-            let mut advanced = false;
-            for (r, cols) in band.rows.range(expect..=band_hi) {
-                if *r != expect || cols.get(&from.col).is_none_or(|c| c.value.is_empty()) {
+            let key = expect / BAND;
+            let Some(column) = self.bands.get(&key).and_then(|b| b.column(from.col)) else { break };
+            let base = key.saturating_mul(BAND);
+            let bottom = cap.min(base.saturating_add(BAND - 1));
+            while expect <= bottom {
+                if column.get(expect - base).is_none_or(|c| c.value.is_empty()) {
                     return last;
                 }
                 last = Some(expect);
-                expect += 1;
-                advanced = true;
-            }
-            if !advanced {
-                break;
+                let Some(next) = expect.checked_add(1) else { return last };
+                expect = next;
             }
         }
         last
@@ -213,28 +340,24 @@ impl CellStore {
             {
                 continue;
             }
-            let (a, b) = (a.map_or(&empty, |x| x), b.map_or(&empty, |x| x));
-            for (row, cols) in &a.rows {
-                for (col, cell) in cols {
-                    if b.rows.get(row).and_then(|r| r.get(col)) != Some(cell) {
-                        out.push(CellRef::new(*row, *col));
-                    }
+            let (a, b): (&Band, &Band) = (a.map_or(&empty, |x| x), b.map_or(&empty, |x| x));
+            for (c, cell) in band_cells(k, a) {
+                if b.get(c.row, c.col) != Some(cell) {
+                    out.push(c);
                 }
             }
-            for (row, cols) in &b.rows {
-                for col in cols.keys() {
-                    if !a.rows.get(row).is_some_and(|r| r.contains_key(col)) {
-                        out.push(CellRef::new(*row, *col));
-                    }
+            for (c, _) in band_cells(k, b) {
+                if a.get(c.row, c.col).is_none() {
+                    out.push(c);
                 }
             }
         }
         out
     }
     /// Approximate heap storage kept alive by this snapshot's bands that `newer` no longer
-    /// shares. This is for bounding Undo history, not for reporting process memory: BTreeMap
-    /// nodes and allocator overhead vary by platform. Shared formulas and values are counted
-    /// only when the newer band no longer holds the same Arc.
+    /// shares. This is for bounding Undo history, not for reporting process memory: allocator
+    /// overhead varies by platform. Shared formulas and values are counted only when the newer
+    /// band no longer holds the same Arc.
     pub fn retained_bytes_against(&self, newer: &CellStore) -> usize {
         use std::mem::size_of;
 
@@ -245,36 +368,34 @@ impl CellStore {
                 continue;
             }
             bytes = bytes.saturating_add(size_of::<Band>());
-            for (row, cols) in &band.rows {
-                bytes = bytes.saturating_add(size_of::<u32>() + 3 * size_of::<usize>());
-                for (col, cell) in cols {
-                    // Cells and BTreeMap nodes are duplicated with a cloned band even when
-                    // their formula/value Arcs are still shared with the next snapshot.
-                    bytes = bytes.saturating_add(size_of::<u32>() + size_of::<Cell>() + 3 * size_of::<usize>());
-                    let next_cell = next.and_then(|b| b.rows.get(row)).and_then(|r| r.get(col));
-                    if let Some(formula) = &cell.formula
-                        && !next_cell.and_then(|c| c.formula.as_ref()).is_some_and(|f| Arc::ptr_eq(f, formula))
+            for column in &band.columns {
+                // A cloned band duplicates the array of cells even when their formula/value Arcs
+                // are still shared with the next snapshot.
+                bytes = bytes.saturating_add(size_of::<Column>()).saturating_add(column.cells.capacity().saturating_mul(size_of::<Cell>()));
+            }
+            for (at, cell) in band_cells(*key, band) {
+                let next_cell = next.and_then(|b| b.get(at.row, at.col));
+                if let Some(formula) = &cell.formula
+                    && !next_cell.and_then(|c| c.formula.as_ref()).is_some_and(|f| Arc::ptr_eq(f, formula))
+                {
+                    bytes = bytes.saturating_add(size_of::<crate::cell::Formula>() + formula.text.len());
+                    if let Some(expr) = &formula.expr {
+                        expr.walk(&mut |_| bytes = bytes.saturating_add(size_of::<mkmatrix_formula::Expr>()));
+                    }
+                }
+                match &cell.value {
+                    mkmatrix_core::Value::Text(text)
+                        if !next_cell.and_then(|c| c.value.as_text()).is_some_and(|t| std::ptr::eq(t, text.as_ref())) =>
                     {
-                        bytes = bytes.saturating_add(size_of::<crate::cell::Formula>() + formula.text.len());
-                        if let Some(expr) = &formula.expr {
-                            expr.walk(&mut |_| bytes = bytes.saturating_add(size_of::<mkmatrix_formula::Expr>()));
-                        }
+                        bytes = bytes.saturating_add(text.len());
                     }
-                    match &cell.value {
-                        mkmatrix_core::Value::Text(text)
-                            if !next_cell.and_then(|c| c.value.as_text()).is_some_and(|t| std::ptr::eq(t, text.as_ref())) =>
-                        {
-                            bytes = bytes.saturating_add(text.len());
-                        }
-                        mkmatrix_core::Value::Array(array)
-                            if !next_cell.is_some_and(|c| matches!(&c.value, mkmatrix_core::Value::Array(a) if Arc::ptr_eq(a, array))) =>
-                        {
-                            bytes = bytes.saturating_add(
-                                size_of::<mkmatrix_core::Array>() + array.data.len().saturating_mul(size_of::<mkmatrix_core::Value>()),
-                            );
-                        }
-                        _ => {}
+                    mkmatrix_core::Value::Array(array)
+                        if !next_cell.is_some_and(|c| matches!(&c.value, mkmatrix_core::Value::Array(a) if Arc::ptr_eq(a, array))) =>
+                    {
+                        bytes = bytes
+                            .saturating_add(size_of::<mkmatrix_core::Array>() + array.data.len().saturating_mul(size_of::<mkmatrix_core::Value>()));
                     }
+                    _ => {}
                 }
             }
         }
@@ -418,6 +539,138 @@ mod tests {
         let json = serde_json::to_string(&snapshot).unwrap();
         let back: CellStore = serde_json::from_str(&json).unwrap();
         assert_eq!(back.used_range(), Some(RangeRef::new(c(5, 1), c(70, 3))));
+    }
+
+    /// A store checked step by step against the plainest model of what it promises.
+    #[test]
+    fn answers_as_a_plain_map_does() {
+        use crate::style::StyleId;
+        use std::collections::BTreeMap;
+
+        let mut state = 0x9E37_79B9_7F4A_7C15u64;
+        let mut next = move |n: u32| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state % u64::from(n)) as u32
+        };
+        for round in 0..60 {
+            // Dense blocks, tall columns, wide rows; a band's edges are always in reach.
+            let (rows, cols) = [(70, 8), (400, 3), (5, 300), (2000, 2000)][round % 4];
+            let mut s = CellStore::new();
+            let mut m: BTreeMap<(u32, u32), Cell> = BTreeMap::new();
+            let mut snapshots: Vec<(CellStore, BTreeMap<(u32, u32), Cell>)> = Vec::new();
+            for _ in 0..1500 {
+                let at = c(next(rows), next(cols));
+                match next(12) {
+                    0..=5 => {
+                        let cell = Cell::value(Value::Number(f64::from(next(1000))));
+                        s.set(at, cell.clone());
+                        m.insert((at.row, at.col), cell);
+                    }
+                    6 => {
+                        let cell = Cell { value: Value::Empty, formula: None, style: StyleId(1 + next(3)) };
+                        s.set(at, cell.clone());
+                        m.insert((at.row, at.col), cell);
+                    }
+                    7 => {
+                        s.set(at, Cell::default());
+                        m.remove(&(at.row, at.col));
+                    }
+                    8 => assert_eq!(s.remove(at), m.remove(&(at.row, at.col))),
+                    // A stored cell emptied in place stays stored.
+                    9 => {
+                        if let Some(cell) = s.get_mut(at) {
+                            cell.value = Value::Empty;
+                        }
+                        if let Some(cell) = m.get_mut(&(at.row, at.col)) {
+                            cell.value = Value::Empty;
+                        }
+                    }
+                    10 => {
+                        if snapshots.len() < 8 {
+                            snapshots.push((s.clone(), m.clone()));
+                        }
+                    }
+                    _ => assert_eq!(s.get(at), m.get(&(at.row, at.col))),
+                }
+                assert_eq!(s.len(), m.len());
+            }
+            let sees = |s: &CellStore, m: &BTreeMap<(u32, u32), Cell>| {
+                assert_eq!(s.len(), m.len());
+                assert!(s.iter().map(|(at, cell)| ((at.row, at.col), cell)).eq(m.iter().map(|(k, v)| (*k, v))), "iter, round {round}");
+                let used = m.keys().fold(None::<(u32, u32, u32, u32)>, |u, &(r, col)| {
+                    Some(u.map_or((r, r, col, col), |(a, b, x, y)| (a.min(r), b.max(r), x.min(col), y.max(col))))
+                });
+                assert_eq!(s.used_range().map(|u| (u.start.row, u.end.row, u.start.col, u.end.col)), used);
+            };
+            sees(&s, &m);
+            // The snapshots haven't moved, and comparing with each finds what changed.
+            for (snap, was) in &snapshots {
+                sees(snap, was);
+                let mut found = snap.diff(&s);
+                found.sort_unstable();
+                let mut expect: Vec<CellRef> = was.keys().chain(m.keys()).filter(|k| was.get(k) != m.get(k)).map(|&(r, col)| c(r, col)).collect();
+                expect.sort_unstable();
+                expect.dedup();
+                assert_eq!(found, expect);
+            }
+            for _ in 0..40 {
+                let r = RangeRef::new(c(next(rows + 70), next(cols + 3)), c(next(rows + 70), next(cols + 3)));
+                let got: Vec<_> = s.iter_range(r).map(|(at, cell)| (at, cell.clone())).collect();
+                let want: Vec<_> = m.iter().filter(|(k, _)| r.contains(c(k.0, k.1))).map(|(k, v)| (c(k.0, k.1), v.clone())).collect();
+                assert_eq!(got, want, "iter_range {r:?}");
+                let row = next(rows);
+                let (c0, c1) = (r.start.col, r.end.col);
+                let got: Vec<_> = s.row(row, c0, c1).map(|(col, cell)| (col, cell.clone())).collect();
+                let want: Vec<_> = m.iter().filter(|(k, _)| k.0 == row && k.1 >= c0 && k.1 <= c1).map(|(k, v)| (k.1, v.clone())).collect();
+                assert_eq!(got, want, "row {row}");
+                let (from, cap) = (c(next(rows), next(cols)), next(rows + 70));
+                let filled = |r: u32| m.get(&(r, from.col)).is_some_and(|x| !x.value.is_empty());
+                let want = (from.row..=cap).take_while(|r| filled(*r)).last();
+                assert_eq!(s.contiguous_value_run(from, cap), want, "run from {from:?} to {cap}");
+            }
+            // A save and a read give the same store, but for cells emptied in place: reading goes
+            // through `set`, which doesn't store a blank cell.
+            let back: CellStore = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+            let mut kept = CellStore::new();
+            for (at, cell) in s.iter() {
+                kept.set(at, cell.clone());
+            }
+            assert_eq!(back, kept);
+        }
+    }
+
+    #[test]
+    fn the_saved_form_is_unchanged() {
+        let mut s = CellStore::new();
+        s.set(c(70, 2), Cell::value(1.0.into()));
+        s.set(c(4, 0), Cell::value(2.0.into()));
+        s.set(c(4, 1), Cell::value(3.0.into()));
+        let cell = |v: &str| format!(r#"{{"value":{v},"formula":null,"style":0}}"#);
+        let value = serde_json::to_value(&s).unwrap();
+        let number = |n: f64| serde_json::to_value(Value::Number(n)).unwrap().to_string();
+        let expect = format!(
+            r#"{{"bands":{{"0":{{"rows":{{"4":{{"0":{},"1":{}}}}}}},"1":{{"rows":{{"70":{{"2":{}}}}}}}}},"len":3}}"#,
+            cell(&number(2.0)),
+            cell(&number(3.0)),
+            cell(&number(1.0)),
+        );
+        assert_eq!(value, serde_json::from_str::<serde_json::Value>(&expect).unwrap());
+        assert_eq!(serde_json::from_str::<CellStore>(&expect).unwrap(), s);
+    }
+
+    #[test]
+    fn a_file_cannot_place_cells_or_forge_the_count() {
+        let cell = serde_json::to_string(&Cell { style: crate::style::StyleId(7), ..Cell::default() }).unwrap();
+        let json = format!(r#"{{"bands":{{"9":{{"rows":{{"4":{{"0":{cell}}},"1048576":{{"0":{cell}}},"5":{{"16384":{cell}}}}}}}}},"len":99}}"#);
+        let mut s: CellStore = serde_json::from_str(&json).unwrap();
+        assert_eq!(s.len(), 1);
+        assert!(s.get(c(4, 0)).is_some());
+        assert_eq!(s.rebuild(), 2);
+        assert_eq!(s.rebuild(), 0);
+        assert!(s.remove(c(4, 0)).is_some());
+        assert_eq!(s.len(), 0);
     }
 
     #[test]
