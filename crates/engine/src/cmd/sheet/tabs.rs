@@ -113,7 +113,7 @@ pub(super) fn rename_sheet(s: &mut Session, p: &Json) -> Result<Json> {
                 if let Some(e) = f.expr() {
                     let ne = mkmatrix_formula::adjust::rename_sheet(e, &old, &name);
                     let text = mkmatrix_formula::print(&ne);
-                    if text != f.text
+                    if text != f.text()
                         && let Some(cell) = sh.cells.get_mut(c)
                     {
                         cell.formula = Some(Arc::new(mkmatrix_model::Formula::from_expr(ne)));

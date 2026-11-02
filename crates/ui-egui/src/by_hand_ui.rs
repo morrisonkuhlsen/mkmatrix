@@ -24,7 +24,7 @@ fn active_formula(app: &SheetApp) -> Option<(String, String)> {
     let sh = d.wb.active()?;
     let at = crate::formula_bar::active_spill_anchor(app).unwrap_or(d.selection.active);
     let f = sh.cell(at)?.formula.as_ref()?;
-    Some((at.a1(), format!("={}", f.text)))
+    Some((at.a1(), format!("={}", f.text())))
 }
 
 /// Draws the panel when it is open (View › Calculation by Hand, or Σ on a selected matrix).

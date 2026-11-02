@@ -2551,3 +2551,30 @@ fn a_big_batch_unblocks_and_blocks_a_spill_as_a_single_edit_does() {
     assert_eq!(t.get("B2"), Value::Error(CellError::Spill));
     assert_eq!(t.get("D1"), Value::Error(CellError::Ref));
 }
+
+#[test]
+fn a_shared_tree_reads_what_its_moved_copy_reads() {
+    let mut wb = Workbook::new();
+    wb.sheets.push(mkmatrix_model::Sheet::new("Two").into());
+    for text in [
+        "A1*B1+$C$1+A$2+$B3",
+        "SUM(A1:B9)+SUM($A$1:A5)",
+        "SUM(A:A)+SUM(3:4)+SUM($B:C)",
+        "Two!A1+Sheet1:Two!B2:C3",
+        "SUMIF(A1:A5,\">1\",B1)+SUMIF(A1:B2,1,D7:D9)",
+        "SUM(A1:INDEX(B1:B9,2))",
+        "INDIRECT(\"A1\")+OFFSET(A1,1,1)",
+        "Name1+1",
+        "\"A1\"&1",
+    ] {
+        let tree = mkmatrix_formula::parse(text).unwrap();
+        for (rows, cols) in [(0, 0), (1, 0), (0, 1), (7, 3), (500_000, 200)] {
+            let moved = mkmatrix_formula::adjust::shift_relative(tree.clone(), rows, cols);
+            let (want, want_dynamic) = crate::eval::precedents(&wb, 0, &moved);
+            let (got, got_dynamic) = crate::eval::precedents_moved(&wb, 0, &tree, rows, cols);
+            let show = |a: &[crate::eval::Area]| a.iter().map(|x| (x.sheet, x.range)).collect::<Vec<_>>();
+            assert_eq!(show(&got), show(&want), "{text} moved by {rows}, {cols}");
+            assert_eq!(got_dynamic, want_dynamic, "{text} moved by {rows}, {cols}");
+        }
+    }
+}

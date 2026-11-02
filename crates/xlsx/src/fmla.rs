@@ -10,7 +10,7 @@ pub fn to_file(f: &Formula) -> String {
         // Most formulas have nothing the file spells differently: print them without copying.
         Some(e) if !needs_file_spelling(&e) => mkmatrix_formula::print(&e),
         Some(e) => expr_to_file(Expr::clone(&e)),
-        None => f.text.clone(),
+        None => f.text().into_owned(),
     }
 }
 
@@ -229,13 +229,13 @@ mod tests {
     #[test]
     fn mx_functions_take_excel_names_in_files() {
         // Typed under either name, shown under the MX. one.
-        assert_eq!(Formula::new("MMULT(A1:B2,C1:C2)").text, "MX.MUL(A1:B2,C1:C2)");
-        assert_eq!(Formula::new("mx.inv(A1:B2)").text, "MX.INV(A1:B2)");
+        assert_eq!(Formula::new("MMULT(A1:B2,C1:C2)").text(), "MX.MUL(A1:B2,C1:C2)");
+        assert_eq!(Formula::new("mx.inv(A1:B2)").text(), "MX.INV(A1:B2)");
         // Written as Excel's function, or as user-defined when Excel has none.
         assert_eq!(to_file(&Formula::new("MX.MUL(MX.T(A1:B2),MX.INV(C1:D2))")), "MMULT(TRANSPOSE(A1:B2),MINVERSE(C1:D2))");
         assert_eq!(to_file(&Formula::new("MX.SOLVE(A1:B2,C1:C2)+MX.DET(A1:B2)")), "_xludf.MX.SOLVE(A1:B2,C1:C2)+MDETERM(A1:B2)");
         // And read back under the MX. names.
-        assert_eq!(Formula::new("_xludf.MX.SOLVE(A1:B2,C1:C2)+MDETERM(A1:B2)").text, "MX.SOLVE(A1:B2,C1:C2)+MX.DET(A1:B2)");
+        assert_eq!(Formula::new("_xludf.MX.SOLVE(A1:B2,C1:C2)+MDETERM(A1:B2)").text(), "MX.SOLVE(A1:B2,C1:C2)+MX.DET(A1:B2)");
     }
 
     #[test]
@@ -254,7 +254,7 @@ mod tests {
         // Found by the command-sequence fuzzer: deleting the anchor of `H5#` left `=#REF!` in
         // the workbook but `ANCHORARRAY(#REF!)` in the file, which read back differently.
         let deleted = Formula::from_expr(Expr::Unary(mkmatrix_formula::UnOp::Spill, Box::new(Expr::Error(mkmatrix_core::CellError::Ref))));
-        assert_eq!(deleted.text, "#REF!");
+        assert_eq!(deleted.text(), "#REF!");
         assert_eq!(to_file(&deleted), "#REF!");
     }
 
@@ -301,7 +301,7 @@ mod tests {
         // `Table1[#REF!]` was found by the command-sequence fuzzer (seed 40).
         for text in ["SUM(Table1[Done!])", "Table1[#REF!]", "Table1[@[x!]]", "Sheet2!A1+Table1[[#All],[a!b]]"] {
             let f = Formula::new(text);
-            assert_eq!(from_file(&to_file(&f)), f.text);
+            assert_eq!(from_file(&to_file(&f)), f.text());
         }
     }
 

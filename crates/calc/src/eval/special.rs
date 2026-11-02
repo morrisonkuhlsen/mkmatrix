@@ -1,4 +1,5 @@
 use super::*;
+use mkmatrix_formula::adjust::shift_ref;
 
 /// SUMIF and AVERAGEIF with a sum range: Excel sizes the sum range like the criteria range.
 pub(super) fn resizes_sum_range(name: &str, args: usize) -> bool {
@@ -29,6 +30,13 @@ pub fn resized_sum_range(sum: RangeRef, height: u32, width: u32) -> RangeRef {
 /// Collects the static references of an expression with their sheets resolved; `dynamic` is
 /// set when the formula uses INDIRECT/OFFSET/names/tables whose targets can change.
 pub fn precedents(wb: &Workbook, sheet: usize, e: &Expr) -> (Vec<Area>, bool) {
+    precedents_moved(wb, sheet, e, 0, 0)
+}
+
+/// [`precedents`] of `e` with its relative references moved by `(rows, cols)`, as for a formula
+/// sharing the tree, without copying the tree. A reference that would leave the sheet reads
+/// nothing, as the `#REF!` it becomes.
+pub fn precedents_moved(wb: &Workbook, sheet: usize, e: &Expr, rows: i64, cols: i64) -> (Vec<Area>, bool) {
     let mut out = Vec::new();
     let mut dynamic = false;
     let push = |out: &mut Vec<Area>, r: &Reference, range: RangeRef| match &r.sheet {
@@ -47,13 +55,19 @@ pub fn precedents(wb: &Workbook, sheet: usize, e: &Expr) -> (Vec<Area>, bool) {
         }
     };
     e.walk(&mut |x| match x {
-        Expr::Ref(r) => push(&mut out, r, r.range()),
+        Expr::Ref(r) => {
+            if let Some(moved) = shift_ref(r, rows, cols) {
+                push(&mut out, r, moved.range());
+            }
+        }
         // The cells SUMIF/AVERAGEIF really read from the sum range (see `resized_sum_range`); when
         // the criteria range's size isn't known statically, recalculate the formula every time.
         Expr::Call(n, args) if resizes_sum_range(n, args.len()) => match (args.first(), args.get(2)) {
             (Some(Expr::Ref(c)), Some(Expr::Ref(s))) => {
-                let (crit, sum) = (c.range(), s.range());
-                push(&mut out, s, resized_sum_range(sum, crit.height(), crit.width()));
+                if let (Some(crit), Some(sum)) = (shift_ref(c, rows, cols), shift_ref(s, rows, cols)) {
+                    let (crit, sum) = (crit.range(), sum.range());
+                    push(&mut out, s, resized_sum_range(sum, crit.height(), crit.width()));
+                }
             }
             (_, Some(Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) | Expr::Error(_) | Expr::Array(_) | Expr::Missing)) => {}
             _ => dynamic = true,
@@ -68,8 +82,8 @@ pub fn precedents(wb: &Workbook, sheet: usize, e: &Expr) -> (Vec<Area>, bool) {
         // A range ending in a function's result (`A1:INDEX(B1:B9,n)`) covers the cells between
         // the references inside it, not only those references.
         Expr::Binary(BinOp::Range, a, b) if !matches!((&**a, &**b), (Expr::Ref(_), Expr::Ref(_))) => {
-            let mut inner = precedents(wb, sheet, a).0;
-            inner.extend(precedents(wb, sheet, b).0);
+            let mut inner = precedents_moved(wb, sheet, a, rows, cols).0;
+            inner.extend(precedents_moved(wb, sheet, b, rows, cols).0);
             let mut boxes: Vec<Area> = Vec::new();
             for area in inner {
                 match boxes.iter_mut().find(|x| x.sheet == area.sheet) {

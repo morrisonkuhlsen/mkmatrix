@@ -184,7 +184,7 @@ impl<'h> Evaluator<'h> {
                     Ev::V(Value::Bool(f.is_some()))
                 } else {
                     match f {
-                        Some(f) => Ev::V(Value::text(format!("={}", f.text))),
+                        Some(f) => Ev::V(Value::text(format!("={}", f.text()))),
                         None => err(CellError::NA),
                     }
                 }

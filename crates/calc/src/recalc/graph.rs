@@ -35,7 +35,7 @@ pub type Key = (usize, CellRef);
 #[derive(Clone, Debug)]
 enum Readers {
     One(Key),
-    Many(HashSet<Key>),
+    Many(Box<HashSet<Key>>),
 }
 
 impl Readers {
@@ -46,7 +46,7 @@ impl Readers {
                 let mut set = HashSet::default();
                 set.insert(*only);
                 set.insert(k);
-                *self = Readers::Many(set);
+                *self = Readers::Many(Box::new(set));
             }
             Readers::Many(set) => {
                 set.insert(k);

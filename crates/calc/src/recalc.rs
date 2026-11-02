@@ -17,7 +17,7 @@ use mkmatrix_core::{Array, CellError, CellRef, RangeRef, Value};
 use mkmatrix_formula::Expr;
 use mkmatrix_model::{CalcMode, Cell, Sheet, Workbook};
 
-use crate::eval::{Area, Evaluator, Host, precedents, stack_position};
+use crate::eval::{Area, Evaluator, Host, precedents_moved, stack_position};
 
 mod graph;
 mod pass_host;
@@ -131,9 +131,9 @@ impl Calc {
         for (si, sheet) in wb.sheets.iter().enumerate() {
             for (c, cell) in sheet.cells.iter() {
                 if let Some(f) = &cell.formula
-                    && let Some(e) = f.expr()
+                    && let Some((tree, rows, cols)) = f.eval_tree()
                 {
-                    let (areas, dynamic) = precedents(wb, si, &e);
+                    let (areas, dynamic) = precedents_moved(wb, si, &tree, rows, cols);
                     self.graph.insert((si, c), Node { areas, dynamic });
                     if cell.value == Value::Error(CellError::Circ) {
                         circ.push((si, c));
@@ -239,9 +239,9 @@ impl Calc {
             }
             let formula = cell.and_then(|c| c.formula.clone());
             let unparsed = formula.is_some();
-            match formula.and_then(|f| f.expr()) {
-                Some(e) => {
-                    let (areas, dynamic) = precedents(wb, k.0, &e);
+            match formula.and_then(|f| f.eval_tree()) {
+                Some((tree, rows, cols)) => {
+                    let (areas, dynamic) = precedents_moved(wb, k.0, &tree, rows, cols);
                     self.graph.insert(k, Node { areas, dynamic });
                 }
                 None => {

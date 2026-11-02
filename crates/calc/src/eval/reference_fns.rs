@@ -399,6 +399,7 @@ impl<'h> Evaluator<'h> {
         for input in inputs {
             match input {
                 Input::Cells(sheet, range) => {
+                    let mut nested_tree = None;
                     for c in range.iter() {
                         let (hidden, nested) = {
                             let wb = self.host.workbook();
@@ -407,8 +408,20 @@ impl<'h> Evaluator<'h> {
                                 s.is_some_and(|s| if skip_hidden { s.is_row_hidden(c.row) } else { skip_filtered && s.is_row_filtered(c.row) });
                             let nested = skip_nested
                                 && s.and_then(|s| s.cell(c)).and_then(|cell| cell.formula.as_ref()).is_some_and(|f| {
-                                    let u = f.text.to_ascii_uppercase();
-                                    u.contains("SUBTOTAL(") || u.contains("AGGREGATE(")
+                                    // Formulas sharing a tree call the same functions, and a run of
+                                    // them is usual here: their text is printed for the first only.
+                                    let tree = f.shared.as_ref().filter(|_| f.expr.is_none()).map(|x| &x.tree);
+                                    if let (Some(tree), Some((known, answer))) = (tree, &nested_tree)
+                                        && std::sync::Arc::ptr_eq(tree, known)
+                                    {
+                                        return *answer;
+                                    }
+                                    let u = f.text().to_ascii_uppercase();
+                                    let answer = u.contains("SUBTOTAL(") || u.contains("AGGREGATE(");
+                                    if let Some(tree) = tree {
+                                        nested_tree = Some((std::sync::Arc::clone(tree), answer));
+                                    }
+                                    answer
                                 });
                             (hidden, nested)
                         };

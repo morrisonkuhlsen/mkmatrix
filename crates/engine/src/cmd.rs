@@ -500,7 +500,7 @@ fn same_content(a: Option<&mkmatrix_model::Cell>, b: Option<&mkmatrix_model::Cel
     let empty = |c: Option<&mkmatrix_model::Cell>| c.is_none_or(|c| c.formula.is_none() && c.value.is_empty());
     match (a, b) {
         (Some(a), Some(b)) => match (&a.formula, &b.formula) {
-            (Some(x), Some(y)) => x.text == y.text && x.array == y.array,
+            (Some(x), Some(y)) => x.same_text(y) && x.array == y.array,
             (None, None) => a.value == b.value,
             _ => false,
         },
