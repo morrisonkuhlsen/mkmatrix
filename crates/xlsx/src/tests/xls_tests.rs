@@ -290,7 +290,7 @@ fn v(wb: &mkmatrix_model::Workbook, sheet: usize, a1: &str) -> Value {
 }
 
 fn ftext(wb: &mkmatrix_model::Workbook, a1: &str) -> Option<String> {
-    wb.sheets[0].cell(CellRef::parse(a1).unwrap()).and_then(|c| c.formula.as_ref()).map(|f| f.text.clone())
+    wb.sheets[0].cell(CellRef::parse(a1).unwrap()).and_then(|c| c.formula.as_ref()).map(|f| f.text().into_owned())
 }
 
 #[test]
@@ -333,7 +333,7 @@ fn reads_values_formulas_formats_and_layout() {
         // Array formula: the anchor holds it; the other cell's cached result is dropped so that
         // the formula fills the range on recalculation (as when an .xlsx is read, #156).
         let c5 = wb.sheets[0].cell(CellRef::parse("C5").unwrap()).unwrap().formula.clone().unwrap();
-        assert_eq!((c5.text.as_str(), c5.array), ("A5:A6*2", Some(RangeRef::parse("C5:C6").unwrap())));
+        assert_eq!((c5.text().as_ref(), c5.array), ("A5:A6*2", Some(RangeRef::parse("C5:C6").unwrap())));
         assert_eq!(ftext(&wb, "C6"), None);
         assert_eq!(v(&wb, 0, "C6"), Value::Empty);
         // Number formats, merges, sizes, names, print area; embedded chart records ignored.
@@ -352,7 +352,7 @@ fn reads_values_formulas_formats_and_layout() {
         assert_eq!(wb.date_system, DateSystem::D1900);
         // The import saves as .xlsx and reads back.
         let (back, _) = read_xlsx(&write_xlsx(&wb).unwrap()).unwrap();
-        assert_eq!(back.sheets[0].cell(CellRef::parse("A3").unwrap()).unwrap().formula.as_ref().unwrap().text, "B1*2");
+        assert_eq!(back.sheets[0].cell(CellRef::parse("A3").unwrap()).unwrap().formula.as_ref().unwrap().text(), "B1*2");
         assert_eq!(back.sheets[0].value(CellRef::parse("C3").unwrap()), Value::from("Hello!"));
     }
     let (wb, _) = read_xls(&compound("Workbook", &sample(true))).unwrap();

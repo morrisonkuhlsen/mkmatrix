@@ -534,7 +534,10 @@ fn read_cell(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, c: &El, pos
 
 fn read_formula(cx: &mut Ctx<'_>, st: &mut RowState, f: &El, pos: CellRef, dynamic: bool) -> Option<Formula> {
     // Keep the file's dynamic-array mark, so saving never turns the formula into a legacy one.
-    read_formula_text(cx, st, f, pos, dynamic).map(|fm| Formula { dynamic, ..fm })
+    read_formula_text(cx, st, f, pos, dynamic).map(|fm| {
+        let array = fm.array;
+        fm.marked(array, dynamic)
+    })
 }
 
 fn read_formula_text(cx: &mut Ctx<'_>, st: &mut RowState, f: &El, pos: CellRef, dynamic: bool) -> Option<Formula> {
@@ -546,7 +549,7 @@ fn read_formula_text(cx: &mut Ctx<'_>, st: &mut RowState, f: &El, pos: CellRef, 
             if !text.is_empty() {
                 let expr = mkmatrix_formula::parse(text).ok().map(Arc::new);
                 st.shared.insert(si, Shared { anchor: pos, expr, text: text.to_string() });
-                Some(share_shape(st, pos, Formula::new(text)))
+                Some(share_shape(st, pos, text))
             } else {
                 let Some(sh) = st.shared.get(&si) else {
                     cx.warn("a shared formula refers to a missing master cell; kept the cached value");
@@ -585,24 +588,30 @@ fn read_formula_text(cx: &mut Ctx<'_>, st: &mut RowState, f: &El, pos: CellRef, 
             if text.is_empty() {
                 None
             } else {
-                Some(share_shape(st, pos, Formula::new(text)))
+                Some(share_shape(st, pos, text))
             }
         }
     }
 }
 
-/// `own` (just read at `pos`) sharing the tree of an earlier formula of the same shape, when its
-/// text comes out exactly the same that way; else `own`, remembered for the formulas after it.
-fn share_shape(st: &mut RowState, pos: CellRef, own: Formula) -> Formula {
-    let Some(expr) = own.expr.clone() else { return own };
+/// The formula `text` read at `pos`, sharing the tree of an earlier formula of the same shape when
+/// moving that tree gives exactly this one; else with a tree of its own, remembered for the
+/// formulas after it. Most formulas of a big sheet share, so they are compared as trees.
+fn share_shape(st: &mut RowState, pos: CellRef, text: &str) -> Formula {
+    let Ok(expr) = mkmatrix_formula::parse(text) else { return Formula::new(text) };
     let shape = mkmatrix_formula::print_r1c1(&expr, pos);
     if let Some((tree, at)) = st.shapes.get(&shape) {
-        let moved = Formula::shared(tree, pos.row as i64 - at.row as i64, pos.col as i64 - at.col as i64);
-        if let Some(f) = moved.filter(|f| f.text == own.text) {
-            return f;
+        let (rows, cols) = (pos.row as i64 - at.row as i64, pos.col as i64 - at.col as i64);
+        if let Some(f) = Formula::shared(tree, rows, cols).filter(|f| f.expr().as_ref() == Some(&expr)) {
+            return f.keeping_text(mkmatrix_formula::print(&expr));
         }
-    } else if st.shapes.len() < MAX_SHAPES {
-        st.shapes.insert(shape, (expr, pos));
+        return Formula::from_expr(expr);
+    }
+    let own = Formula::from_expr(expr);
+    if st.shapes.len() < MAX_SHAPES
+        && let Some(tree) = &own.expr
+    {
+        st.shapes.insert(shape, (Arc::clone(tree), pos));
     }
     own
 }

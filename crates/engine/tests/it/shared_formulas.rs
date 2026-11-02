@@ -23,7 +23,7 @@ fn value(s: &Session, a1: &str) -> Value {
 }
 
 fn text(s: &Session, a1: &str) -> String {
-    cell(s, a1).formula.map(|f| f.text.clone()).unwrap_or_default()
+    cell(s, a1).formula.map(|f| f.text().into_owned()).unwrap_or_default()
 }
 
 /// Fills `formula` from `first` down to `last` and checks every filled cell against the same
@@ -40,7 +40,7 @@ fn fill_and_compare(s: &mut Session, first: &str, last: &str, formula: &str) {
         }
         // The same text typed into the cell gives the same value.
         let shared_value = value(s, &at);
-        let typed = format!("={}", f.text);
+        let typed = format!("={}", f.text());
         s.execute("cell.set", json!({"cell": at, "input": typed})).unwrap();
         assert!(cell(s, &at).formula.unwrap().shared.is_none());
         assert_eq!(value(s, &at), shared_value, "{at}: {typed}");
@@ -90,7 +90,7 @@ fn a_reference_that_would_leave_the_sheet_gets_ref_and_a_tree_of_its_own() {
     for at in ["J1", "J2"] {
         let f = cell(&s, at).formula.expect("a formula");
         assert!(f.shared.is_none(), "{at} has a tree of its own");
-        assert!(f.text.contains("#REF!"), "{at}: {}", f.text);
+        assert!(f.text().contains("#REF!"), "{at}: {}", f.text());
         assert_eq!(value(&s, at), Value::Error(CellError::Ref));
     }
 }
@@ -141,9 +141,60 @@ fn a_shared_and_an_own_formula_with_the_same_text_are_equal() {
     use mkmatrix_engine::model::Formula;
     let first = std::sync::Arc::new(mkmatrix_engine::formula::parse("A1*2").unwrap());
     let shared = Formula::shared(&first, 4, 0).unwrap();
-    assert_eq!(shared.text, "A5*2");
+    assert_eq!(shared.text(), "A5*2");
     assert_eq!(shared, Formula::new("=A5*2"));
     assert_eq!(shared.expr(), Formula::new("=A5*2").expr());
     // Leaving the sheet: no shared formula.
     assert!(Formula::shared(&first, -1, 0).is_none());
+}
+
+#[test]
+fn a_filled_formula_keeps_no_text_and_saves_as_any_other() {
+    let mut s = session();
+    s.execute("cell.set", json!({"cell": "E1", "input": "=A1*B1+$C$1"})).unwrap();
+    s.execute("edit.autoFill", json!({"source": "E1", "target": "E1:E20"})).unwrap();
+    let filled = cell(&s, "E7").formula.unwrap();
+    assert_eq!(filled.text_bytes(), 0);
+    assert_eq!(filled.text(), "A7*B7+$C$1");
+    // The same formula with a tree of its own is equal to it, and saves the same.
+    let own = mkmatrix_engine::model::Formula::new("A7*B7+$C$1");
+    assert_eq!(*filled, own);
+    assert_ne!(*filled, *cell(&s, "E8").formula.unwrap());
+    let saved = serde_json::to_string(&*filled).unwrap();
+    assert_eq!(saved, serde_json::to_string(&own).unwrap());
+    assert_eq!(saved, r#"{"text":"A7*B7+$C$1","array":null}"#);
+    let back: mkmatrix_engine::model::Formula = serde_json::from_str(&saved).unwrap();
+    assert_eq!(back, own);
+    assert_eq!(back.expr(), own.expr());
+    // A filled column survives a save to JSON and a read.
+    let wb = s.doc().unwrap().wb.clone();
+    let read: mkmatrix_engine::model::Workbook = serde_json::from_slice(&serde_json::to_vec(&*wb).unwrap()).unwrap();
+    assert_eq!(read.sheet(0).unwrap().cells, wb.sheet(0).unwrap().cells);
+}
+
+#[test]
+fn subtotal_skips_filled_subtotals_and_counts_the_rest() {
+    let mut s = session();
+    s.execute("cell.set", json!({"cell": "E1", "input": "=SUBTOTAL(9,A1:A1)"})).unwrap();
+    s.execute("edit.autoFill", json!({"source": "E1", "target": "E1:E3"})).unwrap();
+    s.execute("cell.set", json!({"cell": "E4", "input": "=A4*2"})).unwrap();
+    s.execute("edit.autoFill", json!({"source": "E4", "target": "E4:E6"})).unwrap();
+    s.execute("cell.set", json!({"cell": "E7", "input": "=SUBTOTAL(9,A7:A7)"})).unwrap();
+    s.execute("cell.set", json!({"cell": "F1", "input": "=SUBTOTAL(9,E1:E7)"})).unwrap();
+    // E4:E6 only: 8 + 10 + 12.
+    assert_eq!(value(&s, "F1"), Value::Number(30.0));
+}
+
+#[test]
+fn a_formula_read_from_a_file_shares_its_tree_and_keeps_its_text() {
+    let mut s = session();
+    s.execute("cell.set", json!({"cell": "E1", "input": "=A1*B1+$C$1"})).unwrap();
+    s.execute("edit.autoFill", json!({"source": "E1", "target": "E1:E20"})).unwrap();
+    let bytes = mkmatrix_engine::io::save_bytes(&s.doc().unwrap().wb, "book.xlsx").unwrap();
+    let (back, _) = mkmatrix_engine::io::open_bytes("book.xlsx", &bytes).unwrap();
+    let f = back.active().unwrap().cell(CellRef::parse("E7").unwrap()).unwrap().formula.clone().unwrap();
+    assert!(f.shared.is_some());
+    assert!(f.text_bytes() > 0);
+    assert_eq!(f.text(), "A7*B7+$C$1");
+    assert_eq!(*f, mkmatrix_engine::model::Formula::new("A7*B7+$C$1"));
 }

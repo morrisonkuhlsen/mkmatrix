@@ -42,6 +42,6 @@ fn the_formula_survives_an_xlsx_round_trip() {
     let bytes = mkmatrix_xlsx::write_xlsx(&s.doc().unwrap().wb).unwrap();
     let (wb, _) = mkmatrix_xlsx::read_xlsx(&bytes).unwrap();
     let sh = wb.sheets.first().unwrap();
-    let f = sh.cell(mkmatrix_engine::core::CellRef::new(0, 4)).and_then(|c| c.formula.as_ref()).map(|f| f.text.clone()).unwrap();
+    let f = sh.cell(mkmatrix_engine::core::CellRef::new(0, 4)).and_then(|c| c.formula.as_ref()).map(|f| f.text().into_owned()).unwrap();
     assert!(f.starts_with("SQL(\"SELECT Região"), "{f}");
 }

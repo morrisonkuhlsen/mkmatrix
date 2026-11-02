@@ -112,7 +112,7 @@ fn editing_a_name_renames_it_in_formulas() {
     let names: Vec<&str> = d.wb.names.iter().map(|n| n.name.as_str()).collect();
     assert_eq!(names, ["Other", "Cost"]);
     let b1 = d.wb.active().unwrap().cell(CellRef::parse("B1").unwrap()).and_then(|c| c.formula.clone()).unwrap();
-    assert_eq!(b1.text, "Cost*2");
+    assert_eq!(b1.text(), "Cost*2");
     assert_eq!(v(&s, "B1"), Value::number(42.0));
     assert!(s.execute("formulas.defineName", json!({"name": "X", "oldName": "Missing"})).is_err());
 }
@@ -392,9 +392,9 @@ fn bulk_formula_history_is_bounded_and_latest_edit_still_undoes() {
     doc.wb = current;
     doc.undo = history;
     session.execute("edit.undo", json!({})).unwrap();
-    assert_eq!(session.doc().unwrap().wb.active().unwrap().cells.get(CellRef::new(0, 0)).unwrap().formula.as_ref().unwrap().text, "B1+3");
+    assert_eq!(session.doc().unwrap().wb.active().unwrap().cells.get(CellRef::new(0, 0)).unwrap().formula.as_ref().unwrap().text(), "B1+3");
     session.execute("edit.redo", json!({})).unwrap();
-    assert_eq!(session.doc().unwrap().wb.active().unwrap().cells.get(CellRef::new(0, 0)).unwrap().formula.as_ref().unwrap().text, "B1+4");
+    assert_eq!(session.doc().unwrap().wb.active().unwrap().cells.get(CellRef::new(0, 0)).unwrap().formula.as_ref().unwrap().text(), "B1+4");
 }
 
 #[test]
@@ -2019,7 +2019,7 @@ fn autosum_over_whole_rows_is_one_undo_step_within_the_data() {
 }
 
 fn formula_at(s: &Session, a: &str) -> Option<String> {
-    s.doc().unwrap().wb.active().unwrap().cell(CellRef::parse(a).unwrap()).and_then(|c| c.formula.as_ref().map(|f| f.text.clone()))
+    s.doc().unwrap().wb.active().unwrap().cell(CellRef::parse(a).unwrap()).and_then(|c| c.formula.as_ref().map(|f| f.text().into_owned()))
 }
 
 #[test]

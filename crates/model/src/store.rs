@@ -1,11 +1,12 @@
 //! Copy-on-write sparse cell storage.
 //!
 //! Cells live in bands of 64 rows, each band behind an `Arc`. Cloning a store (an undo snapshot)
-//! copies only the band pointers; editing a cell copies just its band.
+//! copies only the band pointers; editing a cell copies just its band's list of columns and the
+//! column it is in.
 //!
-//! Inside a band, cells are packed by column: a column holds a bitmap of its stored rows and its
-//! cells in row order, one array per band instead of a tree node per cell. A cell's place in the
-//! array is the number of stored rows above it.
+//! Inside a band, cells are packed by column, each column behind an `Arc` of its own: a column
+//! holds a bitmap of its stored rows and its cells in row order, one array per band instead of a
+//! tree node per cell. A cell's place in the array is the number of stored rows above it.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -43,18 +44,18 @@ impl Column {
 /// The columns holding cells, in column order; a column with no cells is removed.
 #[derive(Clone, Debug, Default, PartialEq)]
 struct Band {
-    columns: Vec<Column>,
+    columns: Vec<Arc<Column>>,
 }
 
 impl Band {
     fn column(&self, col: u32) -> Option<&Column> {
-        self.columns.binary_search_by_key(&col, |x| x.col).ok().and_then(|i| self.columns.get(i))
+        self.columns.binary_search_by_key(&col, |x| x.col).ok().and_then(|i| self.columns.get(i)).map(|x| &**x)
     }
     fn get(&self, row: u32, col: u32) -> Option<&Cell> {
         self.column(col)?.get(row % BAND)
     }
     /// The columns in `c0..=c1`.
-    fn columns_in(&self, c0: u32, c1: u32) -> &[Column] {
+    fn columns_in(&self, c0: u32, c1: u32) -> &[Arc<Column>] {
         let from = self.columns.partition_point(|x| x.col < c0);
         let to = self.columns.partition_point(|x| x.col <= c1);
         self.columns.get(from..to).unwrap_or_default()
@@ -66,7 +67,7 @@ struct Cells<'a, I> {
     bands: I,
     block: (u32, u32, u32, u32),
     /// The current band's columns inside the block, and its first row.
-    columns: &'a [Column],
+    columns: &'a [Arc<Column>],
     base: u32,
     /// The band rows inside the block still to visit, the current one, and the next column of it.
     rows: u64,
@@ -202,7 +203,7 @@ impl CellStore {
         band.get(c.row, c.col)?;
         let band = Arc::make_mut(band);
         let i = band.columns.binary_search_by_key(&c.col, |x| x.col).ok()?;
-        let column = band.columns.get_mut(i)?;
+        let column = Arc::make_mut(band.columns.get_mut(i)?);
         let slot = column.slot(c.row % BAND);
         column.cells.get_mut(slot)
     }
@@ -216,11 +217,11 @@ impl CellStore {
         let i = match band.columns.binary_search_by_key(&c.col, |x| x.col) {
             Ok(i) => i,
             Err(i) => {
-                band.columns.insert(i, Column { col: c.col, ..Column::default() });
+                band.columns.insert(i, Arc::new(Column { col: c.col, ..Column::default() }));
                 i
             }
         };
-        let Some(column) = band.columns.get_mut(i) else { return };
+        let Some(column) = band.columns.get_mut(i).map(Arc::make_mut) else { return };
         let bit = c.row % BAND;
         let slot = column.slot(bit);
         if column.has(bit) {
@@ -250,7 +251,7 @@ impl CellStore {
         shared.get(c.row, c.col)?;
         let band = Arc::make_mut(shared);
         let i = band.columns.binary_search_by_key(&c.col, |x| x.col).ok()?;
-        let column = band.columns.get_mut(i)?;
+        let column = Arc::make_mut(band.columns.get_mut(i)?);
         let bit = c.row % BAND;
         let slot = column.slot(bit);
         let old = column.cells.remove(slot);
@@ -274,7 +275,7 @@ impl CellStore {
     }
     /// Cells of one row in `c0..=c1`.
     pub fn row(&self, row: u32, c0: u32, c1: u32) -> impl Iterator<Item = (u32, &Cell)> + '_ {
-        let columns = self.bands.get(&(row / BAND)).map_or(&[][..], |b| b.columns_in(c0, c1));
+        let columns: &[Arc<Column>] = self.bands.get(&(row / BAND)).map_or(&[], |b| b.columns_in(c0, c1));
         columns.iter().filter_map(move |column| Some((column.col, column.get(row % BAND)?)))
     }
     /// Smallest range containing every stored cell, `None` when empty.
@@ -367,18 +368,20 @@ impl CellStore {
             if next.is_some_and(|b| Arc::ptr_eq(b, band)) {
                 continue;
             }
-            bytes = bytes.saturating_add(size_of::<Band>());
-            for column in &band.columns {
-                // A cloned band duplicates the array of cells even when their formula/value Arcs
-                // are still shared with the next snapshot.
+            bytes = bytes.saturating_add(size_of::<Band>()).saturating_add(band.columns.capacity().saturating_mul(size_of::<Arc<Column>>()));
+            // A column the newer band still shares costs this snapshot only its pointer.
+            let unshared = |column: &Column| !next.and_then(|b| b.column(column.col)).is_some_and(|x| std::ptr::eq(x, column));
+            for column in band.columns.iter().filter(|x| unshared(x)) {
+                // A cloned column duplicates the array of cells even when their formula/value
+                // Arcs are still shared with the next snapshot.
                 bytes = bytes.saturating_add(size_of::<Column>()).saturating_add(column.cells.capacity().saturating_mul(size_of::<Cell>()));
             }
-            for (at, cell) in band_cells(*key, band) {
+            for (at, cell) in band_cells(*key, band).filter(|(at, _)| band.column(at.col).is_some_and(unshared)) {
                 let next_cell = next.and_then(|b| b.get(at.row, at.col));
                 if let Some(formula) = &cell.formula
                     && !next_cell.and_then(|c| c.formula.as_ref()).is_some_and(|f| Arc::ptr_eq(f, formula))
                 {
-                    bytes = bytes.saturating_add(size_of::<crate::cell::Formula>() + formula.text.len());
+                    bytes = bytes.saturating_add(size_of::<crate::cell::Formula>() + formula.text_bytes());
                     if let Some(expr) = &formula.expr {
                         expr.walk(&mut |_| bytes = bytes.saturating_add(size_of::<mkmatrix_formula::Expr>()));
                     }
@@ -671,6 +674,26 @@ mod tests {
         assert_eq!(s.rebuild(), 0);
         assert!(s.remove(c(4, 0)).is_some());
         assert_eq!(s.len(), 0);
+    }
+
+    #[test]
+    fn a_snapshot_shares_the_columns_an_edit_does_not_touch() {
+        let mut s = CellStore::new();
+        for r in 0..64 {
+            for col in 0..6 {
+                s.set(c(r, col), Cell::value(1.0.into()));
+            }
+        }
+        let snap = s.clone();
+        let whole = snap.retained_bytes_against(&CellStore::new());
+        // A new column and an edit in another: the snapshot keeps one column of its own.
+        s.set(c(3, 7), Cell::value(2.0.into()));
+        s.set(c(3, 2), Cell::value(2.0.into()));
+        let kept = snap.retained_bytes_against(&s);
+        assert!(kept * 3 < whole, "{kept} of {whole}");
+        assert_eq!(snap.get(c(3, 2)).unwrap().value, Value::Number(1.0));
+        assert_eq!(s.get(c(3, 2)).unwrap().value, Value::Number(2.0));
+        assert_eq!(snap.diff(&s), [c(3, 2), c(3, 7)]);
     }
 
     #[test]

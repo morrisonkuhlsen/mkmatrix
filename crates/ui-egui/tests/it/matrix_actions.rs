@@ -17,7 +17,7 @@ fn block() -> Session {
 fn formula(h: &crate::common::Harness, a1: &str) -> Option<String> {
     let d = h.state().session.active()?;
     let c = mkmatrix_engine::core::CellRef::parse(a1)?;
-    d.wb.active()?.cell(c)?.formula.as_ref().map(|f| f.text.clone())
+    d.wb.active()?.cell(c)?.formula.as_ref().map(|f| f.text().into_owned())
 }
 
 #[test]

@@ -120,7 +120,7 @@ pub(super) fn paste_special(s: &mut Session, p: &Json) -> Result<Json> {
                                 return Some(std::sync::Arc::new(moved));
                             }
                             let moved = mkmatrix_formula::adjust::shift_relative(e, dest.row as i64 - sc.row as i64, dest.col as i64 - sc.col as i64);
-                            Some(std::sync::Arc::new(Formula { dynamic: f.dynamic, ..Formula::from_expr(moved) }))
+                            Some(std::sync::Arc::new(Formula::from_expr(moved).marked(None, f.dynamic)))
                         };
                         if link {
                             let sheet_prefix = if dest_sheet == clip.sheet && same_doc {
@@ -212,7 +212,7 @@ pub(super) fn paste_special(s: &mut Session, p: &Json) -> Result<Json> {
                                         _ => None,
                                     }
                                 {
-                                    let text = format!("=({}){sym}{}", f.text, mkmatrix_core::number_to_text(y));
+                                    let text = format!("=({}){sym}{}", f.text(), mkmatrix_core::number_to_text(y));
                                     new.formula = Some(std::sync::Arc::new(Formula::new(&text)));
                                     new.value = Value::Empty;
                                 }
@@ -330,7 +330,7 @@ pub(crate) fn rewrite_all_formulas(wb: &mut mkmatrix_model::Workbook, target: &s
                 Some(a) if on_target => crate::cmd::sheet::map_range(a, e),
                 a => a,
             };
-            if (text != f.text || array != f.array)
+            if (text != f.text() || array != f.array)
                 && let Some(cell) = sheet.cells.get_mut(c)
             {
                 let mut nf = Formula::from_expr(new);

@@ -509,7 +509,7 @@ fn resolve_pending(
             }
             shared_attaches += 1;
             st.attach(p.pos, f, Mode::Shared, None);
-            let imported = st.sheet.cell(p.pos).and_then(|c| c.formula.as_ref()).is_some_and(|f| f.text.chars().count() <= MAX_SHARED_TEMPLATE);
+            let imported = st.sheet.cell(p.pos).and_then(|c| c.formula.as_ref()).is_some_and(|f| f.text().chars().count() <= MAX_SHARED_TEMPLATE);
             if !imported {
                 failed.insert(p.anchor);
             }

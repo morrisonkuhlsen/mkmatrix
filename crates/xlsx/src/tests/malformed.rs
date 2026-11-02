@@ -253,7 +253,7 @@ fn hostile_formula_text_does_not_overflow_the_stack() {
             let s = wb.sheet(0).expect("sheet");
             let a1 = s.cell(mkmatrix_core::CellRef::new(0, 0)).and_then(|c| c.formula.clone()).expect("formula kept");
             let b1 = s.cell(mkmatrix_core::CellRef::new(0, 1)).and_then(|c| c.formula.clone()).expect("formula kept");
-            let kept = (a1.expr.is_none(), b1.expr.is_none(), a1.text.len(), s.value(mkmatrix_core::CellRef::new(0, 0)));
+            let kept = (a1.expr.is_none(), b1.expr.is_none(), a1.text().len(), s.value(mkmatrix_core::CellRef::new(0, 0)));
             assert_eq!(wb.names.first().map(|n| n.formula.len()), Some(1_000_001));
             let out = write_xlsx(&wb).expect("writable");
             drop(wb);

@@ -24,13 +24,13 @@ fn shared_formulas_and_value_types() {
     let (wb, rep) = read_xlsx(&minimal(body, &[], "", "")).unwrap();
     let s = wb.sheet(0).unwrap();
     assert_eq!(s.name, "Data");
-    assert_eq!(s.cell(at("B2")).unwrap().formula.as_ref().unwrap().text, "A2*2+$A$1");
-    assert_eq!(s.cell(at("B3")).unwrap().formula.as_ref().unwrap().text, "A3*2+$A$1");
+    assert_eq!(s.cell(at("B2")).unwrap().formula.as_ref().unwrap().text(), "A2*2+$A$1");
+    assert_eq!(s.cell(at("B3")).unwrap().formula.as_ref().unwrap().text(), "A3*2+$A$1");
     assert_eq!(s.value(at("B2")), Value::Number(5.0));
     assert_eq!(s.value(at("A3")), Value::text("rich text"));
     assert_eq!(s.value(at("A4")), Value::Bool(true));
     assert_eq!(s.value(at("B4")), Value::Error(CellError::Div0));
-    assert_eq!(s.cell(at("C4")).unwrap().formula.as_ref().unwrap().text, "CONCAT(\"a\",\"b\")");
+    assert_eq!(s.cell(at("C4")).unwrap().formula.as_ref().unwrap().text(), "CONCAT(\"a\",\"b\")");
     assert_eq!(s.value(at("C4")), Value::text("ab"));
     assert_eq!(s.value(at("D4")), Value::Number(45292.5));
     let a5 = s.cell(at("A5")).unwrap().formula.clone().unwrap();
@@ -38,7 +38,7 @@ fn shared_formulas_and_value_types() {
     assert!(s.cell(at("B5")).is_none() && s.cell(at("A6")).is_none(), "a legacy array's cached values are dropped too");
     let c5 = s.cell(at("C5")).unwrap().formula.clone().unwrap();
     assert_eq!(c5.array, None, "dynamic arrays are not legacy CSE arrays");
-    assert_eq!(c5.text, "SEQUENCE(3)");
+    assert_eq!(c5.text(), "SEQUENCE(3)");
     assert!(s.cell(at("C6")).is_none(), "spilled cached values are dropped so the formula can spill");
     // Rows/cells without r continue from the previous position.
     assert_eq!(s.value(at("A7")), Value::Number(9.0));
@@ -658,7 +658,7 @@ fn user_defined_function_prefix_round_trips() {
     let (wb, _) = read_xlsx(&minimal(&format!("<sheetData>{rows}</sheetData>"), &[], "", "")).unwrap();
     let s = wb.sheet(0).unwrap();
     for (a, f) in cases {
-        assert_eq!(s.cell(at(a)).unwrap().formula.as_ref().unwrap().text, f, "read {a}");
+        assert_eq!(s.cell(at(a)).unwrap().formula.as_ref().unwrap().text(), f, "read {a}");
     }
     let bytes = crate::write_xlsx(&wb).unwrap();
     let mut pkg = crate::package::Package::open(&bytes).unwrap();
