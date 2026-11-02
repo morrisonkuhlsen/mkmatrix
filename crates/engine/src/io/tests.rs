@@ -539,6 +539,14 @@ fn a_part_over_the_size_limit_says_how_to_get_the_data_in() {
     // Just over the limit never reads as a size equal to it.
     let msg = open_bytes("big.xlsx", &declaring(package, "xl/worksheets/sheet1.xml", 512 * 1024 * 1024 + 1)).unwrap_err().to_string();
     assert!(msg.contains("more than 512 MB"), "{msg}");
+    // Past the hard limit, packing no longer matters, and the message says so.
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let msg = open_bytes("big.xlsx", &declaring(save_bytes(&wb, "big.xlsx").unwrap(), "xl/worksheets/sheet1.xml", 3_221_225_472))
+            .unwrap_err()
+            .to_string();
+        assert!(msg.contains("3072 MB") && msg.contains("2048 MB for one part ("), "{msg}");
+    }
     // A package that fails for another reason keeps its own error, oversized part or not.
     let mut broken = declaring(save_bytes(&wb, "big.xlsx").unwrap(), "xl/worksheets/sheet1.xml", 540_278_731);
     let at = central_entry(&broken, "xl/workbook.xml");
