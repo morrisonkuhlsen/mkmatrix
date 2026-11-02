@@ -96,4 +96,4 @@ once the empty Calc is taken off (1640 MB against 1671 MB at a million rows). Th
 overlaps at a million rows: MK Matrix ranged 1.35–1.87 s and Calc 1.82–1.89 s.
 
 Each opens the other's file too. Calc opens MK Matrix's in about 970 ms at 100,000 rows and 8.7 s at a
-million; MK Matrix opens Calc's in about 570 ms and 5.6 s.
+million; MK Matrix opens Calc's in about 570 ms and, once #132 lets a 518 MB part in, 5.6 s.
