@@ -1,4 +1,5 @@
 use super::graph::{HashMap, HashSet, Key};
+use super::kernel::Kernel;
 use super::*;
 
 /// A formula to evaluate: its tree and how far the tree's relative references move (non-zero
@@ -20,6 +21,10 @@ thread_local! {
     /// Makes `visit_range` decline every block, so tests can compare what walking a reference
     /// gives with what copying it gives.
     pub(crate) static DECLINE_WALKS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Makes `run_kernel` decline every cell, so tests can compare kernels with the interpreter.
+    pub(crate) static DECLINE_KERNELS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// How many cells kernels answered.
+    pub(crate) static KERNEL_RUNS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
 pub(super) struct PassHost<'a> {
@@ -157,7 +162,81 @@ pub(super) fn spills_as_before(sheet: &mkmatrix_model::Sheet, anchor: CellRef, r
             .all(|(i, c)| c == anchor || (!sheet.cells.has(c) && sheet.spill.get(&c) == Some(arr.data.get(i).unwrap_or(&Value::Empty))))
 }
 
+/// Trees met in this pass, with their kernels if they compile: few for a filled sheet, and cells
+/// of different columns take turns in row order. Trees past the limit replace earlier ones.
+#[derive(Default)]
+pub(super) struct Kernels {
+    known: Vec<(std::sync::Arc<Expr>, Option<Kernel>)>,
+    next: usize,
+}
+
+/// Most trees remembered in a pass.
+const MAX_KERNELS: usize = 32;
+
+impl Kernels {
+    fn index_of(&mut self, tree: &std::sync::Arc<Expr>) -> Option<usize> {
+        if let Some(i) = self.known.iter().position(|(t, _)| std::sync::Arc::ptr_eq(t, tree)) {
+            return Some(i);
+        }
+        let entry = (std::sync::Arc::clone(tree), Kernel::compile(tree));
+        if self.known.len() < MAX_KERNELS {
+            self.known.push(entry);
+            return Some(self.known.len() - 1);
+        }
+        let i = self.next % MAX_KERNELS;
+        self.next = self.next.wrapping_add(1);
+        *self.known.get_mut(i)? = entry;
+        Some(i)
+    }
+}
+
+/// The number a kernel reads for `v`: blanks are 0, and anything else isn't its to answer.
+#[inline]
+fn kernel_number(v: &Value) -> Option<f64> {
+    match v {
+        Value::Number(n) => Some(*n),
+        Value::Empty => Some(0.0),
+        _ => None,
+    }
+}
+
 impl PassHost<'_> {
+    /// Calculates `k` with its tree's kernel, if it has one and can answer; false leaves it to
+    /// [`Self::calculate`], with nothing changed. Called between evaluations, never during one.
+    pub(super) fn run_kernel(&mut self, k: Key, kernels: &mut Kernels) -> bool {
+        #[cfg(test)]
+        if DECLINE_KERNELS.with(std::cell::Cell::get) {
+            return false;
+        }
+        // A spill of this pass, or an old one, may lie under any cell read.
+        if self.iterate || !self.spills.is_empty() || self.results.contains_key(&k) {
+            return false;
+        }
+        let Some(sheet) = self.wb.sheet(k.0) else { return false };
+        if !sheet.spill.is_empty() || sheet.cell(k.1).and_then(|c| c.formula.as_ref()).is_none_or(|f| f.array.is_some()) {
+            return false;
+        }
+        let Some((tree, rows, cols)) = self.exprs.get(&k) else { return false };
+        let Some(i) = kernels.index_of(tree) else { return false };
+        let Some(kernel) = kernels.known.get(i).and_then(|(_, kernel)| kernel.as_ref()) else { return false };
+        let (results, pending) = (&self.results, &self.pending);
+        let answer = kernel.run(*rows, *cols, |c| match sheet.cells.get(c) {
+            None => Some(0.0),
+            Some(cell) if cell.formula.is_none() => kernel_number(&cell.value),
+            Some(cell) => match results.get(&(k.0, c)) {
+                Some(v) => kernel_number(v),
+                None if pending.contains(&(k.0, c)) => None,
+                None => kernel_number(&cell.value),
+            },
+        });
+        let Some(x) = answer else { return false };
+        self.pending.remove(&k);
+        self.results.insert(k, Value::number(x));
+        #[cfg(test)]
+        KERNEL_RUNS.with(|n| n.set(n.get() + 1));
+        true
+    }
+
     /// Calculates `k` (and the formulas it reads) with bounded stack: when [`Self::compute`] would
     /// go deeper than [`MAX_NESTED`], it suspends what is in progress, the formula it needed is
     /// calculated from here, then the suspended ones again (reading the results kept so far).

@@ -10,7 +10,7 @@
 //! and the formulas that read one are evaluated again until the loop settles
 //! (`PassHost::iterate_loops`).
 
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::hash::{BuildHasherDefault, Hasher};
 
 use mkmatrix_core::{Array, CellError, CellRef, RangeRef, Value};
@@ -20,6 +20,7 @@ use mkmatrix_model::{CalcMode, Cell, Sheet, Workbook};
 use crate::eval::{Area, Evaluator, Host, precedents_moved, stack_position};
 
 mod graph;
+mod kernel;
 mod pass_host;
 
 #[cfg(test)]
@@ -27,7 +28,7 @@ use graph::Intervals;
 pub use graph::{FxHasher, Graph, Key};
 use graph::{HashMap, HashSet, Node};
 #[cfg(test)]
-pub(crate) use pass_host::DECLINE_WALKS;
+pub(crate) use pass_host::{DECLINE_KERNELS, DECLINE_WALKS, KERNEL_RUNS};
 use pass_host::{PassHost, reading_order, spills_as_before};
 
 /// Calculation state kept beside a workbook.
@@ -128,13 +129,13 @@ impl Calc {
     pub fn rebuild(&mut self, wb: &Workbook) {
         self.graph = Graph::default();
         let mut circ = Vec::new();
+        let mut plain = NodeMaker::default();
         for (si, sheet) in wb.sheets.iter().enumerate() {
             for (c, cell) in sheet.cells.iter() {
                 if let Some(f) = &cell.formula
-                    && let Some((tree, rows, cols)) = f.eval_tree()
+                    && let Some(node) = plain.node(wb, si, f)
                 {
-                    let (areas, dynamic) = precedents_moved(wb, si, &tree, rows, cols);
-                    self.graph.insert((si, c), Node { areas, dynamic });
+                    self.graph.insert((si, c), node);
                     if cell.value == Value::Error(CellError::Circ) {
                         circ.push((si, c));
                     }
@@ -225,6 +226,7 @@ impl Calc {
     /// Updates the graph for cells whose content changed and recalculates what depends on them.
     pub fn cells_changed(&mut self, wb: &mut Workbook, changed: &[Key]) {
         let t_start = prof_now();
+        let mut plain = NodeMaker::default();
         let mut cleared: Vec<(usize, RangeRef)> = Vec::new();
         // Per sheet, the bottom-right corner of the cells this edit left empty.
         let mut emptied: Vec<Key> = Vec::new();
@@ -239,11 +241,8 @@ impl Calc {
             }
             let formula = cell.and_then(|c| c.formula.clone());
             let unparsed = formula.is_some();
-            match formula.and_then(|f| f.eval_tree()) {
-                Some((tree, rows, cols)) => {
-                    let (areas, dynamic) = precedents_moved(wb, k.0, &tree, rows, cols);
-                    self.graph.insert(k, Node { areas, dynamic });
-                }
+            match formula.and_then(|f| plain.node(wb, k.0, &f)) {
+                Some(node) => self.graph.insert(k, node),
                 None => {
                     self.graph.remove(k);
                     // A formula replaced by a constant (or cleared) takes its spilled values with it.
@@ -371,8 +370,11 @@ impl Calc {
             let (results, spills, cycles) = {
                 let mut host = PassHost::new(wb, &exprs, &mut rng, now);
                 host.iterate = wb.calc.iterative;
+                let mut kernels = pass_host::Kernels::default();
                 for k in &dirty {
-                    host.calculate(*k);
+                    if !host.run_kernel(*k, &mut kernels) {
+                        host.calculate(*k);
+                    }
                 }
                 if host.iterate && !host.members.is_empty() {
                     let passes = host.iterate_loops(&dirty, wb.calc.max_iterations, wb.calc.max_change);
@@ -397,12 +399,14 @@ impl Calc {
             // Write back.
             let mut spill_changes: Vec<Key> = Vec::new();
             let mut freed: Vec<(usize, RangeRef)> = Vec::new();
-            for (k, v) in results {
-                let Some(sheet) = wb.sheet_mut(k.0) else { continue };
-                if let Some(cell) = sheet.cells.get_mut(k.1)
-                    && cell.value != v
-                {
-                    cell.value = v;
+            // In sheet order, and only what changed: a value that stays costs its column no copy.
+            for k in &dirty {
+                let Some(v) = results.get(k) else { continue };
+                if wb.sheet(k.0).and_then(|s| s.cell(k.1)).is_none_or(|cell| cell.value == *v) {
+                    continue;
+                }
+                if let Some(cell) = wb.sheet_mut(k.0).and_then(|sheet| sheet.cells.get_mut(k.1)) {
+                    cell.value = v.clone();
                 }
             }
             for k in &dirty {
@@ -555,6 +559,38 @@ pub fn evaluate_expr(wb: &Workbook, sheet: usize, at: CellRef, expr: &Expr) -> V
     let mut host = PassHost::new(wb, &exprs, &mut rng, now_serial());
     let mut ev = Evaluator::new(&mut host, sheet, at);
     ev.value(expr)
+}
+
+/// Makes graph nodes, remembering the last shared tree: formulas filled from one come one after
+/// another, and share the list of its references too.
+#[derive(Default)]
+struct NodeMaker {
+    last: Option<(std::sync::Arc<Expr>, std::sync::Arc<[mkmatrix_formula::Reference]>, bool)>,
+}
+
+impl NodeMaker {
+    /// The node of `f` on `sheet`; `None` when it doesn't parse.
+    fn node(&mut self, wb: &Workbook, sheet: usize, f: &mkmatrix_model::Formula) -> Option<Node> {
+        let (tree, rows, cols) = f.eval_tree()?;
+        if f.shared.is_some() && f.expr.is_none() {
+            if let Some((known, refs, dynamic)) = &self.last
+                && std::sync::Arc::ptr_eq(known, &tree)
+                && let Some(node) = Node::moved(std::sync::Arc::clone(refs), rows, cols, *dynamic)
+            {
+                return Some(node);
+            }
+            if let Some(refs) = crate::eval::plain_references(&tree) {
+                let dynamic = precedents_moved(wb, sheet, &tree, 0, 0).1;
+                let refs: std::sync::Arc<[mkmatrix_formula::Reference]> = refs.into();
+                self.last = Some((std::sync::Arc::clone(&tree), std::sync::Arc::clone(&refs), dynamic));
+                if let Some(node) = Node::moved(refs, rows, cols, dynamic) {
+                    return Some(node);
+                }
+            }
+        }
+        let (areas, dynamic) = precedents_moved(wb, sheet, &tree, rows, cols);
+        Some(Node::new(areas, dynamic))
+    }
 }
 
 /// How far above and to the left of a cell a `#SPILL!` anchor is looked for when the cell changes.
