@@ -15,7 +15,7 @@ use std::hash::{BuildHasherDefault, Hasher};
 
 use mkmatrix_core::{Array, CellError, CellRef, RangeRef, Value};
 use mkmatrix_formula::Expr;
-use mkmatrix_model::{CalcMode, Workbook};
+use mkmatrix_model::{CalcMode, Cell, Sheet, Workbook};
 
 use crate::eval::{Area, Evaluator, Host, precedents, stack_position};
 
@@ -224,9 +224,21 @@ impl Calc {
 
     /// Updates the graph for cells whose content changed and recalculates what depends on them.
     pub fn cells_changed(&mut self, wb: &mut Workbook, changed: &[Key]) {
+        let t_start = prof_now();
         let mut cleared: Vec<(usize, RangeRef)> = Vec::new();
+        // Per sheet, the bottom-right corner of the cells this edit left empty.
+        let mut emptied: Vec<Key> = Vec::new();
         for &k in changed {
-            let formula = wb.sheet(k.0).and_then(|s| s.cell(k.1)).and_then(|c| c.formula.clone());
+            let sheet = wb.sheet(k.0);
+            let cell = sheet.and_then(|s| s.cell(k.1));
+            if sheet.is_some() && !cell.is_some_and(Cell::has_value) {
+                match emptied.iter_mut().find(|x| x.0 == k.0) {
+                    Some(x) => x.1 = CellRef::new(x.1.row.max(k.1.row), x.1.col.max(k.1.col)),
+                    None => emptied.push(k),
+                }
+            }
+            let formula = cell.and_then(|c| c.formula.clone());
+            let unparsed = formula.is_some();
             match formula.and_then(|f| f.expr()) {
                 Some(e) => {
                     let (areas, dynamic) = precedents(wb, k.0, &e);
@@ -244,9 +256,7 @@ impl Calc {
                         cleared.push((k.0, r));
                     }
                     // A formula that doesn't parse evaluates to #NAME?.
-                    if let Some(cell) = wb.sheet_mut(k.0).and_then(|s| s.cells.get_mut(k.1))
-                        && cell.formula.is_some()
-                    {
+                    if unparsed && let Some(cell) = wb.sheet_mut(k.0).and_then(|s| s.cells.get_mut(k.1)) {
                         cell.value = Value::Error(CellError::Name);
                     }
                 }
@@ -259,42 +269,17 @@ impl Calc {
             self.run(wb, own, false);
             return;
         }
-        let mut seeds: Vec<Key> = changed.to_vec();
-        let mut emptied: Vec<Key> = Vec::new();
-        // Typing into (or clearing) a cell a dynamic array spills over (or would spill over)
-        // re-evaluates the anchor, which may now be blocked or unblocked.
-        for &k in changed {
-            if let Some(sh) = wb.sheet(k.0) {
-                for (anchor, r) in &sh.spill_ranges {
-                    if *anchor != k.1 && r.contains(k.1) {
-                        seeds.push((k.0, *anchor));
-                    }
-                }
-                for (c, cell) in sh.cells.iter_range(RangeRef::new(CellRef::new(k.1.row.saturating_sub(64), k.1.col.saturating_sub(64)), k.1)) {
-                    if c != k.1 && cell.value == Value::Error(CellError::Spill) {
-                        seeds.push((k.0, c));
-                    }
-                }
-                if !sh.cells.has(k.1) {
-                    match emptied.iter_mut().find(|x| x.0 == k.0) {
-                        Some(x) => x.1 = CellRef::new(x.1.row.max(k.1.row), x.1.col.max(k.1.col)),
-                        None => emptied.push(k),
-                    }
-                }
-            }
-        }
+        let mut keys: Vec<Key> = changed.to_vec();
+        keys.sort_unstable();
+        keys.dedup();
+        let mut seeds = spill_seeds(wb, &keys);
+        seeds.append(&mut keys);
         // An emptied cell can unblock an anchor any distance above or to the left of it.
         for (si, end) in emptied {
             for &(s, c) in self.graph.nodes.keys() {
                 if s == si && c.row <= end.row && c.col <= end.col && wb.sheet(s).is_some_and(|sh| sh.value(c) == Value::Error(CellError::Spill)) {
                     seeds.push((s, c));
                 }
-            }
-        }
-        // Spill areas of changed anchors also change.
-        for &k in changed {
-            if let Some(r) = wb.sheet(k.0).and_then(|s| s.spill_ranges.get(&k.1)) {
-                seeds.extend(r.iter().map(|c| (k.0, c)));
             }
         }
         for (si, r) in &cleared {
@@ -314,7 +299,15 @@ impl Calc {
         let n = dirty.len();
         self.run(wb, dirty, false);
         if std::env::var_os("MKMATRIX_PROFILE").is_some() {
-            eprintln!("recalc: {} seeds, closure {} cells {:.1} ms, run {:.1} ms", seeds.len(), n, t1 - t0, prof_now() - t1);
+            eprintln!(
+                "recalc: {} changed, {} seeds, before closure {:.1} ms, closure {} cells {:.1} ms, run {:.1} ms",
+                changed.len(),
+                seeds.len(),
+                t0 - t_start,
+                n,
+                t1 - t0,
+                prof_now() - t1
+            );
         }
     }
 
@@ -562,6 +555,75 @@ pub fn evaluate_expr(wb: &Workbook, sheet: usize, at: CellRef, expr: &Expr) -> V
     let mut host = PassHost::new(wb, &exprs, &mut rng, now_serial());
     let mut ev = Evaluator::new(&mut host, sheet, at);
     ev.value(expr)
+}
+
+/// How far above and to the left of a cell a `#SPILL!` anchor is looked for when the cell changes.
+const SPILL_REACH: u32 = 64;
+
+/// The dynamic-array cells a batch of changed cells makes worth evaluating again. Typing into (or
+/// clearing) a cell an array spills over, or would spill over, may block or unblock its anchor,
+/// and a changed anchor changes its whole spill area. `keys` is sorted and without duplicates.
+///
+/// One pass over the batch, not one search per cell: `#SPILL!` cells are found by walking the
+/// stored cells near the batch once, and only those it finds are checked against the batch.
+pub(crate) fn spill_seeds(wb: &Workbook, keys: &[Key]) -> Vec<Key> {
+    let mut seeds = Vec::new();
+    for group in keys.chunk_by(|a, b| a.0 == b.0) {
+        let Some((sheet, sh)) = group.first().and_then(|k| Some((k.0, wb.sheet(k.0)?))) else { continue };
+        for (anchor, r) in &sh.spill_ranges {
+            if changed_within(group, *r, *anchor) {
+                seeds.push((sheet, *anchor));
+            }
+        }
+        if !sh.spill_ranges.is_empty() {
+            for (_, c) in group {
+                if let Some(r) = sh.spill_ranges.get(c) {
+                    seeds.extend(r.iter().map(|cell| (sheet, cell)));
+                }
+            }
+        }
+        // The batch's reach as blocks of whole rows, each walked once. A block may hold cells out
+        // of reach of every changed cell, which is why each `#SPILL!` found is checked.
+        let mut block: Option<RangeRef> = None;
+        for &(_, c) in group {
+            let (top, left) = (c.row.saturating_sub(SPILL_REACH), c.col.saturating_sub(SPILL_REACH));
+            match &mut block {
+                Some(b) if top <= b.end.row.saturating_add(1) => {
+                    b.start.col = b.start.col.min(left);
+                    b.end.col = b.end.col.max(c.col);
+                    b.end.row = c.row;
+                }
+                _ => {
+                    if let Some(b) = block.take() {
+                        spill_errors_in_reach(sh, b, group, sheet, &mut seeds);
+                    }
+                    block = Some(RangeRef { start: CellRef::new(top, left), end: c });
+                }
+            }
+        }
+        if let Some(b) = block {
+            spill_errors_in_reach(sh, b, group, sheet, &mut seeds);
+        }
+    }
+    seeds
+}
+
+/// Adds the `#SPILL!` cells of `block` that have a changed cell within their reach.
+fn spill_errors_in_reach(sh: &Sheet, block: RangeRef, group: &[Key], sheet: usize, seeds: &mut Vec<Key>) {
+    for (c, cell) in sh.cells.iter_range(block) {
+        if matches!(cell.value, Value::Error(CellError::Spill)) {
+            let end = CellRef::new(c.row.saturating_add(SPILL_REACH), c.col.saturating_add(SPILL_REACH));
+            if changed_within(group, RangeRef { start: c, end }, c) {
+                seeds.push((sheet, c));
+            }
+        }
+    }
+}
+
+/// Whether a cell of `group` (one sheet, sorted) other than `except` lies in `r`.
+fn changed_within(group: &[Key], r: RangeRef, except: CellRef) -> bool {
+    let from = group.partition_point(|k| k.1.row < r.start.row);
+    group.get(from..).unwrap_or_default().iter().take_while(|k| k.1.row <= r.end.row).any(|k| k.1 != except && r.contains(k.1))
 }
 
 #[allow(clippy::disallowed_methods)] // the clock is read only off wasm

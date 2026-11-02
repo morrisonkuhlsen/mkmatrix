@@ -10,39 +10,39 @@ against `bench/limits.json`. Each section is replaced when it is measured again.
 <!-- bench:100000 -->
 ## 100000 rows
 
-Commit `a71d2b91` (2026-10-29) · linux x86_64, AMD Ryzen 7 5700G with Radeon Graphics, 16 cores
+Commit `bf00d063` (2026-11-02) · linux x86_64, AMD Ryzen 7 5700G with Radeon Graphics, 16 cores
 
 | 100000 rows | |
 |---|---|
-| fill values | 958 ms |
-| autofill formulas | 484 ms |
-| autofill chained formulas | 476 ms |
-| aggregate formulas | 61 ms |
-| edit → recalc | 231 ms |
-| sort | 592 ms |
-| save xlsx | 705 ms |
-| open xlsx (fresh process) | 1.49 s |
-| peak memory: build to save | 433 MB |
-| peak memory: open | 221 MB |
+| fill values | 191 ms |
+| autofill formulas | 242 ms |
+| autofill chained formulas | 198 ms |
+| aggregate formulas | 7 ms |
+| edit → recalc | 102 ms |
+| sort | 282 ms |
+| save xlsx | 685 ms |
+| open xlsx (fresh process) | 1.36 s |
+| peak memory: build to save | 387 MB |
+| peak memory: open | 192 MB |
 | xlsx size | 5.9 MB |
 <!-- /bench:100000 -->
 
 <!-- bench:1000000 -->
 ## 1000000 rows
 
-Commit `a71d2b91` (2026-10-29) · linux x86_64, AMD Ryzen 7 5700G with Radeon Graphics, 16 cores
+Commit `bf00d063` (2026-11-02) · linux x86_64, AMD Ryzen 7 5700G with Radeon Graphics, 16 cores
 
 | 1000000 rows | |
 |---|---|
-| fill values | 9.72 s |
-| autofill formulas | 5.53 s |
-| autofill chained formulas | 5.91 s |
-| aggregate formulas | 764 ms |
-| edit → recalc | 2.76 s |
-| sort | 9.07 s |
-| save xlsx | 8.49 s |
-| open xlsx (fresh process) | 15.91 s |
-| peak memory: build to save | 3646 MB |
-| peak memory: open | 2230 MB |
+| fill values | 2.01 s |
+| autofill formulas | 3.14 s |
+| autofill chained formulas | 2.97 s |
+| aggregate formulas | 98 ms |
+| edit → recalc | 1.42 s |
+| sort | 4.33 s |
+| save xlsx | 8.01 s |
+| open xlsx (fresh process) | 14.94 s |
+| peak memory: build to save | 2899 MB |
+| peak memory: open | 1967 MB |
 | xlsx size | 61.9 MB |
 <!-- /bench:1000000 -->

@@ -2455,3 +2455,99 @@ fn a_long_matrix_product_chain_does_not_overflow() {
     t.set("A1", &format!("=SUM({chain})"));
     assert_eq!(t.num("A1"), 2.0);
 }
+
+/// `spill_seeds` as one search per changed cell: what it must answer, however it gets there.
+fn spill_seeds_cell_by_cell(wb: &Workbook, keys: &[crate::recalc::Key]) -> Vec<crate::recalc::Key> {
+    let mut seeds = Vec::new();
+    for &k in keys {
+        let Some(sh) = wb.sheet(k.0) else { continue };
+        for (anchor, r) in &sh.spill_ranges {
+            if *anchor != k.1 && r.contains(k.1) {
+                seeds.push((k.0, *anchor));
+            }
+        }
+        let reach = mkmatrix_core::RangeRef::new(CellRef::new(k.1.row.saturating_sub(64), k.1.col.saturating_sub(64)), k.1);
+        for (c, cell) in sh.cells.iter_range(reach) {
+            if c != k.1 && cell.value == Value::Error(CellError::Spill) {
+                seeds.push((k.0, c));
+            }
+        }
+        if let Some(r) = sh.spill_ranges.get(&k.1) {
+            seeds.extend(r.iter().map(|c| (k.0, c)));
+        }
+    }
+    seeds
+}
+
+#[test]
+fn a_batch_finds_the_spill_anchors_each_of_its_cells_would() {
+    // A small deterministic generator: positions cluster around the reach's boundaries.
+    let mut state = 0x2545_F491_4F6C_DD1Du64;
+    let mut next = move |n: u32| {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        (state % u64::from(n)) as u32
+    };
+    for round in 0..200 {
+        let mut wb = Workbook::new();
+        wb.sheets.push(mkmatrix_model::Sheet::new("Two").into());
+        let (rows, cols) = ([40, 300, 70_000][round % 3], [10, 200, 16_000][round % 3]);
+        for si in 0..2 {
+            let Some(sh) = wb.sheet_mut(si) else { continue };
+            for _ in 0..next(60) {
+                let at = CellRef::new(next(rows), next(cols));
+                let v = if next(3) == 0 { Value::Error(CellError::Spill) } else { Value::Number(1.0) };
+                sh.cells.set(at, Cell::value(v));
+            }
+            for _ in 0..next(6) {
+                let anchor = CellRef::new(next(rows), next(cols));
+                let end = CellRef::new(anchor.row + next(80), anchor.col + next(80));
+                sh.spill_ranges.insert(anchor, mkmatrix_core::RangeRef::new(anchor, end));
+            }
+        }
+        // Includes sheets that don't exist, and cells at the sheet's edges.
+        let mut keys: Vec<crate::recalc::Key> = (0..next(200))
+            .map(|_| match next(10) {
+                0 => (next(3) as usize, CellRef::new(u32::MAX - next(3), u32::MAX - next(3))),
+                1 => (next(3) as usize, CellRef::new(next(2), next(2))),
+                _ => (next(3) as usize, CellRef::new(next(rows), next(cols))),
+            })
+            .collect();
+        keys.sort_unstable();
+        keys.dedup();
+        let sorted_set = |mut v: Vec<crate::recalc::Key>| {
+            v.sort_unstable();
+            v.dedup();
+            v
+        };
+        let batch = sorted_set(crate::recalc::spill_seeds(&wb, &keys));
+        assert_eq!(batch, sorted_set(spill_seeds_cell_by_cell(&wb, &keys)), "round {round}");
+    }
+}
+
+#[test]
+fn a_big_batch_unblocks_and_blocks_a_spill_as_a_single_edit_does() {
+    let mut t = T::new();
+    t.set("B2", "=SEQUENCE(3)");
+    t.set("B3", "x");
+    t.set("D1", "=SUM(B2#)");
+    assert_eq!(t.get("B2"), Value::Error(CellError::Spill));
+    // A batch that clears the blocker among many other cells, far away and nearby.
+    let mut changed: Vec<crate::recalc::Key> = (0..5000).map(|r| (0, CellRef::new(r + 100, 5))).collect();
+    for (at, _) in changed.iter().map(|k| (k.1, ())).collect::<Vec<_>>() {
+        t.wb.sheet_mut(0).unwrap().cells.set(at, Cell::value(Value::Number(f64::from(at.row))));
+    }
+    t.wb.sheet_mut(0).unwrap().cells.remove(c("B3"));
+    changed.insert(2500, (0, c("B3")));
+    t.calc.cells_changed(&mut t.wb, &changed);
+    assert_eq!(t.num("B2"), 1.0);
+    assert_eq!(t.num("D1"), 6.0);
+    // A batch that writes over the spill blocks it again, and the same set of cells in any order
+    // gives the same answer.
+    changed.reverse();
+    t.wb.sheet_mut(0).unwrap().cells.set(c("B3"), Cell::value(Value::Number(9.0)));
+    t.calc.cells_changed(&mut t.wb, &changed);
+    assert_eq!(t.get("B2"), Value::Error(CellError::Spill));
+    assert_eq!(t.get("D1"), Value::Error(CellError::Ref));
+}
