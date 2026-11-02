@@ -26,6 +26,8 @@ mod pass_host;
 use graph::Intervals;
 pub use graph::{FxHasher, Graph, Key};
 use graph::{HashMap, HashSet, Node};
+#[cfg(test)]
+pub(crate) use pass_host::DECLINE_WALKS;
 use pass_host::{PassHost, reading_order, spills_as_before};
 
 /// Calculation state kept beside a workbook.
@@ -806,7 +808,7 @@ pub(crate) mod tests {
         let mut host = PassHost::new(wb, &exprs, &mut rng, 0.0);
 
         let mut seen = Vec::new();
-        host.visit_range(0, range, &mut |v| {
+        host.visit_range(0, range, &mut |_, v| {
             seen.push(v.clone());
             true
         })

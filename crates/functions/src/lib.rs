@@ -79,6 +79,7 @@ pub(crate) mod stat;
 pub(crate) mod text;
 pub(crate) mod util;
 
+pub use criteria::{Criterion, ExactKey, ifs_criteria};
 pub use ets::Timeline;
 pub use math::linalg::{MatrixSummary, SUMMARY_MAX, summarize};
 pub use stat::{aggregate_values, aggregate_values_k};

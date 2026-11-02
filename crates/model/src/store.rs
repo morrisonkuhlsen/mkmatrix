@@ -4,7 +4,7 @@
 //! copies only the band pointers; editing a cell copies just its band.
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use mkmatrix_core::{CellRef, RangeRef};
 use serde::{Deserialize, Serialize};
@@ -17,10 +17,30 @@ fn has_value(cell: &Cell) -> bool {
     !cell.value.is_empty() || cell.formula.is_some()
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 struct Band {
     /// row → (col → cell)
     rows: BTreeMap<u32, BTreeMap<u32, Cell>>,
+    /// The first and last column holding a cell, worked out when `used_range` first asks and
+    /// forgotten when a cell is added or removed; derived, so neither saved nor compared.
+    #[serde(skip)]
+    cols: OnceLock<Option<(u32, u32)>>,
+}
+
+impl PartialEq for Band {
+    fn eq(&self, other: &Band) -> bool {
+        self.rows == other.rows
+    }
+}
+
+impl Band {
+    fn col_bounds(&self) -> Option<(u32, u32)> {
+        *self.cols.get_or_init(|| {
+            let first = self.rows.values().filter_map(|cols| cols.keys().next()).min()?;
+            let last = self.rows.values().filter_map(|cols| cols.keys().next_back()).max()?;
+            Some((*first, *last))
+        })
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -58,6 +78,7 @@ impl CellStore {
         }
         let band = Arc::make_mut(self.bands.entry(c.row / BAND).or_default());
         if band.rows.entry(c.row).or_default().insert(c.col, cell).is_none() {
+            band.cols = OnceLock::new();
             self.len += 1;
         }
     }
@@ -90,6 +111,7 @@ impl CellStore {
             return None;
         }
         let b = Arc::make_mut(band);
+        b.cols = OnceLock::new();
         let row = b.rows.get_mut(&c.row)?;
         let old = row.remove(&c.col);
         if row.is_empty() {
@@ -129,13 +151,9 @@ impl CellStore {
         let r1 = *last_band.rows.keys().next_back()?;
         let mut c0 = u32::MAX;
         let mut c1 = 0;
-        for band in self.bands.values() {
-            for cols in band.rows.values() {
-                if let (Some(a), Some(b)) = (cols.keys().next(), cols.keys().next_back()) {
-                    c0 = c0.min(*a);
-                    c1 = c1.max(*b);
-                }
-            }
+        for (a, b) in self.bands.values().filter_map(|band| band.col_bounds()) {
+            c0 = c0.min(a);
+            c1 = c1.max(b);
         }
         if c0 == u32::MAX {
             return None;
@@ -379,6 +397,31 @@ mod tests {
         s.set(c(500, 0), Cell::value(4.0.into()));
         let v: Vec<f64> = s.iter_range(RangeRef::parse("A1:D100").unwrap()).map(|(_, x)| x.value.as_f64().unwrap()).collect();
         assert_eq!(v, [1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn used_range_follows_cells_added_and_removed() {
+        let mut s = CellStore::new();
+        assert_eq!(s.used_range(), None);
+        s.set(c(5, 3), Cell::value(Value::Number(1.0)));
+        s.set(c(70, 1), Cell::value(Value::Number(2.0)));
+        assert_eq!(s.used_range(), Some(RangeRef::new(c(5, 1), c(70, 3))));
+        // A snapshot keeps its own bounds while the store changes under it.
+        let snapshot = s.clone();
+        s.set(c(6, 9), Cell::value(Value::Number(3.0)));
+        assert_eq!(s.used_range(), Some(RangeRef::new(c(5, 1), c(70, 9))));
+        s.remove(c(6, 9));
+        s.remove(c(70, 1));
+        assert_eq!(s.used_range(), Some(RangeRef::new(c(5, 3), c(5, 3))));
+        assert_eq!(snapshot.used_range(), Some(RangeRef::new(c(5, 1), c(70, 3))));
+        // Equality ignores whether the bounds were worked out.
+        let mut fresh = CellStore::new();
+        fresh.set(c(5, 3), Cell::value(Value::Number(1.0)));
+        assert_eq!(s, fresh);
+        // A store read back from JSON works its bounds out again.
+        let json = serde_json::to_string(&snapshot).unwrap();
+        let back: CellStore = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.used_range(), Some(RangeRef::new(c(5, 1), c(70, 3))));
     }
 
     #[test]

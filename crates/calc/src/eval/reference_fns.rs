@@ -207,7 +207,13 @@ impl<'h> Evaluator<'h> {
             let horizontal = l.range.height() == 1 && l.range.width() > 1;
             let same_len = if vertical { r.range.height() == l.range.height() } else { r.range.width() == l.range.width() };
             if !matches!(key, Value::Array(_)) && (vertical || horizontal) && same_len {
-                let mut xargs = vec![Arg { value: key, from_ref: false }, Arg { value: self.area_value(&l), from_ref: true }];
+                // The lookup block is walked rather than copied when the search is a linear exact
+                // one (`stream`); its formulas are calculated now either way, as copying would.
+                let walk = self.walkable(1, &l);
+                let mut xargs = vec![
+                    Arg { value: key, from_ref: false },
+                    Arg { value: if walk.is_some() { Value::Empty } else { self.area_value(&l) }, from_ref: true },
+                ];
                 // An empty match_mode before a given search_mode is the default (0), not the end.
                 let given = |i: usize| args.get(i).is_some_and(|e| !matches!(e, Expr::Missing));
                 let last = if given(5) {
@@ -226,8 +232,23 @@ impl<'h> Evaluator<'h> {
                         }
                     }
                 }
-                let mut ctx = FnCtx { ev: self, criteria: None, lambda: None };
-                return match mkmatrix_functions::call(spec, &xargs, &mut ctx) {
+                let found = match walk {
+                    Some(w) => self.walk_xmatch(&xargs, w.block),
+                    None => None,
+                };
+                let found = match found {
+                    Some(found) => found,
+                    None => {
+                        if walk.is_some()
+                            && let Some(slot) = xargs.get_mut(1)
+                        {
+                            slot.value = self.area_value(&l);
+                        }
+                        let mut ctx = FnCtx { ev: self, criteria: None, lambda: None };
+                        mkmatrix_functions::call(spec, &xargs, &mut ctx)
+                    }
+                };
+                return match found {
                     Value::Number(p) if p >= 1.0 => {
                         let k = p as u32 - 1;
                         let range = if vertical {

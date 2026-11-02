@@ -315,8 +315,19 @@ impl<'h> Evaluator<'h> {
             "PIVOTBY" => Some(3),
             _ => None,
         };
+        // Range arguments read by walking them rather than copying (`stream`).
+        let mut walked = Vec::new();
         for (i, a) in args.iter().enumerate() {
             let mut ev = self.eval(a);
+            if stream::walks(name, i)
+                && let Ev::R(areas) = &ev
+                && let [area] = areas.as_slice()
+                && let Some(w) = self.walkable(i, area)
+            {
+                walked.push(w);
+                evaluated.push(Arg { value: Value::Empty, from_ref: true });
+                continue;
+            }
             if lambda_at == Some(i)
                 && let Ev::L(l) = &ev
             {
@@ -357,6 +368,17 @@ impl<'h> Evaluator<'h> {
             };
             evaluated.push(Arg { value, from_ref });
         }
+        if !walked.is_empty() {
+            if let Some(v) = self.walk_call(name, &evaluated, &walked) {
+                return Ev::V(v);
+            }
+            for w in walked {
+                let value = self.area_value(&w.area);
+                if let Some(slot) = evaluated.get_mut(w.at) {
+                    slot.value = value;
+                }
+            }
+        }
         let mut ctx = FnCtx { ev: self, criteria, lambda };
         mkmatrix_functions::call(spec, &evaluated, &mut ctx).pipe(Ev::V)
     }
@@ -388,7 +410,7 @@ impl<'h> Evaluator<'h> {
     fn aggregate_area(&mut self, kind: Agg, a: &Area, acc: &mut Acc) -> Result<(), Ev> {
         if !a.range.is_single() {
             let mut error = None;
-            let walked = self.host.visit_range(a.sheet, a.range, &mut |v| match acc.add_cell(kind, v) {
+            let walked = self.host.visit_range(a.sheet, a.range, &mut |_, v| match acc.add_cell(kind, v) {
                 Ok(()) => true,
                 Err(e) => {
                     error = Some(e);
