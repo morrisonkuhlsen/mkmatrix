@@ -136,6 +136,10 @@ impl Cell {
     pub fn formula(f: Formula) -> Cell {
         Cell { value: Value::Empty, formula: Some(Arc::new(f)), style: StyleId::DEFAULT }
     }
+    /// Holds a value or a formula (a cell with only a style does not).
+    pub fn has_value(&self) -> bool {
+        !self.value.is_empty() || self.formula.is_some()
+    }
     /// No value, no formula and the default style: storing it is pointless.
     pub fn is_blank(&self) -> bool {
         self.value.is_empty() && self.formula.is_none() && self.style == StyleId::DEFAULT

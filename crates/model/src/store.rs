@@ -13,10 +13,6 @@ use crate::cell::Cell;
 
 const BAND: u32 = 64;
 
-fn has_value(cell: &Cell) -> bool {
-    !cell.value.is_empty() || cell.formula.is_some()
-}
-
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 struct Band {
     /// row → (col → cell)
@@ -144,7 +140,7 @@ impl CellStore {
     }
     /// Last stored row in column `col` at or above `below_or_at` (for Ctrl+arrow navigation).
     pub fn has(&self, c: CellRef) -> bool {
-        self.get(c).is_some_and(has_value)
+        self.get(c).is_some_and(Cell::has_value)
     }
     /// Last row (inclusive, capped at `cap`) of the maximal run of contiguous rows at or after
     /// `from.row` that store a cell in `from.col` with a non-empty *value* in `from.col`. `None`
