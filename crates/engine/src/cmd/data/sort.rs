@@ -154,32 +154,7 @@ fn do_sort(s: &mut Session, sheet: usize, r: RangeRef, header: bool, keys: Vec<S
             .flat_map(|(dst_i, &src_i)| lanes.iter().map(move |&k| (src_i, dst_i as u32, k)))
             .filter_map(|(src_i, dst_i, k)| sh.hyperlinks.get(&line(src_i, k)).map(|h| (line(dst_i, k), h.clone())))
             .collect();
-        let mut moved: Vec<(CellRef, Option<Cell>)> = Vec::with_capacity(body.count() as usize);
-        let mut pictures = Vec::new();
-        for (dst_i, &src_i) in order.iter().enumerate() {
-            for &k in &lanes {
-                let src = line(src_i, k);
-                let dst = line(dst_i as u32, k);
-                let mut cell = sh.cell(src).cloned();
-                if let Some(c) = cell.as_mut()
-                    && let Some(f) = &c.formula
-                    && let Some(e) = f.expr()
-                {
-                    let shifted = mkmatrix_formula::adjust::shift_relative(e, dst.row as i64 - src.row as i64, dst.col as i64 - src.col as i64);
-                    c.formula = Some(Arc::new(Formula::from_expr(shifted)));
-                }
-                if let Some(picture) = sh.cell_pictures.get(&src) {
-                    pictures.push((dst, picture.clone()));
-                }
-                moved.push((dst, cell));
-            }
-        }
-        // Row heights travel with rows.
-        let heights: Vec<Option<LineInfo>> =
-            if by_cols { vec![] } else { order.iter().map(|&i| sh.rows.get(&(body.start.row + i)).copied()).collect() };
-        // Floating objects anchored inside the sorted body travel with their lines, unless they
-        // are pinned absolutely ("Don't move or size with cells", `editAs="absolute"`). Reordering
-        // is the inverse of `order`: `dst_of[src] = dst`.
+        // Reordering is the inverse of `order`: `dst_of[src] = dst`.
         let dst_of: Vec<u32> = {
             let mut v = vec![0u32; order.len()];
             for (dst_i, &src_i) in order.iter().enumerate() {
@@ -189,6 +164,66 @@ fn do_sort(s: &mut Session, sheet: usize, r: RangeRef, header: bool, keys: Vec<S
             }
             v
         };
+        // A cell's line (index along the sort axis) and lane (index across it) in the body.
+        let place = |c: CellRef| -> (u32, u32) {
+            if by_cols { (c.col - body.start.col, c.row - body.start.row) } else { (c.row - body.start.row, c.col - body.start.col) }
+        };
+        let lane0 = if by_cols { body.start.row } else { body.start.col };
+        let width = lanes.len();
+        let slot = |line: u32, lane: u32| line as usize * width + lane as usize;
+        // The body's cells at their destinations, read in one pass over the store (formulas with
+        // their relative references moved). `filled` keeps which places held a value before and
+        // after, and whether any cell held a formula, for choosing how to recalculate.
+        let mut moved: Vec<Option<Cell>> = vec![None; n as usize * width];
+        let (mut filled_before, mut filled_after) = (vec![false; moved.len()], vec![false; moved.len()]);
+        let mut formulas = false;
+        for (src, cell) in sh.cells.iter_range(body) {
+            let (src_i, lane) = place(src);
+            let Some(&dst_i) = dst_of.get(src_i as usize) else { continue };
+            let dst = line(dst_i, lane0 + lane);
+            let filled = cell.formula.is_some() || !cell.value.is_empty();
+            if let (Some(before), Some(after)) = (filled_before.get_mut(slot(src_i, lane)), filled_after.get_mut(slot(dst_i, lane))) {
+                (*before, *after) = (filled, filled);
+            }
+            let mut cell = cell.clone();
+            if let Some(f) = &cell.formula
+                && let Some(e) = f.expr()
+            {
+                formulas = true;
+                let shifted = mkmatrix_formula::adjust::shift_relative(e, dst.row as i64 - src.row as i64, dst.col as i64 - src.col as i64);
+                cell.formula = Some(Arc::new(Formula::from_expr(shifted)));
+            } else if cell.formula.is_some() {
+                formulas = true;
+            }
+            if let Some(at) = moved.get_mut(slot(dst_i, lane)) {
+                *at = Some(cell);
+            }
+        }
+        let pictures: Vec<(CellRef, Arc<CellPicture>)> = sh
+            .cell_pictures
+            .iter()
+            .filter(|(c, _)| body.contains(**c))
+            .filter_map(|(&src, picture)| {
+                let (src_i, lane) = place(src);
+                dst_of.get(src_i as usize).map(|&dst_i| (line(dst_i, lane0 + lane), picture.clone()))
+            })
+            .collect();
+        // Only the formulas reading the body need calculating again when it holds constants that
+        // all stayed (no cell emptied or filled), no spill reaches into it and no table header
+        // row is in it; otherwise the sort recalculates as a structural edit.
+        let values_only = !formulas
+            && filled_before == filled_after
+            && !sh.spill.range(body.start..=body.end).any(|(c, _)| body.contains(*c))
+            && !sh.spill_ranges.iter().any(|(anchor, r)| body.contains(*anchor) || r.intersects(&body))
+            && !sh
+                .tables
+                .iter()
+                .any(|t| t.header_row && RangeRef::new(t.range.start, CellRef::new(t.range.start.row, t.range.end.col)).intersects(&body));
+        // Row heights travel with rows.
+        let heights: Vec<Option<LineInfo>> =
+            if by_cols { vec![] } else { order.iter().map(|&i| sh.rows.get(&(body.start.row + i)).copied()).collect() };
+        // Floating objects anchored inside the sorted body travel with their lines, unless they
+        // are pinned absolutely ("Don't move or size with cells", `editAs="absolute"`).
         // The object's own geometry (its top-left anchor cell, offset and size) is read from the
         // pre-sort `sh`; a two-cell object's bottom-right cell is derived from its size here so it
         // can be re-fitted to the lines it spans after the sort.
@@ -205,11 +240,13 @@ fn do_sort(s: &mut Session, sheet: usize, r: RangeRef, header: bool, keys: Vec<S
             })
             .collect();
         let shm = cx.sheet_mut(sheet)?;
-        for (c, cell) in &moved {
+        for (i, cell) in moved.into_iter().enumerate() {
+            let (line_i, lane) = ((i / width.max(1)) as u32, (i % width.max(1)) as u32);
+            let c = line(line_i, lane0 + lane);
             match cell {
-                Some(x) => shm.set_cell(*c, x.clone()),
+                Some(x) => shm.set_cell(c, x),
                 None => {
-                    shm.remove_cell(*c);
+                    shm.remove_cell(c);
                 }
             }
         }
@@ -267,10 +304,16 @@ fn do_sort(s: &mut Session, sheet: usize, r: RangeRef, header: bool, keys: Vec<S
                 }
             }
         }
-        for (c, _) in moved {
-            cx.changed.push((sheet, c));
+        if values_only {
+            cx.moved.push((sheet, body));
+            // Row heights fit to their contents as after an edit of each cell.
+            if body.count() <= 200_000 {
+                cx.fit_rows.extend((body.start.row..=body.end.row).map(|r| (sheet, r)));
+            }
+        } else {
+            cx.changed.extend(body.iter().map(|c| (sheet, c)));
+            cx.structural = true;
         }
-        cx.structural = true;
         Ok(Json::Null)
     })?;
     Ok(json!({"sorted": body.a1()}))
