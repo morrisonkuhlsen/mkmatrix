@@ -7,7 +7,7 @@
     "edit → recalc": 0.25,
     "sort": 0.8,
     "save xlsx": 3.0,
-    "open xlsx (fresh process)": 6.0,
+    "open xlsx (fresh process)": 2.0,
     "peak memory: build to save": 300,
     "peak memory: open": 230,
     "xlsx size": 8
