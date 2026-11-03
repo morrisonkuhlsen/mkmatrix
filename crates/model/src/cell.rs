@@ -173,6 +173,15 @@ impl Formula {
             _ => self.expr().map(Arc::new),
         }
     }
+    /// The tree this formula keeps and how far its relative references move, without touching
+    /// the tree's reference count (threads share it); `None` when it has to be parsed first.
+    pub fn tree(&self) -> Option<(&Arc<Expr>, i64, i64)> {
+        match (&self.expr, &self.shared) {
+            (Some(e), _) => Some((e, 0, 0)),
+            (None, Some(s)) => Some((&s.tree, i64::from(s.rows), i64::from(s.cols))),
+            (None, None) => None,
+        }
+    }
     /// What to evaluate: a tree and how far its relative references move (0, 0 for a formula's
     /// own tree). A shared tree isn't copied.
     pub fn eval_tree(&self) -> Option<(Arc<Expr>, i64, i64)> {

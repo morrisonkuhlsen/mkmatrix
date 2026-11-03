@@ -2624,8 +2624,8 @@ fn kernels_answer_as_the_interpreter_does() {
     // Awkward values, each next to all the others as the rows go by.
     let values =
         ["1", "2.5", "0", "-3", "", "x", "12", "TRUE", "#N/A", "1E308", "-1E308", "1E-308", "'5", "=NA()", "=1/0", "=\"\"", "=1+1", "=\"7\""];
-    let build = |decline: bool| {
-        crate::recalc::DECLINE_KERNELS.with(|d| d.set(decline));
+    let build = |path: Path| {
+        set_path(path);
         let mut t = T::new();
         for r in 0..values.len() {
             for (col, shift) in [("A", 0), ("B", 5)] {
@@ -2666,18 +2666,117 @@ fn kernels_answer_as_the_interpreter_does() {
         out.push(dump(&t));
         out
     };
-    crate::recalc::KERNEL_RUNS.with(|n| n.set(0));
-    let with = build(false);
-    let answered = crate::recalc::KERNEL_RUNS.with(std::cell::Cell::get);
-    let without = build(true);
-    crate::recalc::DECLINE_KERNELS.with(|d| d.set(false));
-    assert!(answered > 100, "kernels answered {answered} cells");
-    for (step, (a, b)) in with.iter().zip(&without).enumerate() {
-        for (i, (x, y)) in a.iter().zip(b).enumerate() {
-            let same = x == y || matches!((x, y), (Value::Number(p), Value::Number(q)) if p.to_bits() == q.to_bits());
-            assert!(same, "step {step}, cell {i}: kernel {x:?}, interpreter {y:?}");
+    let agree = |what: &str, a: &[Vec<Value>], b: &[Vec<Value>]| {
+        for (step, (a, b)) in a.iter().zip(b).enumerate() {
+            for (i, (x, y)) in a.iter().zip(b).enumerate() {
+                let same = x == y || matches!((x, y), (Value::Number(p), Value::Number(q)) if p.to_bits() == q.to_bits());
+                assert!(same, "{what}, step {step}, cell {i}: {x:?} against {y:?}");
+            }
         }
-    }
+    };
+    crate::recalc::KERNEL_RUNS.with(|n| n.set(0));
+    let on_threads = build(Path::Threads);
+    let answered = crate::recalc::KERNEL_RUNS.with(std::cell::Cell::get);
+    crate::recalc::KERNEL_RUNS.with(|n| n.set(0));
+    let one_thread = build(Path::OneThread);
+    let answered_alone = crate::recalc::KERNEL_RUNS.with(std::cell::Cell::get);
+    let interpreter = build(Path::Interpreter);
+    set_path(Path::Threads);
+    assert!(answered > 100 && answered_alone > 100, "kernels answered {answered} and {answered_alone} cells");
+    agree("threads", &on_threads, &interpreter);
+    agree("one thread", &one_thread, &interpreter);
+}
+
+#[derive(Clone, Copy)]
+enum Path {
+    Threads,
+    OneThread,
+    Interpreter,
+}
+
+fn set_path(path: Path) {
+    crate::recalc::DECLINE_THREADS.with(|d| d.set(matches!(path, Path::OneThread)));
+    crate::recalc::DECLINE_KERNELS.with(|d| d.set(matches!(path, Path::Interpreter)));
+}
+
+/// More formulas than a thread takes at a time, a few levels of them reading one another, a running
+/// sum, and blocks that give up: threads, one thread and the interpreter must agree.
+#[test]
+fn threads_answer_as_one_thread_does_on_a_big_sheet() {
+    let rows = 20_000u32;
+    let build = |path: Path| {
+        set_path(path);
+        let mut t = T::new();
+        let mut changed = Vec::new();
+        let mut put = |t: &mut T, at: CellRef, cell: Cell| {
+            t.wb.sheet_mut(0).unwrap().cells.set(at, cell);
+            changed.push((0, at));
+        };
+        for r in 0..rows {
+            let v = match r % 977 {
+                0 => Value::text("x"),
+                1 => Value::Error(CellError::NA),
+                2 => Value::Bool(true),
+                3 => Value::Number(0.0),
+                n => Value::Number(f64::from(n) * 1.5),
+            };
+            put(&mut t, CellRef::new(r, 0), Cell::value(v));
+            if r % 13 != 0 {
+                put(&mut t, CellRef::new(r, 1), Cell::value(Value::Number(f64::from(r % 7))));
+            }
+        }
+        for (col, text) in [
+            (2, "A1*B1+1"), // reads constants
+            (3, "C1/B1"),   // reads the level before
+            (4, "D1-C1"),   // and the one before that
+            (5, "E1*2"),    // a fifth level, past the rounds
+            (6, "F1+D1+1"), // and a sixth
+            (7, "H1+1"),    // reads itself: a loop
+            (9, "J1"),      // reads the cell below's column on the same row: forward
+        ] {
+            let tree = std::sync::Arc::new(mkmatrix_formula::parse(text).unwrap());
+            for r in 0..rows {
+                if let Some(f) = Formula::shared(&tree, i64::from(r), 0) {
+                    put(&mut t, CellRef::new(r, col), Cell::formula(f));
+                }
+            }
+        }
+        // A running sum, down a column.
+        put(&mut t, CellRef::new(0, 8), Cell::formula(Formula::new("C1")));
+        let tree = std::sync::Arc::new(mkmatrix_formula::parse("I1+B2").unwrap());
+        for r in 1..rows {
+            if let Some(f) = Formula::shared(&tree, i64::from(r) - 1, 0) {
+                put(&mut t, CellRef::new(r, 8), Cell::formula(f));
+            }
+        }
+        let list = std::mem::take(&mut changed);
+        t.calc.cells_changed(&mut t.wb, &list);
+        let dump =
+            |t: &T| (0..rows).flat_map(|r| (0..10).map(move |c| CellRef::new(r, c))).map(|c| t.wb.sheet(0).unwrap().value(c)).collect::<Vec<_>>();
+        let mut out = vec![dump(&t)];
+        t.set("B5000", "9");
+        out.push(dump(&t));
+        t.set("A4000", "x");
+        out.push(dump(&t));
+        // An array appears in the same pass as what reads the cells it spills over.
+        let list = vec![(0, c("L1")), (0, c("M1")), (0, c("M2"))];
+        t.wb.sheet_mut(0).unwrap().cells.set(c("L1"), Cell::formula(Formula::new("SEQUENCE(3)")));
+        t.wb.sheet_mut(0).unwrap().cells.set(c("M1"), Cell::formula(Formula::new("L3*2")));
+        t.wb.sheet_mut(0).unwrap().cells.set(c("M2"), Cell::formula(Formula::new("L2+1")));
+        t.calc.cells_changed(&mut t.wb, &list);
+        assert_eq!(t.num("M1"), 6.0);
+        assert_eq!(t.num("M2"), 3.0);
+        out.push(dump(&t));
+        t.calc.recalc_all(&mut t.wb);
+        out.push(dump(&t));
+        out
+    };
+    let on_threads = build(Path::Threads);
+    let one_thread = build(Path::OneThread);
+    let interpreter = build(Path::Interpreter);
+    set_path(Path::Threads);
+    assert!(on_threads == interpreter, "threads against the interpreter");
+    assert!(one_thread == interpreter, "one thread against the interpreter");
 }
 
 #[test]
@@ -2694,4 +2793,24 @@ fn a_kernel_leaves_array_formulas_and_spills_to_the_interpreter() {
     t.set("C1", "=SEQUENCE(3)");
     t.set("E2", "=C3*2");
     assert_eq!(t.num("E2"), 6.0);
+}
+
+#[test]
+fn a_legacy_array_formula_is_not_a_kernels_to_answer() {
+    let values = |path: Path| {
+        set_path(path);
+        let mut t = T::new();
+        t.set("A1", "4");
+        let range = mkmatrix_core::RangeRef::parse("C5:C6").unwrap();
+        let f = Formula::new("A1*2").marked(Some(range), false);
+        t.wb.sheet_mut(0).unwrap().cells.set(c("C5"), Cell::formula(f));
+        t.calc.cells_changed(&mut t.wb, &[(0, c("C5"))]);
+        (t.get("C5"), t.get("C6"))
+    };
+    let threads = values(Path::Threads);
+    let one_thread = values(Path::OneThread);
+    let interpreter = values(Path::Interpreter);
+    set_path(Path::Threads);
+    assert_eq!(threads, interpreter);
+    assert_eq!(one_thread, interpreter);
 }

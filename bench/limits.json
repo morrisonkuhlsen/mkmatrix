@@ -1,11 +1,11 @@
 {
   "100000": {
     "fill values": 0.8,
-    "autofill formulas": 0.5,
+    "autofill formulas": 0.4,
     "autofill chained formulas": 0.5,
     "aggregate formulas": 0.1,
     "edit → recalc": 0.25,
-    "sort": 1.2,
+    "sort": 0.8,
     "save xlsx": 3.0,
     "open xlsx (fresh process)": 6.0,
     "peak memory: build to save": 300,

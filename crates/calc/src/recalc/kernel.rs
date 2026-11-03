@@ -6,7 +6,9 @@
 //! calculated, a division by zero or a result that isn't finite. The interpreter then evaluates
 //! that cell, so results are the same whichever one ran.
 
-use mkmatrix_core::{CellRef, MAX_COLS, MAX_ROWS};
+use std::sync::Arc;
+
+use mkmatrix_core::{CellRef, MAX_COLS, MAX_ROWS, Value};
 use mkmatrix_formula::{Anchor, BinOp, Expr, RefKind, SheetSel, UnOp};
 
 /// Longest program compiled.
@@ -79,6 +81,49 @@ impl Kernel {
             top += 1;
         }
         if top == 1 { stack.first().copied() } else { None }
+    }
+}
+
+/// Trees met so far, with their kernels if they compile: few for a filled sheet, and cells of
+/// different columns take turns in row order. Trees past the limit replace earlier ones.
+#[derive(Default)]
+pub(super) struct Kernels {
+    known: Vec<(Arc<Expr>, Option<Kernel>)>,
+    next: usize,
+}
+
+/// Most trees remembered.
+const MAX_KERNELS: usize = 32;
+
+impl Kernels {
+    /// The kernel of `tree`, if it has one.
+    pub(super) fn get(&mut self, tree: &Arc<Expr>) -> Option<&Kernel> {
+        let i = match self.known.iter().position(|(t, _)| Arc::ptr_eq(t, tree)) {
+            Some(i) => i,
+            None => {
+                let entry = (Arc::clone(tree), Kernel::compile(tree));
+                if self.known.len() < MAX_KERNELS {
+                    self.known.push(entry);
+                    self.known.len() - 1
+                } else {
+                    let i = self.next % MAX_KERNELS;
+                    self.next = self.next.wrapping_add(1);
+                    *self.known.get_mut(i)? = entry;
+                    i
+                }
+            }
+        };
+        self.known.get(i)?.1.as_ref()
+    }
+}
+
+/// The number a kernel reads for `v`: blanks are 0, and anything else isn't its to answer.
+#[inline]
+pub(super) fn number(v: &Value) -> Option<f64> {
+    match v {
+        Value::Number(n) => Some(*n),
+        Value::Empty => Some(0.0),
+        _ => None,
     }
 }
 
