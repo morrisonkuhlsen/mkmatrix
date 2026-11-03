@@ -1,14 +1,17 @@
 # MK Matrix's copy of storytold/craft-common-actions .github/workflows/release.yml at
 # eddaf203b2d4873525a69842240214b23bac65ba, called by release.yml.
 #
-# Two changes, both so a release costs nothing:
+# Three changes, all so a release costs nothing:
 # - the macOS job runs on the standard `macos-15` runner (free for public repositories) instead
 #   of the paid larger runner `macos-15-xlarge`, with a longer timeout for the slower runner;
 #   the shared workflow has no input for the runner;
 # - every upload-artifact step keeps its artifact for one day (`retention-days: 1`): the draft
 #   job collects them in the same run, the release assets themselves live on the Releases page,
-#   and Actions storage past the organisation's free quota is billed.
-# To update, copy the shared file again and reapply both changes.
+#   and Actions storage past the organisation's free quota is billed;
+# - on the release branch, missing macOS and Windows signing secrets are a warning, not an error:
+#   signing needs paid certificates (Apple Developer Program, Azure Trusted Signing), so the
+#   installers ship unsigned, the way the 0.13.0 test runs built them.
+# To update, copy the shared file again and reapply all three changes.
 name: "Release"
 
 on:
@@ -280,8 +283,7 @@ jobs:
             [ -n "${!name}" ] || missing="$missing $name"
           done
           if [ -n "$missing" ]; then
-            echo "::error::macOS release builds must be signed and notarized, but these secrets are empty:$missing. List them in the caller's secrets: block and set them in the repo's release environment."
-            exit 1
+            echo "::warning::macOS release is unsigned (ad-hoc) and not notarized: these secrets are empty:$missing. MK Matrix ships unsigned so the release costs nothing."
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Load refreshed contributor credits
@@ -437,8 +439,7 @@ jobs:
             [ -n "${!name}" ] || missing="$missing $name"
           done
           if [ -n "$missing" ]; then
-            echo "::error::Windows release builds must be signed, but there is no WINDOWS_CERTIFICATE pair and these Azure Trusted Signing secrets are empty:$missing. List them in the caller's secrets: block and set them in the repo's release environment."
-            exit 1
+            echo "::warning::Windows release is unsigned: there is no WINDOWS_CERTIFICATE pair and these Azure Trusted Signing secrets are empty:$missing. MK Matrix ships unsigned so the release costs nothing."
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Load refreshed contributor credits
