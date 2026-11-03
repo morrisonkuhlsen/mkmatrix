@@ -12,6 +12,8 @@ on:
 
 permissions:
   contents: write
+  # release-common.yml's flatpak job asks for it; a called workflow can't exceed its caller.
+  packages: write
 
 concurrency:
   group: release-${{ github.ref }}
