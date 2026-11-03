@@ -5,6 +5,12 @@ signed installers for macOS, Windows, Linux, FreeBSD and the web, then creates o
 **draft** GitHub Release named `MK Matrix v<version>`. Nobody sees a draft until a maintainer
 publishes it.
 
+`release.yml` calls `release-common.yml`, MK Matrix's copy of the suite's shared release
+workflow (`storytold/craft-common-actions`). The copy builds macOS on the standard `macos-15`
+runner instead of the paid `macos-15-xlarge`, which the organisation's billing doesn't cover;
+its header says how to refresh it. FreeBSD builds x86_64 only: the aarch64 VM didn't start in
+the 0.13.0 test runs.
+
 This is MK Matrix's implementation of the shared [release playbook](release-playbook.md)
 (craftrules `release/playbook.md`), copied from DesignCraft and renamed. User-facing names say
 **MK Matrix**. Files, binaries and ids stay lowercase
