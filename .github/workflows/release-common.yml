@@ -1,10 +1,14 @@
 # MK Matrix's copy of storytold/craft-common-actions .github/workflows/release.yml at
 # eddaf203b2d4873525a69842240214b23bac65ba, called by release.yml.
 #
-# The one change: the macOS job runs on the standard `macos-15` runner (free for public
-# repositories) instead of the paid larger runner `macos-15-xlarge`, which the organisation's
-# billing doesn't cover, with a longer timeout for the slower runner. The shared workflow has no
-# input for the runner. To update, copy the shared file again and reapply that change.
+# Two changes, both so a release costs nothing:
+# - the macOS job runs on the standard `macos-15` runner (free for public repositories) instead
+#   of the paid larger runner `macos-15-xlarge`, with a longer timeout for the slower runner;
+#   the shared workflow has no input for the runner;
+# - every upload-artifact step keeps its artifact for one day (`retention-days: 1`): the draft
+#   job collects them in the same run, the release assets themselves live on the Releases page,
+#   and Actions storage past the organisation's free quota is billed.
+# To update, copy the shared file again and reapply both changes.
 name: "Release"
 
 on:
@@ -339,6 +343,7 @@ jobs:
         run: echo "::warning::packaging/macos/verify.sh is missing, so this release was not checked for a signature or notarization ticket."
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 1
           name: release-macos
           path: dist/release/*
           if-no-files-found: error
@@ -480,6 +485,7 @@ jobs:
         run: ./packaging/windows/package.ps1 -Arch ${{ matrix.arch }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 1
           name: release-windows-${{ matrix.arch }}
           path: dist/release/*
           if-no-files-found: error
@@ -590,6 +596,7 @@ jobs:
           done
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 1
           name: release-linux-${{ matrix.arch }}
           path: dist/release/*
           if-no-files-found: error
@@ -720,6 +727,7 @@ jobs:
           fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 1
           name: release-flatpak-${{ matrix.arch }}
           path: |
             dist/release/*.flatpak
@@ -767,6 +775,7 @@ jobs:
           arch: ${{ matrix.arch }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 1
           name: release-arch-${{ matrix.arch }}
           path: dist/release/*.pkg.tar.zst
           if-no-files-found: error
@@ -1026,6 +1035,7 @@ jobs:
             "freebsd:$GITHUB_WORKSPACE/dist/release/" dist/release/
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 1
           name: release-freebsd-${{ matrix.arch }}
           path: dist/release/*
           if-no-files-found: error
@@ -1137,6 +1147,7 @@ jobs:
         run: packaging/web/package.sh
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 1
           name: release-web
           path: dist/release/*
           if-no-files-found: error
@@ -1253,6 +1264,7 @@ jobs:
           dpkg-deb --contents dist/release/*-linux-riscv64.deb 2>/dev/null | grep -E 'usr/bin/|metainfo|applications' || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 1
           name: release-linux-riscv64
           path: dist/release/*
           if-no-files-found: error
@@ -1308,6 +1320,7 @@ jobs:
           tar -tzf "dist/release/$APP_NAME-server-$VERSION-linux-${{ matrix.arch }}.tar.gz" || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 1
           name: release-server-linux-${{ matrix.arch }}
           path: dist/release/*.tar.gz
           if-no-files-found: error
