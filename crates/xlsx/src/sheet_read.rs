@@ -21,6 +21,12 @@ use crate::tables::{col_width_to_px, paper_name, pt_to_px};
 use crate::xml::{self, El};
 
 mod parts;
+#[cfg(not(target_arch = "wasm32"))]
+#[path = "sheet_read/threads.rs"]
+pub(crate) mod rows;
+#[cfg(target_arch = "wasm32")]
+#[path = "sheet_read/one_thread.rs"]
+mod rows;
 mod rules;
 
 pub use parts::{read_autofilter, read_table};
@@ -38,11 +44,13 @@ struct Shared {
 /// Bounded, so a sheet of all-different formulas doesn't grow it past a fixed size.
 const MAX_SHAPES: usize = 65_536;
 
+type Shapes = HashMap<String, (Arc<Expr>, CellRef)>;
+
 #[derive(Default)]
 struct RowState {
     next_row: u32,
     shared: HashMap<u32, Shared>,
-    shapes: HashMap<String, (Arc<Expr>, CellRef)>,
+    shapes: Shapes,
     /// Dynamic-array spill ranges and legacy array ranges: cached values inside them (other than
     /// the anchor) are not stored, so the formula can fill them again.
     dynamic: Vec<RangeRef>,
@@ -108,15 +116,25 @@ pub fn read_sheet(cx: &mut Ctx<'_>, part: &str, name: &str) -> Result<Sheet, IoE
     let rels = cx.pkg.rels(part)?;
     let mut sheet = Sheet::new(name);
     let mut st = RowState::default();
-    let res = xml::parse_streaming(&bytes, &["row"], &mut |row| {
-        read_row(cx, &mut sheet, &mut st, &row);
-        Ok(())
-    });
-    let root = match res {
-        Ok(r) => r,
-        Err(e) => {
-            cx.warn(format!("sheet \"{name}\" is damaged ({e}); kept {} rows", st.rows));
-            El::default()
+    let on_threads = rows::read_on_threads(cx, &bytes, &mut sheet, &mut st);
+    let root = match on_threads {
+        Some(root) => root,
+        None => {
+            // Nothing the threads may have placed counts: this is the whole read.
+            sheet = Sheet::new(name);
+            st = RowState::default();
+            let res = xml::parse_streaming(&bytes, &["row"], &mut |row| {
+                let parsed = parse_row(&CellSource::of(cx), &mut st.shapes, sheet.default_row_height, st.next_row, &row);
+                place_row(cx, &mut sheet, &mut st, parsed);
+                Ok(())
+            });
+            match res {
+                Ok(r) => r,
+                Err(e) => {
+                    cx.warn(format!("sheet \"{name}\" is damaged ({e}); kept {} rows", st.rows));
+                    El::default()
+                }
+            }
         }
     };
     if st.dropped > 0 {
@@ -411,26 +429,71 @@ fn read_cols(cx: &Ctx<'_>, e: &El, sheet: &mut Sheet, remaining: &mut u64) -> Re
     Ok(())
 }
 
-fn read_row(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, row: &El) {
-    st.rows += 1;
+/// What reading a cell needs from the rest of the file: read-only, so threads can share it.
+struct CellSource<'a> {
+    sst: &'a [Arc<str>],
+    xf_map: &'a [mkmatrix_model::StyleId],
+    cell_pictures: &'a [Option<Arc<mkmatrix_model::CellPicture>>],
+    date_system: DateSystem,
+}
+
+impl<'a> CellSource<'a> {
+    fn of(cx: &'a Ctx<'_>) -> CellSource<'a> {
+        CellSource { sst: &cx.sst, xf_map: &cx.xf_map, cell_pictures: &cx.cell_pictures, date_system: cx.date_system }
+    }
+    fn style(&self, xf: Option<u32>) -> mkmatrix_model::StyleId {
+        xf.and_then(|i| self.xf_map.get(i as usize).copied()).unwrap_or_default()
+    }
+}
+
+/// A row as read from its element, before anything that depends on the rows above it.
+struct ParsedRow {
+    /// `None` when its row number is unusable: the row is dropped.
+    row: Option<u32>,
+    info: LineInfo,
+    cells: Vec<ParsedCell>,
+    /// Cells dropped for a bad address.
+    dropped: u64,
+    notes: Vec<&'static str>,
+}
+
+struct ParsedCell {
+    pos: CellRef,
+    style: mkmatrix_model::StyleId,
+    value: Value,
+    picture: Option<Arc<mkmatrix_model::CellPicture>>,
+    formula: ParsedFormula,
+    dynamic: bool,
+}
+
+enum ParsedFormula {
+    None,
+    Ready(Formula),
+    /// An array formula, with the range it covers when that is more than its cell.
+    Array(Formula, Option<RangeRef>),
+    /// The master of a shared formula, for the cells of its group further down.
+    Master(u32, Shared, Formula),
+    /// A cell of a shared formula's group: its master may be in a row read on another thread.
+    Child(u32),
+}
+
+/// Reads a row. `next_row` numbers a row that doesn't say its own.
+fn parse_row(src: &CellSource<'_>, shapes: &mut Shapes, default_height: f32, next_row: u32, row: &El) -> ParsedRow {
+    let mut out = ParsedRow { row: None, info: LineInfo::default(), cells: Vec::new(), dropped: 0, notes: Vec::new() };
     let r = match row.attr_u32("r") {
         Some(r) if r >= 1 => r - 1,
-        Some(_) => {
-            st.dropped += 1;
-            return;
-        }
-        None => st.next_row,
+        Some(_) => return out,
+        None => next_row,
     };
     if r >= MAX_ROWS {
-        st.dropped += 1;
-        return;
+        return out;
     }
-    st.next_row = r + 1;
+    out.row = Some(r);
     let mut info = LineInfo::default();
     if let Some(ht) = row.attr_f64("ht") {
         info.custom = row.flag("customHeight", false);
         // Automatic heights equal to the default are noise.
-        if info.custom || (pt_to_px(ht) - sheet.default_row_height).abs() > 0.5 {
+        if info.custom || (pt_to_px(ht) - default_height).abs() > 0.5 {
             info.size = Some(pt_to_px(ht));
         }
     }
@@ -440,41 +503,106 @@ fn read_row(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, row: &El) {
     if row.flag("customFormat", false)
         && let Some(s) = row.attr_u32("s")
     {
-        info.style = Some(cx.style(Some(s)));
+        info.style = Some(src.style(Some(s)));
     }
-    if info != LineInfo::default() {
-        sheet.rows.insert(r, info);
-    }
+    out.info = info;
+    out.cells.reserve(row.children.len());
     let mut next_col = 0u32;
     for c in row.kids("c") {
         let pos = match c.attr("r") {
             Some(a) => match CellRef::parse(a.trim()) {
                 Some(p) => p,
                 None => {
-                    st.dropped += 1;
+                    out.dropped += 1;
                     continue;
                 }
             },
             None => CellRef::new(r, next_col),
         };
         if pos.col >= MAX_COLS || pos.row >= MAX_ROWS {
-            st.dropped += 1;
+            out.dropped += 1;
             continue;
         }
         next_col = pos.col + 1;
-        read_cell(cx, sheet, st, c, pos);
+        let cell = parse_cell(src, shapes, &mut out.notes, c, pos);
+        out.cells.push(cell);
+    }
+    out
+}
+
+/// Puts a read row on the sheet, in file order, with what depends on the rows above it.
+fn place_row(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, parsed: ParsedRow) {
+    st.rows += 1;
+    for note in &parsed.notes {
+        cx.warn(*note);
+    }
+    let Some(r) = parsed.row else {
+        st.dropped += 1;
+        return;
+    };
+    st.next_row = r + 1;
+    if parsed.info != LineInfo::default() {
+        sheet.rows.insert(r, parsed.info);
+    }
+    st.dropped += parsed.dropped;
+    for cell in parsed.cells {
+        place_cell(cx, sheet, st, cell);
     }
 }
 
-fn read_cell(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, c: &El, pos: CellRef) {
-    let style = cx.style(c.attr_u32("s"));
+fn place_cell(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, c: ParsedCell) {
+    let ParsedCell { pos, style, value, picture, formula, dynamic } = c;
+    if let Some(picture) = picture {
+        sheet.set_picture(pos, picture);
+        sheet.set_style(pos, style);
+        return;
+    }
+    let formula = match formula {
+        ParsedFormula::None => None,
+        ParsedFormula::Ready(f) => Some(f),
+        ParsedFormula::Array(f, range) => {
+            if let Some(range) = range {
+                push_dynamic(st, range);
+            }
+            Some(f)
+        }
+        ParsedFormula::Master(si, shared, f) => {
+            st.shared.insert(si, shared);
+            Some(f)
+        }
+        ParsedFormula::Child(si) => match st.shared.get(&si) {
+            None => {
+                cx.warn("a shared formula refers to a missing master cell; kept the cached value");
+                None
+            }
+            Some(sh) => {
+                let f = match &sh.expr {
+                    Some(e) => {
+                        let dr = pos.row as i64 - sh.anchor.row as i64;
+                        let dc = pos.col as i64 - sh.anchor.col as i64;
+                        Formula::shared(e, dr, dc)
+                            .unwrap_or_else(|| Formula::from_expr(mkmatrix_formula::adjust::shift_relative((**e).clone(), dr, dc)))
+                    }
+                    None => Formula::new(&sh.text),
+                };
+                let array = f.array;
+                Some(f.marked(array, dynamic))
+            }
+        },
+    };
+    let value = if formula.is_none() && in_dynamic(st, pos) { Value::Empty } else { value };
+    sheet.cells.set(pos, Cell { value, formula: formula.map(Arc::new), style });
+}
+
+fn parse_cell(src: &CellSource<'_>, shapes: &mut Shapes, notes: &mut Vec<&'static str>, c: &El, pos: CellRef) -> ParsedCell {
+    let style = src.style(c.attr_u32("s"));
     let v = c.child("v").map(|v| v.text.as_str());
     let value = match c.attr("t").unwrap_or("n") {
         "s" => match v.and_then(|v| v.trim().parse::<usize>().ok()) {
-            Some(i) => match cx.sst.get(i) {
+            Some(i) => match src.sst.get(i) {
                 Some(s) => Value::Text(s.clone()),
                 None => {
-                    cx.warn("some cells refer to missing shared strings");
+                    notes.push("some cells refer to missing shared strings");
                     Value::Empty
                 }
             },
@@ -486,13 +614,13 @@ fn read_cell(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, c: &El, pos
         }
         "b" => v.map(|v| Value::Bool(matches!(v.trim(), "1" | "true" | "TRUE"))).unwrap_or(Value::Empty),
         "e" => v.map(|v| Value::Error(CellError::parse(v.trim()).unwrap_or(CellError::Value))).unwrap_or(Value::Empty),
-        "d" => match v.and_then(|v| parse_iso_datetime(v.trim(), cx.date_system)) {
+        "d" => match v.and_then(|v| parse_iso_datetime(v.trim(), src.date_system)) {
             Some(n) => Value::number(n),
             None => {
                 if let Some(v) = v
                     && !v.trim().is_empty()
                 {
-                    cx.warn("some date cells could not be read");
+                    notes.push("some date cells could not be read");
                 }
                 Value::Empty
             }
@@ -501,7 +629,7 @@ fn read_cell(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, c: &El, pos
             Some(t) => match t.parse::<f64>() {
                 Ok(n) if n.is_finite() => Value::Number(if n == 0.0 { 0.0 } else { n }),
                 _ => {
-                    cx.warn("some numeric cells could not be read");
+                    notes.push("some numeric cells could not be read");
                     Value::Empty
                 }
             },
@@ -512,95 +640,68 @@ fn read_cell(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, c: &El, pos
         if vm == "0" {
             return None;
         }
-        let picture = vm.parse::<usize>().ok().and_then(|n| n.checked_sub(1)).and_then(|n| cx.cell_pictures.get(n)).cloned().flatten();
+        let picture = vm.parse::<usize>().ok().and_then(|n| n.checked_sub(1)).and_then(|n| src.cell_pictures.get(n)).cloned().flatten();
         if picture.is_none() {
-            cx.warn("some cells have unsupported or missing value metadata; kept their scalar fallback (cell pictures may be missing)");
+            notes.push("some cells have unsupported or missing value metadata; kept their scalar fallback (cell pictures may be missing)");
         }
         picture
     });
-    if let Some(picture) = picture {
-        if c.child("f").is_some() {
-            cx.warn("formula-generated cell pictures were imported as static pictures; their formulas were not retained");
-        }
-        sheet.set_picture(pos, picture);
-        sheet.set_style(pos, style);
-        return;
-    }
     let dynamic = c.attr("cm").is_some();
-    let formula = c.child("f").and_then(|f| read_formula(cx, st, f, pos, dynamic));
-    let value = if formula.is_none() && in_dynamic(st, pos) { Value::Empty } else { value };
-    sheet.cells.set(pos, Cell { value, formula: formula.map(Arc::new), style });
+    if picture.is_some() {
+        if c.child("f").is_some() {
+            notes.push("formula-generated cell pictures were imported as static pictures; their formulas were not retained");
+        }
+        return ParsedCell { pos, style, value, picture, formula: ParsedFormula::None, dynamic };
+    }
+    let formula = c.child("f").map_or(ParsedFormula::None, |f| parse_formula(shapes, notes, f, pos, dynamic));
+    ParsedCell { pos, style, value, picture: None, formula, dynamic }
 }
 
-fn read_formula(cx: &mut Ctx<'_>, st: &mut RowState, f: &El, pos: CellRef, dynamic: bool) -> Option<Formula> {
-    // Keep the file's dynamic-array mark, so saving never turns the formula into a legacy one.
-    read_formula_text(cx, st, f, pos, dynamic).map(|fm| {
+/// Keeps the file's dynamic-array mark, so saving never turns the formula into a legacy one.
+fn parse_formula(shapes: &mut Shapes, notes: &mut Vec<&'static str>, f: &El, pos: CellRef, dynamic: bool) -> ParsedFormula {
+    let marked = |fm: Formula| {
         let array = fm.array;
         fm.marked(array, dynamic)
-    })
-}
-
-fn read_formula_text(cx: &mut Ctx<'_>, st: &mut RowState, f: &El, pos: CellRef, dynamic: bool) -> Option<Formula> {
+    };
     let model = from_file(f.text.trim());
     let text = model.as_str();
     match f.attr("t").unwrap_or("normal") {
         "shared" => {
-            let si = f.attr_u32("si")?;
-            if !text.is_empty() {
-                let expr = mkmatrix_formula::parse(text).ok().map(Arc::new);
-                st.shared.insert(si, Shared { anchor: pos, expr, text: text.to_string() });
-                Some(share_shape(st, pos, text))
-            } else {
-                let Some(sh) = st.shared.get(&si) else {
-                    cx.warn("a shared formula refers to a missing master cell; kept the cached value");
-                    return None;
-                };
-                Some(match &sh.expr {
-                    Some(e) => {
-                        let dr = pos.row as i64 - sh.anchor.row as i64;
-                        let dc = pos.col as i64 - sh.anchor.col as i64;
-                        Formula::shared(e, dr, dc)
-                            .unwrap_or_else(|| Formula::from_expr(mkmatrix_formula::adjust::shift_relative((**e).clone(), dr, dc)))
-                    }
-                    None => Formula::new(&sh.text),
-                })
+            let Some(si) = f.attr_u32("si") else { return ParsedFormula::None };
+            if text.is_empty() {
+                return ParsedFormula::Child(si);
             }
+            let expr = mkmatrix_formula::parse(text).ok().map(Arc::new);
+            let formula = marked(share_shape(shapes, pos, text));
+            ParsedFormula::Master(si, Shared { anchor: pos, expr, text: text.to_string() }, formula)
         }
         "array" => {
             if text.is_empty() {
-                return None;
+                return ParsedFormula::None;
             }
             let mut fm = Formula::new(text);
             let range = f.attr("ref").and_then(RangeRef::parse).unwrap_or(RangeRef::cell(pos));
-            if !range.is_single() {
-                push_dynamic(st, range);
-            }
             if !dynamic {
                 fm.array = Some(range);
             }
-            Some(fm)
+            ParsedFormula::Array(marked(fm), (!range.is_single()).then_some(range))
         }
         "dataTable" => {
-            cx.warn("what-if data tables are not supported; kept their values");
-            None
+            notes.push("what-if data tables are not supported; kept their values");
+            ParsedFormula::None
         }
-        _ => {
-            if text.is_empty() {
-                None
-            } else {
-                Some(share_shape(st, pos, text))
-            }
-        }
+        _ if text.is_empty() => ParsedFormula::None,
+        _ => ParsedFormula::Ready(marked(share_shape(shapes, pos, text))),
     }
 }
 
 /// The formula `text` read at `pos`, sharing the tree of an earlier formula of the same shape when
 /// moving that tree gives exactly this one; else with a tree of its own, remembered for the
 /// formulas after it. Most formulas of a big sheet share, so they are compared as trees.
-fn share_shape(st: &mut RowState, pos: CellRef, text: &str) -> Formula {
+fn share_shape(shapes: &mut Shapes, pos: CellRef, text: &str) -> Formula {
     let Ok(expr) = mkmatrix_formula::parse(text) else { return Formula::new(text) };
     let shape = mkmatrix_formula::print_r1c1(&expr, pos);
-    if let Some((tree, at)) = st.shapes.get(&shape) {
+    if let Some((tree, at)) = shapes.get(&shape) {
         let (rows, cols) = (pos.row as i64 - at.row as i64, pos.col as i64 - at.col as i64);
         if let Some(f) = Formula::shared(tree, rows, cols).filter(|f| f.expr().as_ref() == Some(&expr)) {
             return f.keeping_text(mkmatrix_formula::print(&expr));
@@ -608,10 +709,10 @@ fn share_shape(st: &mut RowState, pos: CellRef, text: &str) -> Formula {
         return Formula::from_expr(expr);
     }
     let own = Formula::from_expr(expr);
-    if st.shapes.len() < MAX_SHAPES
+    if shapes.len() < MAX_SHAPES
         && let Some(tree) = &own.expr
     {
-        st.shapes.insert(shape, (Arc::clone(tree), pos));
+        shapes.insert(shape, (Arc::clone(tree), pos));
     }
     own
 }
