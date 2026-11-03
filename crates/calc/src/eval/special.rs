@@ -98,6 +98,22 @@ pub fn precedents_moved(wb: &Workbook, sheet: usize, e: &Expr, rows: i64, cols: 
     (out, dynamic)
 }
 
+/// The references of `e` when they alone give its precedents wherever the tree is moved: all on
+/// the formula's own sheet, and none that a function resizes or a range operator spans. Then
+/// [`precedents_moved`] needs neither the workbook nor another walk of the tree.
+pub fn plain_references(e: &Expr) -> Option<Vec<Reference>> {
+    let mut refs = Vec::new();
+    let mut plain = true;
+    e.walk(&mut |x| match x {
+        Expr::Ref(r) if matches!(r.sheet, SheetSel::Current) => refs.push(r.clone()),
+        Expr::Ref(_) => plain = false,
+        Expr::Call(n, args) if resizes_sum_range(n, args.len()) => plain = false,
+        Expr::Binary(BinOp::Range, a, b) if !matches!((&**a, &**b), (Expr::Ref(_), Expr::Ref(_))) => plain = false,
+        _ => {}
+    });
+    plain.then_some(refs)
+}
+
 fn is_special(n: &str) -> bool {
     matches!(
         n,

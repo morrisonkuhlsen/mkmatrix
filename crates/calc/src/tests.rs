@@ -2575,6 +2575,123 @@ fn a_shared_tree_reads_what_its_moved_copy_reads() {
             let show = |a: &[crate::eval::Area]| a.iter().map(|x| (x.sheet, x.range)).collect::<Vec<_>>();
             assert_eq!(show(&got), show(&want), "{text} moved by {rows}, {cols}");
             assert_eq!(got_dynamic, want_dynamic, "{text} moved by {rows}, {cols}");
+            // Where the plain list of references applies, it reads the same.
+            if let Some(refs) = crate::eval::plain_references(&tree) {
+                let plain: Vec<_> = refs.iter().filter_map(|r| mkmatrix_formula::adjust::shift_ref(r, rows, cols)).map(|r| (0, r.range())).collect();
+                assert_eq!(plain, show(&want), "{text} moved by {rows}, {cols}");
+            } else {
+                assert!(text.contains("Two!") || text.contains("SUMIF") || text.contains("INDEX"), "{text}");
+            }
         }
     }
+}
+
+/// Filled formulas over awkward values, calculated with kernels and with the interpreter alone,
+/// before and after an edit: every cell must agree.
+#[test]
+fn kernels_answer_as_the_interpreter_does() {
+    let formulas = [
+        "=A1+B1",
+        "=A1-B1",
+        "=A1*B1",
+        "=A1/B1",
+        "=-A1",
+        "=+A1",
+        "=A1",
+        "=(A1+B1)*(A1-B1)/2+3",
+        "=-(A1*-B1)",
+        "=A1/B1/B1",
+        "=$A$1+A1",
+        "=A$1*$B1",
+        "=1/0",
+        "=2*3",
+        "=1E308*10*A1",
+        "=1/(A1*1E308*10)",
+        "=A1-A1",
+        "=0*-1",
+        "=1/(0*-1)",
+        // A chain, a forward chain and a loop.
+        "=A1+AA1",
+        "=A2+Z2",
+        "=Y1+1",
+        // What no kernel takes, reading what kernels calculate.
+        "=SUM(D1:D3)+A1",
+        "=A1^2",
+        "=A1&B1",
+        "=A1>B1",
+        "=A1%",
+    ];
+    // Awkward values, each next to all the others as the rows go by.
+    let values =
+        ["1", "2.5", "0", "-3", "", "x", "12", "TRUE", "#N/A", "1E308", "-1E308", "1E-308", "'5", "=NA()", "=1/0", "=\"\"", "=1+1", "=\"7\""];
+    let build = |decline: bool| {
+        crate::recalc::DECLINE_KERNELS.with(|d| d.set(decline));
+        let mut t = T::new();
+        for r in 0..values.len() {
+            for (col, shift) in [("A", 0), ("B", 5)] {
+                let v = values[(r + shift) % values.len()];
+                if !v.is_empty() {
+                    t.set(&format!("{col}{}", r + 1), v);
+                }
+            }
+        }
+        let mut out = Vec::new();
+        let rows = values.len() as u32;
+        for (i, f) in formulas.iter().enumerate() {
+            let col = i as u32 + 3;
+            let tree = std::sync::Arc::new(mkmatrix_formula::parse(f.trim_start_matches('=')).unwrap());
+            let mut changed = Vec::new();
+            for r in 0..rows {
+                let at = CellRef::new(r, col);
+                // Filled down: every column reads the columns its text says.
+                let formula = Formula::shared(&tree, i64::from(r), 0);
+                if let Some(formula) = formula {
+                    t.wb.sheet_mut(0).unwrap().cells.set(at, Cell::formula(formula));
+                    changed.push((0, at));
+                }
+            }
+            t.calc.cells_changed(&mut t.wb, &changed);
+        }
+        let dump =
+            |t: &T| (0..rows).flat_map(|r| (0..30).map(move |c| CellRef::new(r, c))).map(|c| t.wb.sheet(0).unwrap().value(c)).collect::<Vec<_>>();
+        out.push(dump(&t));
+        // Edits that reach the formulas, and a recalculation of everything.
+        t.set("A3", "4");
+        out.push(dump(&t));
+        t.set("B7", "x");
+        out.push(dump(&t));
+        t.set("A1", "");
+        out.push(dump(&t));
+        t.calc.recalc_all(&mut t.wb);
+        out.push(dump(&t));
+        out
+    };
+    crate::recalc::KERNEL_RUNS.with(|n| n.set(0));
+    let with = build(false);
+    let answered = crate::recalc::KERNEL_RUNS.with(std::cell::Cell::get);
+    let without = build(true);
+    crate::recalc::DECLINE_KERNELS.with(|d| d.set(false));
+    assert!(answered > 100, "kernels answered {answered} cells");
+    for (step, (a, b)) in with.iter().zip(&without).enumerate() {
+        for (i, (x, y)) in a.iter().zip(b).enumerate() {
+            let same = x == y || matches!((x, y), (Value::Number(p), Value::Number(q)) if p.to_bits() == q.to_bits());
+            assert!(same, "step {step}, cell {i}: kernel {x:?}, interpreter {y:?}");
+        }
+    }
+}
+
+#[test]
+fn a_kernel_leaves_array_formulas_and_spills_to_the_interpreter() {
+    let mut t = T::new();
+    t.set("A1", "2");
+    t.set("C1", "=SEQUENCE(2)");
+    // Reads a spilled cell: not a stored one.
+    t.set("E1", "=C2+A1");
+    assert_eq!(t.num("E1"), 4.0);
+    t.set("A1", "3");
+    assert_eq!(t.num("E1"), 5.0);
+    // The spill grows over what was blank.
+    t.set("C1", "=SEQUENCE(3)");
+    t.set("E2", "=C3*2");
+    assert_eq!(t.num("E2"), 6.0);
 }
