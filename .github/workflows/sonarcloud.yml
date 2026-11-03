@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   sonarcloud:
-    # Tracked at @main so org-wide CI improvements propagate without PR churn.
-    uses: storytold/craft-common-actions/.github/workflows/sonarcloud.yml@main
+    # Pinned (not @main) so a change upstream can't move this onto a paid runner: MK Matrix's
+    # GitHub use must cost nothing. Checked at this commit: standard ubuntu runners only.
+    uses: storytold/craft-common-actions/.github/workflows/sonarcloud.yml@eddaf203b2d4873525a69842240214b23bac65ba
     secrets: inherit
