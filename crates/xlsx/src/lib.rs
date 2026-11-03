@@ -6,7 +6,8 @@
 //!
 //! Reading is lenient: unsupported or broken optional parts are skipped and reported in
 //! [`ReadReport::warnings`]; only a missing/invalid package or workbook part is an error. Hostile
-//! input is bounded: decompressed parts are capped at 512 MB (1 GB per package), cells outside
+//! input is bounded: decompressed parts are capped at 512 MB (1 GB per package), or up to 2 GB
+//! (4 GB) natively for files that hold at least a hundredth of what they unpack to, cells outside
 //! Excel's grid are dropped and XML nesting is limited.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![forbid(unsafe_code)]
@@ -47,7 +48,7 @@ use mkmatrix_model::Workbook;
 pub use crypto::{DecryptError, check_encryption, decrypt};
 pub use csv::{MAX_CSV_BYTES, read_csv, write_csv, write_csv_limited};
 pub use ods::read_ods;
-pub use package::MAX_PART;
+pub use package::{MAX_PART, MAX_TIGHT_PART};
 pub use passthrough::rebase_links;
 pub use xls::read_xls;
 pub use xlsb::read_xlsb;
@@ -86,7 +87,7 @@ pub fn read_xlsx(bytes: &[u8]) -> Result<(Workbook, ReadReport), IoError> {
     read::read_xlsx(bytes)
 }
 
-/// The part of a zip package that declares more than [`MAX_PART`] unpacked bytes, with that size:
+/// The part of a zip package that declares more unpacked bytes than reading accepts, with that size:
 /// what an [`IoError::TooLarge`] from reading the package is about when one part is too large.
 pub fn oversized_part(bytes: &[u8]) -> Option<(String, u64)> {
     package::oversized_part(bytes)
