@@ -193,7 +193,10 @@ fn open_plain(name: &str, bytes: &[u8], csv_as_text: bool) -> Result<(Workbook, 
 /// per part, so smaller sheets fit; the shared strings are one part for every sheet, so only a
 /// CSV, which has no parts, helps there.
 fn part_too_large_message(name: &str, part: &str, size: u64) -> String {
-    let limit = mkmatrix_xlsx::MAX_PART >> 20;
+    // Under the hard limit, what stopped this part is how tightly it is packed.
+    let hard = size > mkmatrix_xlsx::MAX_PART;
+    let limit = if hard { mkmatrix_xlsx::MAX_PART } else { mkmatrix_xlsx::MAX_TIGHT_PART } >> 20;
+    let which = if hard { "for one part" } else { "for one part packed this tightly" };
     let mb = size >> 20;
     let size = if mb > limit { format!("{mb} MB") } else { format!("more than {limit} MB") };
     let remedy = if part.contains("worksheets/") {
@@ -202,7 +205,7 @@ fn part_too_large_message(name: &str, part: &str, size: u64) -> String {
         "To open it, save the data as CSV, which keeps only its values."
     };
     format!(
-        "We can't open '{name}': its part {part} unpacks to {size}, over MK Matrix's limit of {limit} MB for one part \
+        "We can't open '{name}': its part {part} unpacks to {size}, over MK Matrix's limit of {limit} MB {which} \
          (a guard against damaged or malicious files). {remedy}"
     )
 }

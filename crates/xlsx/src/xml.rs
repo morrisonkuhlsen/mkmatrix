@@ -223,6 +223,27 @@ pub fn parse(xml: &[u8]) -> Result<El, IoError> {
 /// Parses a part; complete elements named in `split` (below the root) are handed to `cb` and not
 /// kept in the returned tree.
 pub fn parse_streaming(xml: &[u8], split: &[&str], cb: &mut dyn FnMut(El) -> Result<(), IoError>) -> Result<El, IoError> {
+    parse_events(xml, split, false, cb)
+}
+
+/// Whether a part's bytes are read as they are: UTF-8, not converted first.
+pub fn is_utf8_as_is(xml: &[u8]) -> bool {
+    matches!(to_utf8(xml), std::borrow::Cow::Borrowed(_))
+}
+
+/// Parses a run of sibling `name` elements cut from a part, handing each to `cb`. Anything else at
+/// the top, or anything left open at the end, is an error: the run wasn't cut cleanly.
+pub fn parse_siblings(xml: &[u8], name: &str, cb: &mut dyn FnMut(El) -> Result<(), IoError>) -> Result<(), IoError> {
+    match parse_events(xml, &[name], true, cb) {
+        Err(e) if matches!(&e, IoError::Xml(m) if m == NO_ROOT) => Ok(()),
+        Err(e) => Err(e),
+        Ok(_) => Err(IoError::Xml("not a run of sibling elements".into())),
+    }
+}
+
+const NO_ROOT: &str = "no root element";
+
+fn parse_events(xml: &[u8], split: &[&str], siblings: bool, cb: &mut dyn FnMut(El) -> Result<(), IoError>) -> Result<El, IoError> {
     let data = to_utf8(xml);
     let mut reader = Reader::from_reader(data.as_ref());
     {
@@ -245,9 +266,14 @@ pub fn parse_streaming(xml: &[u8], split: &[&str], cb: &mut dyn FnMut(El) -> Res
         root: &mut Option<El>,
         el: El,
         split: &[&str],
+        siblings: bool,
         cb: &mut dyn FnMut(El) -> Result<(), IoError>,
         kept: &mut usize,
     ) -> Result<(), IoError> {
+        if siblings && stack.is_empty() && split.contains(&el.name.as_str()) {
+            *kept = kept.saturating_sub(descendants(&el));
+            return cb(el);
+        }
         match stack.last_mut() {
             Some(parent) => {
                 if split.contains(&el.name.as_str()) {
@@ -282,11 +308,11 @@ pub fn parse_streaming(xml: &[u8], split: &[&str], cb: &mut dyn FnMut(El) -> Res
             }
             Event::Empty(e) => {
                 let el = start_el(&e);
-                finish(&mut stack, &mut root, el, split, cb, &mut kept)?;
+                finish(&mut stack, &mut root, el, split, siblings, cb, &mut kept)?;
             }
             Event::End(_) => {
                 if let Some(el) = stack.pop() {
-                    finish(&mut stack, &mut root, el, split, cb, &mut kept)?;
+                    finish(&mut stack, &mut root, el, split, siblings, cb, &mut kept)?;
                 }
             }
             Event::Text(t) => {
@@ -324,10 +350,13 @@ pub fn parse_streaming(xml: &[u8], split: &[&str], cb: &mut dyn FnMut(El) -> Res
         buf.clear();
     }
     // Unclosed elements (truncated part): close them so we keep what we have.
-    while let Some(el) = stack.pop() {
-        finish(&mut stack, &mut root, el, split, cb, &mut kept)?;
+    if siblings && !stack.is_empty() {
+        return Err(IoError::Xml("an element was cut".into()));
     }
-    root.ok_or_else(|| IoError::Xml("no root element".into()))
+    while let Some(el) = stack.pop() {
+        finish(&mut stack, &mut root, el, split, siblings, cb, &mut kept)?;
+    }
+    root.ok_or_else(|| IoError::Xml(NO_ROOT.into()))
 }
 
 // ---------------------------------------------------------------- writing helpers

@@ -22,13 +22,19 @@ use crate::eval::{Area, Evaluator, Host, precedents_moved, stack_position};
 mod graph;
 mod kernel;
 mod pass_host;
+#[cfg(not(target_arch = "wasm32"))]
+#[path = "recalc/parallel.rs"]
+mod threads;
+#[cfg(target_arch = "wasm32")]
+#[path = "recalc/serial.rs"]
+mod threads;
 
 #[cfg(test)]
 use graph::Intervals;
 pub use graph::{FxHasher, Graph, Key};
 use graph::{HashMap, HashSet, Node};
 #[cfg(test)]
-pub(crate) use pass_host::{DECLINE_KERNELS, DECLINE_WALKS, KERNEL_RUNS};
+pub(crate) use pass_host::{DECLINE_KERNELS, DECLINE_THREADS, DECLINE_WALKS, KERNEL_RUNS};
 use pass_host::{PassHost, reading_order, spills_as_before};
 
 /// Calculation state kept beside a workbook.
@@ -357,9 +363,21 @@ impl Calc {
                 break;
             }
             // Row-major order is a good topological guess; on-demand evaluation fixes the rest.
-            dirty.sort_by_key(|(s, c)| (*s, c.row, c.col));
-            let mut exprs: HashMap<Key, pass_host::Tree> = HashMap::with_capacity_and_hasher(dirty.len(), Default::default());
-            for k in &dirty {
+            threads::sort_keys(&mut dirty);
+            #[cfg(test)]
+            let declined = DECLINE_KERNELS.with(std::cell::Cell::get) || DECLINE_THREADS.with(std::cell::Cell::get);
+            #[cfg(not(test))]
+            let declined = false;
+            let tk = prof_now();
+            let (left, on_threads) = if declined { (dirty.clone(), 0) } else { threads::run_kernels(wb, &dirty) };
+            if on_threads > 0 && std::env::var_os("MKMATRIX_PROFILE").is_some() {
+                eprintln!("  kernels on threads: {on_threads} formulas {:.1} ms", prof_now() - tk);
+            }
+            self.last_recalc_cells += on_threads;
+            #[cfg(test)]
+            KERNEL_RUNS.with(|n| n.set(n.get() + on_threads as u64));
+            let mut exprs: HashMap<Key, pass_host::Tree> = HashMap::with_capacity_and_hasher(left.len(), Default::default());
+            for k in &left {
                 if let Some(e) = wb.sheet(k.0).and_then(|s| s.cell(k.1)).and_then(|c| c.formula.as_ref()).and_then(|f| f.eval_tree()) {
                     exprs.insert(*k, e);
                 }
@@ -370,8 +388,8 @@ impl Calc {
             let (results, spills, cycles) = {
                 let mut host = PassHost::new(wb, &exprs, &mut rng, now);
                 host.iterate = wb.calc.iterative;
-                let mut kernels = pass_host::Kernels::default();
-                for k in &dirty {
+                let mut kernels = kernel::Kernels::default();
+                for k in &left {
                     if !host.run_kernel(*k, &mut kernels) {
                         host.calculate(*k);
                     }
