@@ -169,7 +169,9 @@ impl Tokens {
     fn palette(dark: bool) -> Tokens {
         Tokens {
             dark,
-            window: pick(dark, Color32::from_rgb(0xF3, 0xF3, 0xF3), Color32::from_rgb(0x14, 0x16, 0x1C)),
+            // The bars around the sheet (title, ribbon, formula bar, sheet tabs, status bar) and the
+            // panes sit on the sheet's own colour: one surface, the cells' grid the only drawing on it.
+            window: pick(dark, Color32::WHITE, Color32::from_rgb(0x2B, 0x2F, 0x38)),
             ribbon: pick(dark, Color32::from_rgb(0xFF, 0xFF, 0xFF), Color32::from_rgb(0x1B, 0x1E, 0x25)),
             ribbon_border: pick(dark, Color32::from_rgb(0xE3, 0xE3, 0xE3), Color32::from_rgb(0x26, 0x2A, 0x33)),
             text: pick(dark, Color32::from_rgb(0x24, 0x24, 0x24), Color32::from_rgb(0xE6, 0xE8, 0xEC)),
@@ -200,9 +202,9 @@ impl Tokens {
             input_border: pick(dark, Color32::from_rgb(0xD1, 0xD1, 0xD1), Color32::from_rgb(0x2E, 0x33, 0x3D)),
             field_hover: pick(dark, Color32::from_rgb(0xE8, 0xE8, 0xE8), Color32::from_rgb(0x0F, 0x11, 0x15)),
             field_active: pick(dark, Color32::from_rgb(0xDE, 0xDE, 0xDE), Color32::from_rgb(0x0A, 0x0B, 0x0E)),
-            tab_bar: pick(dark, Color32::from_rgb(0xF3, 0xF3, 0xF3), Color32::from_rgb(0x14, 0x16, 0x1C)),
+            tab_bar: pick(dark, Color32::WHITE, Color32::from_rgb(0x2B, 0x2F, 0x38)),
             tab_active: pick(dark, Color32::WHITE, Color32::from_rgb(0x1F, 0x23, 0x2B)),
-            status_bar: pick(dark, Color32::from_rgb(0xF3, 0xF3, 0xF3), Color32::from_rgb(0x14, 0x16, 0x1C)),
+            status_bar: pick(dark, Color32::WHITE, Color32::from_rgb(0x2B, 0x2F, 0x38)),
             cell_text: pick(dark, Color32::BLACK, Color32::from_rgb(0xE6, 0xE8, 0xEC)),
             menu_bg: pick(dark, Color32::WHITE, Color32::from_rgb(0x1B, 0x1E, 0x25)),
             shadow: pick(dark, Color32::from_black_alpha(40), Color32::from_black_alpha(140)),
@@ -434,9 +436,13 @@ mod contrast_tests {
     #[test]
     fn the_dark_sheet_is_graphite_its_controls_stay_light() {
         let (l, d) = (Tokens::light(), Tokens::dark());
-        // MK Matrix's dark sheet: a graphite a step lighter than the ink around it.
+        // MK Matrix's sheet: white, or a graphite on the dark theme, and the bars around it on
+        // the same colour.
         assert_eq!(l.grid_bg, Color32::WHITE);
-        assert!(contrast(d.grid_bg, d.window) > 1.2 && contrast(d.cell_text, d.grid_bg) >= 4.5);
+        assert!(contrast(d.cell_text, d.grid_bg) >= 4.5);
+        for t in [&l, &d] {
+            assert_eq!((t.window, t.tab_bar, t.status_bar), (t.grid_bg, t.grid_bg, t.grid_bg), "dark={}", t.dark);
+        }
         assert_ne!(l.sheet_ref_colors, d.sheet_ref_colors);
         assert_eq!(
             (l.sheet_control_bg, l.sheet_control_border, l.sheet_control_text, l.sheet_track),

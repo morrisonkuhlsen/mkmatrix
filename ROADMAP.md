@@ -135,6 +135,7 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | What landed |
 |---|---|
+| 2026-11-06 | The bars around the sheet (title bar, ribbon, formula bar, sheet tabs, status bar) and the panes sit on the sheet's own colour, white or the dark theme's graphite: one surface, with the cells' grid the only drawing on it |
 | 2026-11-06 | A quiet grid: gridlines a shade off the sheet (#F0EEEB on white), the row and column headings on the sheet itself with no grey band, row numbers set by the sheet, and the selected line shown by the accent and a 2 px tick instead of a grey box, in both themes |
 | 2026-10-29 | 0.13.0: Alt+drag scrubs a typed number and Data › What-If Analysis › Sensitivity ranks a result's inputs in a tornado chart (`data.sensitivity`); the AutoFilter menu in the dialogs' style, with each value's row count and frequency bar, sorting that keeps the header and Clear Filter for every kind of filter; the app icon in terracotta on a transparent background; the floating formula bar moves by its grip and resizes by its edges |
 | 2026-10-29 | `=SQL(query, table1, …)`, beyond Excel: a SQL SELECT over ranges (each a table `t1`, `t2`… headed by its first row) with joins, GROUP BY/HAVING, ORDER BY and LIMIT; the result spills with a header row, recalculates with its data and is saved as `_xludf.SQL` |
