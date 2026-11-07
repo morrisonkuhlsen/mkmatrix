@@ -242,7 +242,16 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     }
     if app.ui.matrix_brackets {
         let hover = ui.input(|i| i.pointer.hover_pos()).filter(|h| geo.cells.contains(*h)).map(|h| geo.mirror_pos(h));
-        crate::matrices::paint_brackets(&painter.with_clip_rect(geo.cells), &geo, sh, &crate::matrices::on_sheet(&wb, si), t.accent, hover);
+        crate::matrices::paint_brackets(
+            &painter.with_clip_rect(geo.cells),
+            &geo,
+            sh,
+            &crate::matrices::on_sheet(&wb, si),
+            t.accent,
+            t.grid_bg,
+            hover,
+            Some(sel.active),
+        );
     }
     if sh.view == mkmatrix_engine::model::SheetViewMode::PageBreakPreview {
         paint_pages(app, &painter.with_clip_rect(geo.cells), &geo, sh);
