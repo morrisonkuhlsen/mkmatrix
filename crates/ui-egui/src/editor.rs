@@ -278,13 +278,27 @@ impl EditState {
     }
 }
 
+/// A reference in formula text: its byte span, range, sheet (when it names one) and colour index.
+pub type FormulaRef = (usize, usize, RangeRef, Option<String>, usize);
+
+/// A named matrix a formula cites (`X` in `=X'@X`): its byte span, name, range and colour index,
+/// counted with the references' (the same name ⇒ the same colour).
+pub type MatrixRef = (usize, usize, String, RangeRef, usize);
+
 /// References in formula text with their byte spans and colour index (same reference text ⇒
 /// same colour), for colouring the editor and outlining ranges on the grid.
-pub fn formula_refs(text: &str) -> Vec<(usize, usize, RangeRef, Option<String>, usize)> {
+pub fn formula_refs(text: &str) -> Vec<FormulaRef> {
+    refs_and_matrices(text, &[]).0
+}
+
+/// [`formula_refs`], and the named matrices among `matrices` the formula cites, coloured in the
+/// same sequence: a matrix is a reference too, drawn by its brackets.
+pub fn refs_and_matrices(text: &str, matrices: &[(String, RangeRef)]) -> (Vec<FormulaRef>, Vec<MatrixRef>) {
     let body = text.strip_prefix('=').or_else(|| text.strip_prefix('+')).unwrap_or(text);
     let offset = text.len() - body.len();
-    let Ok(toks) = mkmatrix_engine::formula::lexer::tokenize(body) else { return vec![] };
-    let mut out: Vec<(usize, usize, RangeRef, Option<String>, usize)> = Vec::new();
+    let Ok(toks) = mkmatrix_engine::formula::lexer::tokenize(body) else { return (vec![], vec![]) };
+    let mut out: Vec<FormulaRef> = Vec::new();
+    let mut named: Vec<MatrixRef> = Vec::new();
     let mut seen: Vec<String> = Vec::new();
     let mut i = 0;
     while i < toks.len() {
@@ -313,6 +327,24 @@ pub fn formula_refs(text: &str) -> Vec<(usize, usize, RangeRef, Option<String>, 
                 i = j + 1;
                 (RangeRef::cell(c), toks[j].end)
             } else {
+                // A named matrix (a function's name is lexed apart, so a bare word is no call).
+                if sheet.is_none()
+                    && let Some((name, range)) = matrices.iter().find(|(n, _)| mkmatrix_engine::formula::same_name(n, w))
+                    && let Some(tok) = toks.get(j)
+                {
+                    // Keyed apart from cell references, which a name can't spell.
+                    let key = format!("={}", name.to_ascii_uppercase());
+                    let idx = match seen.iter().position(|k| *k == key) {
+                        Some(k) => k,
+                        None => {
+                            seen.push(key);
+                            seen.len() - 1
+                        }
+                    };
+                    named.push((tok.start + offset, tok.end + offset, name.clone(), *range, idx % REF_COLOR_COUNT));
+                    i = j + 1;
+                    continue;
+                }
                 i += 1;
                 continue;
             };
@@ -329,7 +361,7 @@ pub fn formula_refs(text: &str) -> Vec<(usize, usize, RangeRef, Option<String>, 
         }
         i += 1;
     }
-    out
+    (out, named)
 }
 
 /// Whether a reference of the formula being edited belongs on the sheet shown: a reference with a
@@ -393,6 +425,22 @@ pub fn completion_rest<'a>(full: &'a str, typed: &str) -> Option<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Named matrices a formula cites take reference colours in the references' sequence: the same
+    /// name the same colour, a name apart from any cell reference, and a function's name is no
+    /// matrix.
+    #[test]
+    fn named_matrices_are_coloured_with_the_references() {
+        let m = |a1: &str| RangeRef::parse(a1).unwrap_or(RangeRef::cell(CellRef::new(0, 0)));
+        let matrices = vec![("X".to_string(), m("B7:D14")), ("beta".to_string(), m("N11:N13")), ("SUM".to_string(), m("A1:A2"))];
+        let text = "=X'@X+A1*BETA+SUM(A1)";
+        let (refs, named) = refs_and_matrices(text, &matrices);
+        let spans: Vec<(&str, &str, usize)> = named.iter().map(|n| (&text[n.0..n.1], n.2.as_str(), n.4)).collect();
+        assert_eq!(spans, [("X", "X", 0), ("X", "X", 0), ("BETA", "beta", 2)]);
+        assert_eq!(refs.iter().map(|r| (r.2.a1(), r.4)).collect::<Vec<_>>(), [("A1".to_string(), 1), ("A1".to_string(), 1)]);
+        // Without matrices, the references are formula_refs' own.
+        assert_eq!(refs_and_matrices(text, &[]).0, formula_refs(text));
+    }
 
     #[test]
     fn point_mode() {

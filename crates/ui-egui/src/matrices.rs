@@ -26,6 +26,12 @@ pub fn on_sheet(wb: &Workbook, si: usize) -> Vec<(String, RangeRef)> {
         .collect()
 }
 
+/// The named matrices on every sheet, in sheet order: the names a formula may cite, wherever it
+/// is typed.
+pub fn all(wb: &Workbook) -> Vec<(String, RangeRef)> {
+    (0..wb.sheets.len()).flat_map(|si| on_sheet(wb, si)).collect()
+}
+
 /// The smallest named matrix on sheet `si` holding `cell`, with the cell's 1-based row and column
 /// in it.
 pub fn containing(wb: &Workbook, si: usize, cell: CellRef) -> Option<(String, u32, u32)> {
@@ -186,7 +192,7 @@ fn bracket_lines(r: Rect) -> Vec<[egui::Pos2; 2]> {
 
 /// A block's tag, `X · 8×3` (or `8×3` for a spill): over its top-left corner, under it when the
 /// sheet's edge leaves no room above. On the sheet's colour, so it reads over a heading.
-fn paint_tag(p: &Painter, geo: &Geo, r: Rect, text: &str, ink: Color32, ground: Color32) {
+pub(crate) fn paint_tag(p: &Painter, geo: &Geo, r: Rect, text: &str, ink: Color32, ground: Color32) {
     let font = FontId::new(TAG_SIZE * geo.z, FontFamily::Name(crate::theme::MONO.into()));
     let galley = p.layout_no_wrap(text.to_string(), font, ink);
     let pad = vec2(4.0, 2.0) * geo.z;
@@ -208,7 +214,9 @@ fn dims(r: RangeRef) -> String {
 /// name beside them in italics. The matrix under `hover` (sheet coordinates) glows. The matrix
 /// under the pointer or holding the active cell also shows its tag, `X · 8×3`. A spill that is
 /// no named matrix shows lighter brackets and its tag, `8×1`, only while the pointer is over it or
-/// the active cell is in it, so blocks side by side don't crowd each other.
+/// the active cell is in it, so blocks side by side don't crowd each other. While a formula is
+/// typed, the matrices it cites (`cited`: name and colour) take their reference colours and
+/// show their tags, as a cited range takes its colour on the sheet.
 #[allow(clippy::too_many_arguments)]
 pub fn paint_brackets(
     p: &Painter,
@@ -219,6 +227,7 @@ pub fn paint_brackets(
     ground: Color32,
     hover: Option<egui::Pos2>,
     active: Option<CellRef>,
+    cited: &[(String, Color32)],
 ) {
     let lit = hover.and_then(|h| bracket_at(geo, sh, matrices, h)).map(|(n, _)| n);
     let inside = |range: RangeRef, r: Rect| hover.is_some_and(|h| r.expand(4.0).contains(h)) || active.is_some_and(|a| range.contains(a));
@@ -250,6 +259,8 @@ pub fn paint_brackets(
             continue;
         }
         let glow = lit.as_deref() == Some(name.as_str());
+        let quoted = cited.iter().find(|(n, _)| n == name).map(|(_, c)| *c);
+        let color = quoted.unwrap_or(color);
         let lines = bracket_lines(r);
         let text_at = label.map(|l| pos2(l.right(), l.center().y));
         if glow {
@@ -275,7 +286,7 @@ pub fn paint_brackets(
         if let Some(at) = text_at {
             p.text(at, Align2::RIGHT_CENTER, name, font.clone(), ink);
         }
-        if glow || inside(*range, r) {
+        if glow || quoted.is_some() || inside(*range, r) {
             tags.push((r, format!("{name} · {}", dims(*range)), color));
         }
     }
