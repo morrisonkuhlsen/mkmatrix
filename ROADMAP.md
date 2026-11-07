@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~25 points of "ready for real work" and ~160–240 h away
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-06 · **Change:** minor (matrix brackets) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-06 · **Change:** minor (tabs in the title bar) · **Target:** Microsoft Excel (Microsoft 365)
 
 MK Matrix aims at full Microsoft Excel parity, and at being better in places: faster, open (XLSX
 is the native format), fully scriptable by agents (MCP, control channel, CLI), and on the web.
@@ -135,6 +135,7 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | What landed |
 |---|---|
+| 2026-11-06 | Compact and Minimal density put the ribbon's tabs in the title bar, between the quick-access controls and the ones on the right, with the title centred in the room left: the sheet starts 27 px higher in Compact (from 144 to 117 at 1440×900). A window too narrow for them keeps the tabs in the ribbon; Normal density is unchanged |
 | 2026-11-06 | While a formula is typed, the named matrices it cites take reference colours like ranges, in the formula bar and on their brackets, names and tags; the preview of where the result spills carries its shape (`→ 3×1`), and when the shapes don't fit the cell typed in is tagged with why (`X@y: 8×3 @ 8×1, 3 vs 8`) |
 | 2026-11-06 | Matrix brackets: finer (1.5 px); a matrix's name takes the first place beside, under or over it that covers no other cell's contents; the matrix under the pointer or holding the active cell shows a tag with its name and shape (`X · 8×3`), and a spill shows light brackets and its shape (`3×3`) the same way |
 | 2026-11-06 | The dark sheet shows charts, tables and data bars in its own colours: a chart sits on a graphite card with the theme's text, gridlines and axes (printing and export keep the white page), a table style's light bands become a wash over the dark sheet, data bars are translucent so their value keeps the theme's ink, and a sparkline too dark to read takes a lighter shade of its colour. Fills a cell or a rule chose are kept |

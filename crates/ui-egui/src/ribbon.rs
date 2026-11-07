@@ -60,8 +60,14 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
         app.ui.ribbon_tab = "Home".to_string();
     }
     let collapsed = app.ui.ribbon_collapsed;
+    // In the title bar (see `title_bar`), the tabs leave this panel to the row of controls.
+    let tabs_here = !app.ui.tabs_in_title;
+    if !tabs_here && collapsed {
+        return;
+    }
     // Room between the tabs and the icons under them.
     let gap = if compact { 4.0 } else { 8.0 };
+    let (menu_h, gap) = if tabs_here { (menu_h, gap) } else { (0.0, 2.0) };
     let h = menu_h + if collapsed { 0.0 } else { gap + row_h + 2.0 };
     egui::Panel::top("ribbon")
         .exact_size(h)
@@ -69,21 +75,11 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
         .frame(egui::Frame::NONE.fill(t.window).inner_margin(egui::Margin { left: 10, right: 10, top: 0, bottom: 0 }))
         .show(ui, |ui| {
             let bar = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), menu_h));
-            ui.scope_builder(egui::UiBuilder::new().max_rect(bar), |ui| {
-                ui.horizontal_centered(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    if app.chrome.file_tab {
-                        file_button(app, ui, menu_h);
-                    }
-                    let mut tabs: Vec<&str> = TABS.to_vec();
-                    let ctx_tabs = contextual_tabs(app);
-                    tabs.extend(ctx_tabs.iter());
-                    for tab in tabs {
-                        tab_button(app, ui, tab, ctx_tabs.contains(&tab), menu_h);
-                    }
-                    menu(app, ui, "Help", menu_h);
+            if tabs_here {
+                ui.scope_builder(egui::UiBuilder::new().max_rect(bar), |ui| {
+                    ui.horizontal_centered(|ui| tab_strip(app, ui, menu_h));
                 });
-            });
+            }
             if collapsed {
                 return;
             }
@@ -134,6 +130,40 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                 scroll_arrows(ui, &t, tab.as_str(), scroll);
             });
         });
+}
+
+/// The tabs' row: File, the tabs (contextual ones included) and Help, `menu_h` tall.
+fn tab_strip(app: &mut SheetApp, ui: &mut Ui, menu_h: f32) {
+    ui.spacing_mut().item_spacing.x = 0.0;
+    if app.chrome.file_tab {
+        file_button(app, ui, menu_h);
+    }
+    let mut tabs: Vec<&str> = TABS.to_vec();
+    let ctx_tabs = contextual_tabs(app);
+    tabs.extend(ctx_tabs.iter());
+    for tab in tabs {
+        tab_button(app, ui, tab, ctx_tabs.contains(&tab), menu_h);
+    }
+    menu(app, ui, "Help", menu_h);
+}
+
+/// How wide [`tab_strip`] is: each label's width (the active tab's in bold) and its padding.
+fn tab_strip_width(app: &SheetApp, ui: &Ui) -> f32 {
+    let t = Tokens::get(ui.ctx());
+    let lang = app.ui.language;
+    let width = |label: &str, bold: bool| {
+        let font = if bold { theme::ui_bold(13.0) } else { theme::ui_font(13.0) };
+        ui.painter().layout_no_wrap(lang.tr(label).to_string(), font, t.text).size().x + 18.0
+    };
+    let mut w = width("Help", false);
+    if app.chrome.file_tab {
+        w += width("File", false);
+    }
+    let ctx_tabs = contextual_tabs(app);
+    for tab in TABS.iter().chain(ctx_tabs.iter()) {
+        w += width(tab, app.ui.ribbon_tab == *tab);
+    }
+    w
 }
 
 /// One of the top bar's tabs: bold while active, in the accent colour when contextual.

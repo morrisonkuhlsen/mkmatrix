@@ -176,8 +176,24 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                 })
                 .unwrap_or_default();
             let dirty = app.session.active().is_some_and(|d| d.is_dirty());
-            let max_w = title_max_width(rect.center().x, left_end, right.inner);
-            paint_title(ui, rect.center(), &title, dirty, max_w, t.text);
+            // Compact density: the ribbon's tabs move up into the room between the controls, and
+            // the title centres in what is left after them; with no room for the tabs (a narrow
+            // window) they stay in the ribbon, over its row, as in normal density.
+            let (from, to) = (left_end + TABS_GAP, right.inner - TABS_GAP);
+            let tabs_w = super::tab_strip_width(app, ui);
+            app.ui.tabs_in_title = app.ui.density.compact() && from + tabs_w <= to;
+            if app.ui.tabs_in_title {
+                let strip = Rect::from_min_max(pos2(from, rect.top()), pos2(from + tabs_w, rect.bottom()));
+                ui.scope_builder(egui::UiBuilder::new().max_rect(strip), |ui| {
+                    ui.horizontal_centered(|ui| super::tab_strip(app, ui, bar_h));
+                });
+                let (start, end) = (strip.right(), right.inner);
+                let center = pos2((start + end) / 2.0, rect.center().y);
+                paint_title(ui, center, &title, dirty, title_max_width(center.x, start, end), t.text);
+            } else {
+                let max_w = title_max_width(rect.center().x, left_end, right.inner);
+                paint_title(ui, rect.center(), &title, dirty, max_w, t.text);
+            }
         });
     });
 }
@@ -279,6 +295,9 @@ fn title_galleys(
 
 /// Gap kept between the title and the controls beside it.
 const TITLE_GAP: f32 = 12.0;
+
+/// Gap kept between the tabs, when they sit in the title bar, and the controls on either side.
+const TABS_GAP: f32 = 16.0;
 
 /// The widest the centred title may be without reaching the controls that end at `left_end` or
 /// start at `right_start`.

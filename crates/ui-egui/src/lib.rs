@@ -83,6 +83,10 @@ pub struct UiState {
     pub system_theme: bool,
     pub ribbon_tab: String,
     pub ribbon_collapsed: bool,
+    /// The ribbon's tabs sit in the title bar this frame (compact density, when they fit there);
+    /// the ribbon then shows only its row of controls. Set by the title bar, read by the ribbon.
+    #[serde(skip)]
+    pub tabs_in_title: bool,
     pub formula_bar_expanded: bool,
     pub status_bar: bool,
     /// Motion in the UI: the selection outline glides to a new selection (View ▸ Animations).
@@ -216,6 +220,7 @@ impl Default for UiState {
             system_theme: false,
             ribbon_tab: "Home".into(),
             ribbon_collapsed: false,
+            tabs_in_title: false,
             formula_bar_expanded: false,
             status_bar: true,
             animations: true,
