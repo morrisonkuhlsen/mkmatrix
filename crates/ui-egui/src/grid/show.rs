@@ -556,7 +556,8 @@ pub(crate) fn paint_headers(
                     pc.rect_filled(cr, 0.0, if full_col(c) { t.header_all_bg } else { t.header_sel_bg });
                     pc.line_segment([pos2(cr.left(), cr.bottom() - 1.0), pos2(cr.right(), cr.bottom() - 1.0)], Stroke::new(2.0, t.accent));
                 }
-                pc.line_segment([pos2(cr.right() - 0.5, cr.top() + 3.0), pos2(cr.right() - 0.5, cr.bottom())], Stroke::new(1.0, t.header_line));
+                // Between headings, a divider as faint as a gridline (it still shows where to drag).
+                pc.line_segment([pos2(cr.right() - 0.5, cr.top() + 3.0), pos2(cr.right() - 0.5, cr.bottom())], Stroke::new(1.0, t.gridline));
                 let (before, after) = hidden_around(c, |i| sh.col_width(i));
                 for x in [before.then_some(cr.left()), after.then_some(cr.right())].into_iter().flatten() {
                     for dx in [-1.5, 1.5] {
@@ -604,7 +605,7 @@ pub(crate) fn paint_headers(
                     pr.rect_filled(cr, 0.0, if full_row(rr) { t.header_all_bg } else { t.header_sel_bg });
                     pr.line_segment([pos2(cr.right() - 1.0, cr.top()), pos2(cr.right() - 1.0, cr.bottom())], Stroke::new(2.0, t.accent));
                 }
-                pr.line_segment([pos2(cr.left() + 3.0, cr.bottom() - 0.5), pos2(cr.right(), cr.bottom() - 0.5)], Stroke::new(1.0, t.header_line));
+                pr.line_segment([pos2(cr.left() + 3.0, cr.bottom() - 0.5), pos2(cr.right(), cr.bottom() - 0.5)], Stroke::new(1.0, t.gridline));
                 let (before, after) = hidden_around(rr, |i| sh.row_height(i));
                 for y in [before.then_some(cr.top()), after.then_some(cr.bottom())].into_iter().flatten() {
                     for dy in [-1.5, 1.5] {
@@ -616,7 +617,9 @@ pub(crate) fn paint_headers(
                 match local.filter(|m| (m.start.row..=m.end.row).contains(&rr)) {
                     Some(m) => local_heading(&pr, cr, rr - m.start.row + 1, &label, &font, t, row_sel(rr)),
                     None => {
-                        pr.text(cr.center(), Align2::CENTER_CENTER, label, font.clone(), color);
+                        // Numbers line up on their last digit, by the sheet.
+                        let pad = 6.0 * (geo.z / display_scale()).max(0.75);
+                        pr.text(pos2(cr.right() - pad, cr.center().y), Align2::RIGHT_CENTER, label, font.clone(), color);
                     }
                 }
             }

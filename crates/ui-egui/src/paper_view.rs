@@ -555,7 +555,8 @@ pub(crate) fn paint_rulers(app: &SheetApp, p: &Painter, outer: Rect, geo: &Geo, 
             }
         };
         let pc = p.with_clip_rect(area);
-        pc.rect_filled(band(from, to), 0.0, t.header_sel_bg);
+        // The margins take the window's shade; the printable part, the headings' own.
+        pc.rect_filled(band(from, to), 0.0, t.window);
         pc.rect_filled(band(m0, m1), 0.0, t.header_bg);
         if unit < 2.0 {
             return;
