@@ -17,7 +17,7 @@ fn fixture() -> (Harness, u32) {
     session.execute("selection.set", json!({"range": "A1:A2"})).unwrap();
     let chart = session.execute("insert.chart", json!({"type": "column", "at": "D3", "width": 300, "height": 200})).unwrap();
     let id = chart["chart"].as_u64().unwrap() as u32;
-    let mut h = crate::common::builder().with_size(vec2(1200.0, 800.0)).build_ui_state(
+    let mut h = crate::common::builder().with_size(vec2(1200.0, 1600.0)).build_ui_state(
         |ui, app: &mut SheetApp| {
             let ctx = ui.ctx().clone();
             app.logic(&ctx);
@@ -74,12 +74,11 @@ fn dragging_the_corner_handle_resizes_the_chart() {
     assert!(w1 > w0 + 40.0 && h1 > h0 + 20.0, "chart grew from {w0}x{h0} to {w1}x{h1}");
 }
 
-/// Opens Format Chart Area for the chart and expands its Size section; returns the Width field's rect.
+/// Opens Format Chart Area for the chart; returns its Size section's Width field's rect (the
+/// fixture's window is tall enough for the whole pane).
 fn open_size_fields(h: &mut Harness, id: u32) -> egui::Rect {
     h.state_mut().selected_chart = Some(id);
     h.state_mut().grid.pane = Some("formatChart".into());
-    h.run_steps(2);
-    h.get_by_role_and_label(Role::DisclosureTriangle, "Size").click();
     h.run_steps(2);
     h.get_all_by_role(Role::SpinButton).next().unwrap().rect()
 }

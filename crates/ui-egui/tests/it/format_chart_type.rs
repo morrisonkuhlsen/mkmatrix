@@ -21,8 +21,6 @@ fn open_chart_type(t: &str, sub: &str) -> (Harness, u32) {
     h.state_mut().selected_chart = Some(id);
     h.state_mut().grid.pane = Some("formatChart".into());
     h.run_steps(2);
-    h.get_by_role_and_label(Role::DisclosureTriangle, "Chart Type").click();
-    h.run_steps(2);
     (h, id)
 }
 
@@ -30,16 +28,20 @@ fn kind(h: &Harness, id: u32) -> ChartKind {
     h.state().session.active().unwrap().wb.active().unwrap().charts.iter().find(|c| c.id == id).unwrap().kind
 }
 
-/// Whether the pane's `label` button is drawn as the chart's current type. The pane sits on the
-/// right, past the Chart Type header's left edge; the ribbon's buttons are elsewhere.
+/// The pane's left edge: its title's. The ribbon's buttons are further left.
+fn pane_left(h: &Harness) -> f32 {
+    h.get_by_label("Format Chart Area").rect().left()
+}
+
+/// Whether the pane's `label` row is drawn as the chart's current type.
 fn marked(h: &Harness, label: &str) -> bool {
-    let left = h.get_by_role_and_label(Role::DisclosureTriangle, "Chart Type").rect().left();
+    let left = pane_left(h);
     let button = h.get_all_by_role_and_label(Role::Button, label).find(|n| n.rect().left() >= left - 1.0).unwrap();
     button.accesskit_node().toggled() == Some(Toggled::True)
 }
 
 fn click(h: &mut Harness, label: &str) {
-    let left = h.get_by_role_and_label(Role::DisclosureTriangle, "Chart Type").rect().left();
+    let left = pane_left(h);
     h.get_all_by_role_and_label(Role::Button, label).find(|n| n.rect().left() >= left - 1.0).unwrap().click();
     h.run_steps(2);
 }
@@ -88,4 +90,14 @@ fn chart_type_marks_the_chart_s_current_type() {
             assert_eq!(marked(&h, other), other == label, "{other} on a {t} {sub} chart");
         }
     }
+}
+
+/// The pane's controls fit its width: none asks for more, so the pane doesn't grow by a few
+/// points each frame (a text field's margins once pushed it wider until it hit its cap).
+#[test]
+fn the_pane_keeps_its_width_from_frame_to_frame() {
+    let (mut h, _) = open_chart_type("column", "");
+    let before = pane_left(&h);
+    h.run_steps(6);
+    assert_eq!(pane_left(&h), before);
 }
