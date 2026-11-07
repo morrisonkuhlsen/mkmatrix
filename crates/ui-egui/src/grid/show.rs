@@ -264,6 +264,18 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
             &cited_matrices(app, &wb, &t),
         );
     }
+    // Over a cell of a matrix product: the row and column that make it, and the sum written out.
+    // Not while typing, dragging or holding a button, when the pointer is busy elsewhere.
+    if app.editor.is_none() && app.grid.drag == super::Drag::None && !pointer_selecting {
+        let over = ui.input(|i| i.pointer.hover_pos()).filter(|h| geo.cells.contains(*h)).map(|h| geo.mirror_pos(h));
+        if let Some(h) = over {
+            let cell = mkmatrix_engine::core::CellRef::new(geo.row_at(sh, h.y), geo.col_at(sh, h.x));
+            if let Some(f) = crate::product_focus::at(&wb, si, sh, cell) {
+                let (a, b) = (t.ref_color(0, true), t.ref_color(1, true));
+                crate::product_focus::paint(&painter.with_clip_rect(geo.cells), &geo, sh, &f, a, b, t.accent, t.grid_bg);
+            }
+        }
+    }
     if sh.view == mkmatrix_engine::model::SheetViewMode::PageBreakPreview {
         paint_pages(app, &painter.with_clip_rect(geo.cells), &geo, sh);
     }
