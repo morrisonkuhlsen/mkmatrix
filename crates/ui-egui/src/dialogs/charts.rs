@@ -85,7 +85,7 @@ pub(super) fn recommended_charts(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut 
                         resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, label.as_str()));
                         let p = ui.painter();
                         if on {
-                            p.rect_filled(r, 0.0, t.accent_soft);
+                            // As the dialogs' navigation: the accent bar, on no fill.
                             p.rect_filled(egui::Rect::from_min_size(r.min, vec2(2.0, r.height())), 0.0, t.accent);
                         } else if resp.hovered() {
                             p.rect_filled(r, 0.0, t.hover);

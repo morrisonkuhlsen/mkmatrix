@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~25 points of "ready for real work" and ~160–240 h away
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-06 · **Change:** release (0.15.0) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-07 · **Change:** release (0.16.0) · **Target:** Microsoft Excel (Microsoft 365)
 
 MK Matrix aims at full Microsoft Excel parity, and at being better in places: faster, open (XLSX
 is the native format), fully scriptable by agents (MCP, control channel, CLI), and on the web.
@@ -135,6 +135,12 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | What landed |
 |---|---|
+| 2026-11-07 | 0.16.0: the [aᵢⱼ] mark in every icon, the splash screen and the File view; flat dialogs (no shadow, no tinted fills) that keep their size between sections; View › Matrix Heat Map; a matrix product explained cell by cell under the pointer; operand shapes and spill obstacles shown while a formula is typed |
+| 2026-11-07 | A new mark, [aᵢⱼ]: a matrix as mathematics writes one, its general element between square brackets, letters drawn by hand (the a alone at 24 px and under); in every app icon, the splash screen and the File view. `cargo xtask icns` packs the macOS icon off macOS |
+| 2026-11-07 | While a product or solve is typed the formula bar shows its operands' shapes, `3×8 @ 8×1 → 3×1`; when the result would land on cells that hold something, the preview turns to the danger colour and says where, `→ 3×3 · blocked by D17`, before Enter instead of a `#SPILL!` after |
+| 2026-11-07 | A matrix product, cell by cell: with the pointer over a cell of `A@B` or `MX.MUL(A, B)` (ranges or named matrices, transposed or not), the row of A and the column of B that make it light up in reference colours and the sum is written out under the result, `X'(2,:)·X(:,2) = 2·2 + 3·3 + … = 284` |
+| 2026-11-07 | View › Matrix Heat Map (`view.matrixHeatMap`, also in a selected matrix's action column): each named matrix and spilled result shades its numbers by value on its own scale, positive in orange and negative in blue diverging from zero, one-sign blocks from lightest to deepest, the numbers kept readable |
+| 2026-11-07 | Dialogs are flat: no shadow, the title on the dialog's own colour, and the chosen section, list row, segment or option marked by the accent alone, with no tinted fill; a dialog keeps its size moving between its sections (Find ▸ Replace, Format Cells ▸ Border, About ▸ Contributors) and never shrinks while it is open |
 | 2026-11-06 | 0.15.0: a quieter, single-surface look (gridlines a shade off the sheet, headings and every bar on the sheet's colour, the tabs in the title bar in compact density); dark mode for charts, tables and data bars; matrix brackets with shape tags and cited matrices in reference colours; changed values light up after a recalculation; Format Chart Area and the chart menus in the house style; circular references through a spill area detected; status-bar statistics over styled spills; Alt, Q opens Search Commands |
 | 2026-11-06 | After a recalculation the cells whose values it changed light in the accent and fade (0.7 s): an edit's effect shows at a glance. Not on opening a file, after a full recalculation, past 500 cells, or with View › Animations off |
 | 2026-11-06 | Compact and Minimal density put the ribbon's tabs in the title bar, between the quick-access controls and the ones on the right, with the title centred in the room left: the sheet starts 27 px higher in Compact (from 144 to 117 at 1440×900). A window too narrow for them keeps the tabs in the ribbon; Normal density is unchanged |

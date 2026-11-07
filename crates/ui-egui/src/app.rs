@@ -327,6 +327,19 @@ impl SheetApp {
         let d = self.session.active()?;
         crate::shapes::of_formula(&ed.text, &d.wb, d.wb.active_sheet(), self.ui.language)
     }
+
+    /// The operands' shapes of the product or solve being typed, `3×8 @ 8×1` (see `shapes`).
+    pub fn editing_operands(&self) -> Option<String> {
+        let ed = self.editor.as_ref().filter(|e| e.is_formula())?;
+        let d = self.session.active()?;
+        crate::shapes::operands(&ed.text, &d.wb, d.wb.active_sheet())
+    }
+
+    /// The first cell a result of `shape` typed in the active cell would spill onto that is taken.
+    pub fn editing_blocked(&self, shape: crate::shapes::Shape) -> Option<mkmatrix_engine::core::CellRef> {
+        let d = self.session.active()?;
+        crate::shapes::blocked(d.wb.active()?, d.selection.active, shape)
+    }
 }
 
 /// A cell given as `(row, column)` or `row, column` (1-based, as the Name Box shows it with

@@ -71,6 +71,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "{what}: {a} {op} {b}, {n} vs {m}" => "{what}: {a} {op} {b}, {n} contra {m}",
         "{what}: {a} vs {b}" => "{what}: {a} contra {b}",
         "{what}: {shape} isn't square" => "{what}: {shape} não é quadrada",
+        "blocked by {cell}" => "bloqueado por {cell}",
         "Bottom Border" => "Borda Inferior",
         "Top Border" => "Borda Superior",
         "Left Border" => "Borda Esquerda",
@@ -1491,6 +1492,10 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Minimal" => "Mínima",
         "Matrix Brackets" => "Colchetes de Matriz",
         "Draw square brackets around each named matrix" => "Desenhar colchetes em volta de cada matriz nomeada",
+        "Matrix Heat Map" => "Mapa de Calor de Matriz",
+        "Shade each matrix's numbers by their values: positive warm, negative cool, the largest deepest" => {
+            "Sombrear os números de cada matriz pelo valor: positivos em tom quente, negativos em tom frio, os maiores mais intensos"
+        }
         "Help" => "Ajuda",
         "New Workbook" => "Nova Pasta de Trabalho",
         "New from Sample…" => "Novo a partir de Exemplo…",
@@ -1526,6 +1531,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Eigenvalues" => "Autovalores",
         "Singular values" => "Valores singulares",
         "Calculation by hand" => "Cálculo à mão",
+        "Heat map" => "Mapa de calor",
         "There are no empty cells next to the matrix for the result." => "Não há células vazias ao lado da matriz para o resultado.",
         "Calculation by Hand" => "Cálculo à Mão",
         "Copy LaTeX" => "Copiar LaTeX",

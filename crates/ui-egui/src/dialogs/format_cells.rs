@@ -20,7 +20,7 @@ const SECTIONS: [(&str, &str, Icon); 6] = [
 ];
 
 /// The content area's height: every section the same size, so the window never jumps.
-const BODY_H: f32 = 360.0;
+const BODY_H: f32 = 458.0;
 /// The navigation column's width.
 const NAV_W: f32 = 168.0;
 
@@ -212,7 +212,8 @@ fn number(app: &SheetApp, ui: &mut egui::Ui, st: &mut Style, sample: &mkmatrix_e
                 resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, label));
                 let p = ui.painter();
                 if on {
-                    p.rect_filled(r, 0.0, t.accent_soft);
+                    // As a list row: the accent bar, on no fill.
+                    p.rect_filled(egui::Rect::from_min_size(r.min, vec2(2.0, r.height())), 0.0, t.accent);
                 } else if resp.hovered() {
                     p.rect_filled(r, 0.0, t.hover);
                 }
@@ -248,17 +249,11 @@ fn number(app: &SheetApp, ui: &mut egui::Ui, st: &mut Style, sample: &mkmatrix_e
                         egui::Sense::click(),
                     );
                     let on = code == c;
-                    ui.painter().rect_filled(
-                        r,
-                        0.0,
-                        if on {
-                            t.accent_soft
-                        } else if resp.hovered() {
-                            t.hover
-                        } else {
-                            t.input_bg
-                        },
-                    );
+                    ui.painter().rect_filled(r, 0.0, if resp.hovered() && !on { t.hover } else { t.input_bg });
+                    // As a segment: the chosen one outlined in the accent, on no tint.
+                    if on {
+                        ui.painter().rect_stroke(r, 0.0, egui::Stroke::new(1.0, t.accent), egui::StrokeKind::Inside);
+                    }
                     ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, c, egui::FontId::monospace(12.0), if on { t.accent } else { t.text });
                     if resp.clicked() {
                         code = c.to_string();

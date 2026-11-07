@@ -2747,7 +2747,7 @@ dependencies = [
 
 [[package]]
 name = "mkmatrix"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "arboard",
  "chrono",
@@ -2774,7 +2774,7 @@ dependencies = [
 
 [[package]]
 name = "mkmatrix-calc"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "log",
  "mkmatrix-core",
@@ -2787,7 +2787,7 @@ dependencies = [
 
 [[package]]
 name = "mkmatrix-chart"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "mkmatrix-calc",
  "mkmatrix-core",
@@ -2798,7 +2798,7 @@ dependencies = [
 
 [[package]]
 name = "mkmatrix-cli"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "log",
  "mkmatrix-engine",
@@ -2810,7 +2810,7 @@ dependencies = [
 
 [[package]]
 name = "mkmatrix-core"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "chrono",
  "js-sys",
@@ -2821,7 +2821,7 @@ dependencies = [
 
 [[package]]
 name = "mkmatrix-engine"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "image",
  "log",
@@ -2842,7 +2842,7 @@ dependencies = [
 
 [[package]]
 name = "mkmatrix-formula"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "mkmatrix-core",
  "serde",
@@ -2851,7 +2851,7 @@ dependencies = [
 
 [[package]]
 name = "mkmatrix-functions"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "mkmatrix-core",
  "nalgebra",
@@ -2860,7 +2860,7 @@ dependencies = [
 
 [[package]]
 name = "mkmatrix-mcp"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "log",
  "mkmatrix-engine",
@@ -2869,7 +2869,7 @@ dependencies = [
 
 [[package]]
 name = "mkmatrix-model"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "mkmatrix-core",
  "mkmatrix-formula",
@@ -2881,18 +2881,18 @@ dependencies = [
 
 [[package]]
 name = "mkmatrix-numfmt"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "mkmatrix-core",
 ]
 
 [[package]]
 name = "mkmatrix-pdf"
-version = "0.15.0"
+version = "0.16.0"
 
 [[package]]
 name = "mkmatrix-ui-egui"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "craft-ui",
  "craft-update",
@@ -2916,7 +2916,7 @@ dependencies = [
 
 [[package]]
 name = "mkmatrix-web"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "eframe",
  "egui",
@@ -2933,7 +2933,7 @@ dependencies = [
 
 [[package]]
 name = "mkmatrix-xlsx"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "aes",
  "mkmatrix-core",
@@ -6548,7 +6548,7 @@ checksum = "e450f9b2ed1dff33c94c12589a87338689467b9c4f5d8a5710bd09a847d2c8a7"
 
 [[package]]
 name = "xtask"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "mkmatrix-engine",
  "serde_json",
