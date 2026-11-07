@@ -117,95 +117,119 @@ fn selection(app: &mut SheetApp, ui: &mut Ui) {
     }
 }
 
-/// Draws the chart format pane: title, type, legend, elements/axis titles, series colors, palettes/layouts and size.
+/// Draws the chart format pane in the dialogs' style (`dialogs::kit`): a muted heading per section
+/// (title, type, legend, elements, series, colours and layout, size), each under a rule; the types
+/// as a list with the chart's own marked, the legend, elements and layouts as segmented controls,
+/// fields in labelled rows.
 fn format_chart(app: &mut SheetApp, ui: &mut Ui) {
+    use crate::dialogs::kit;
+    let lang = app.ui.language;
     let Some(id) = app.selected_chart else {
-        ui.label(egui::RichText::new("Select a chart to format it.").italics());
+        kit::hint(ui, lang.tr("Select a chart to format it."));
         return;
     };
     let Some(chart) = app.session.active().and_then(|d| d.wb.active().and_then(|s| s.charts.iter().find(|c| c.id == id).cloned())) else {
-        ui.label("The chart no longer exists.");
+        kit::hint(ui, lang.tr("The chart no longer exists."));
         return;
     };
     let theme = app.session.active().map(|d| d.wb.theme.clone()).unwrap_or_default();
-    ui.collapsing("Chart Title", |ui| {
-        let field = egui::Id::unique(("mkmatrix.chart_title", id));
-        if let Some(title) = crate::widgets::committed_text(ui, field, chart.title.as_deref().unwrap_or(""), None) {
-            app.run_or_alert("chart.set", json!({"chart": id, "title": title}));
+    let t = Tokens::get(ui.ctx());
+    let width = ui.available_width();
+    // Nothing may ask for more than the pane has: a control wider than it widens the pane, which
+    // widens the control, frame after frame. A text field draws its margins outside its width;
+    // a form's controls sit beside a label column and its gap.
+    const FIELD_MARGIN: f32 = 8.0;
+    let beside = (width - kit::LABEL_W - 12.0).max(40.0);
+    ui.spacing_mut().item_spacing.y = 6.0;
+
+    kit::heading(ui, lang.tr("Chart Title"));
+    let field = egui::Id::unique(("mkmatrix.chart_title", id));
+    let title_name = lang.tr("Chart Title");
+    if let Some(title) =
+        crate::widgets::committed_text_named(ui, field, chart.title.as_deref().unwrap_or(""), Some(width - FIELD_MARGIN), Some(title_name))
+    {
+        app.run_or_alert("chart.set", json!({"chart": id, "title": title}));
+    }
+
+    kit::rule(ui);
+    kit::heading(ui, lang.tr("Chart Type"));
+    const TYPES: [(&str, &str, &str); 15] = [
+        ("Column", "column", ""),
+        ("Stacked Column", "column", "stacked"),
+        ("100% Stacked Column", "column", "stacked100"),
+        ("Bar", "bar", ""),
+        ("Stacked Bar", "bar", "stacked"),
+        ("100% Stacked Bar", "bar", "stacked100"),
+        ("Line", "line", "markers"),
+        ("Stacked Line", "line", "stacked"),
+        ("Area", "area", ""),
+        ("Stacked Area", "area", "stacked"),
+        ("100% Stacked Area", "area", "stacked100"),
+        ("Pie", "pie", ""),
+        ("Doughnut", "doughnut", ""),
+        ("Scatter", "scatter", ""),
+        ("Radar", "radar", ""),
+    ];
+    // Every type shows at once (the pane scrolls as a whole).
+    kit::panel(ui, TYPES.len() as f32 * kit::ROW_H + 2.0, |ui| {
+        ui.spacing_mut().item_spacing.y = 0.0;
+        for (label, k, s) in TYPES {
+            let cur = chart.kind == mkmatrix_engine::cmd::insert::chart_kind(k, s);
+            if kit::list_row(ui, lang.tr(label), None, cur, width).clicked() && !cur {
+                app.run_or_alert("chart.set", json!({"chart": id, "type": k, "subtype": s}));
+            }
         }
     });
-    ui.collapsing("Chart Type", |ui| {
-        ui.horizontal_wrapped(|ui| {
-            for (l, k, s) in [
-                ("Column", "column", ""),
-                ("Stacked Column", "column", "stacked"),
-                ("100% Stacked Column", "column", "stacked100"),
-                ("Bar", "bar", ""),
-                ("Stacked Bar", "bar", "stacked"),
-                ("100% Stacked Bar", "bar", "stacked100"),
-                ("Line", "line", "markers"),
-                ("Stacked Line", "line", "stacked"),
-                ("Area", "area", ""),
-                ("Stacked Area", "area", "stacked"),
-                ("100% Stacked Area", "area", "stacked100"),
-                ("Pie", "pie", ""),
-                ("Doughnut", "doughnut", ""),
-                ("Scatter", "scatter", ""),
-                ("Radar", "radar", ""),
-            ] {
-                let cur = chart.kind == mkmatrix_engine::cmd::insert::chart_kind(k, s);
-                if ui.selectable_label(cur, l).clicked() {
-                    app.run_or_alert("chart.set", json!({"chart": id, "type": k, "subtype": s}));
-                }
+
+    kit::rule(ui);
+    kit::heading(ui, lang.tr("Legend"));
+    let legend = format!("{:?}", chart.legend).to_ascii_lowercase();
+    let options =
+        [("none", lang.tr("None")), ("bottom", lang.tr("Bottom")), ("top", lang.tr("Top")), ("left", lang.tr("Left")), ("right", lang.tr("Right"))];
+    if let Some(v) = kit::segments(ui, &legend, &options, (width / options.len() as f32).floor()) {
+        app.run_or_alert("chart.set", json!({"chart": id, "legend": v}));
+    }
+
+    kit::rule(ui);
+    kit::heading(ui, lang.tr("Elements"));
+    let show_none = [("on", lang.tr("Show")), ("off", lang.tr("None"))];
+    let seg_w = (beside / 2.0).floor().min(90.0);
+    kit::form(ui, "mkmatrix.chart_elements", |ui| {
+        for (label, key, on) in [("Data Labels", "dataLabels", chart.data_labels), ("Gridlines", "gridlines", chart.gridlines)] {
+            kit::label(ui, lang.tr(label));
+            if let Some(v) = kit::segments(ui, if on { "on" } else { "off" }, &show_none, seg_w) {
+                app.run_or_alert("chart.set", json!({"chart": id, key: v == "on"}));
             }
-        });
-    });
-    ui.collapsing("Legend", |ui| {
-        ui.horizontal(|ui| {
-            for (l, v) in [("None", "none"), ("Bottom", "bottom"), ("Top", "top"), ("Left", "left"), ("Right", "right")] {
-                let cur = format!("{:?}", chart.legend).eq_ignore_ascii_case(v);
-                if ui.selectable_label(cur, l).clicked() {
-                    app.run_or_alert("chart.set", json!({"chart": id, "legend": v}));
-                }
-            }
-        });
-    });
-    ui.collapsing("Elements", |ui| {
-        let mut dl = chart.data_labels;
-        if ui.checkbox(&mut dl, "Data Labels").changed() {
-            app.run_or_alert("chart.set", json!({"chart": id, "dataLabels": dl}));
+            ui.end_row();
         }
-        let mut gl = chart.gridlines;
-        if ui.checkbox(&mut gl, "Gridlines").changed() {
-            app.run_or_alert("chart.set", json!({"chart": id, "gridlines": gl}));
+        for (label, key, current, salt) in [
+            ("Horizontal axis title", "xTitle", chart.x_title.as_deref(), "mkmatrix.chart_x_title"),
+            ("Vertical axis title", "yTitle", chart.y_title.as_deref(), "mkmatrix.chart_y_title"),
+        ] {
+            kit::label(ui, lang.tr(label));
+            let field = egui::Id::unique((salt, id));
+            if let Some(text) =
+                crate::widgets::committed_text_named(ui, field, current.unwrap_or(""), Some(beside - FIELD_MARGIN), Some(lang.tr(label)))
+            {
+                app.run_or_alert("chart.set", json!({"chart": id, key: if text.is_empty() { Json::Null } else { json!(text) }}));
+            }
+            ui.end_row();
         }
-        ui.horizontal(|ui| {
-            ui.label("Horizontal axis title:");
-            let field = egui::Id::unique(("mkmatrix.chart_x_title", id));
-            if let Some(xt) = crate::widgets::committed_text(ui, field, chart.x_title.as_deref().unwrap_or(""), None) {
-                app.run_or_alert("chart.set", json!({"chart": id, "xTitle": if xt.is_empty() { Json::Null } else { json!(xt) }}));
-            }
-        });
-        ui.horizontal(|ui| {
-            ui.label("Vertical axis title:");
-            let field = egui::Id::unique(("mkmatrix.chart_y_title", id));
-            if let Some(yt) = crate::widgets::committed_text(ui, field, chart.y_title.as_deref().unwrap_or(""), None) {
-                app.run_or_alert("chart.set", json!({"chart": id, "yTitle": if yt.is_empty() { Json::Null } else { json!(yt) }}));
-            }
-        });
     });
-    ui.collapsing("Series", |ui| {
-        let data = app.session.active().map(|d| mkmatrix_chart::resolve(&d.wb, d.wb.active_sheet(), &chart));
-        for (i, s) in chart.series.iter().enumerate() {
-            let name = data.as_ref().and_then(|d| d.series.get(i)).map(|x| x.name.clone()).unwrap_or_else(|| format!("Series {}", i + 1));
-            let col =
-                data.as_ref().and_then(|d| d.series.get(i)).map(|x| Color32::from_rgb(x.color[0], x.color[1], x.color[2])).unwrap_or(Color32::GRAY);
-            ui.horizontal(|ui| {
-                let (r, _) = ui.allocate_exact_size(vec2(14.0, 14.0), egui::Sense::hover());
-                ui.painter().rect_filled(r, 2.0, col);
-                ui.label(&name);
-                ui.label(egui::RichText::new(&s.values).small().color(crate::theme::Tokens::get(ui.ctx()).text_dim));
-                ui.menu_button("Fill…", |ui| {
+
+    kit::rule(ui);
+    kit::heading(ui, lang.tr("Series"));
+    let data = app.session.active().map(|d| mkmatrix_chart::resolve(&d.wb, d.wb.active_sheet(), &chart));
+    for (i, s) in chart.series.iter().enumerate() {
+        let name = data.as_ref().and_then(|d| d.series.get(i)).map(|x| x.name.clone()).unwrap_or_else(|| format!("Series {}", i + 1));
+        let col = data.as_ref().and_then(|d| d.series.get(i)).map(|x| Color32::from_rgb(x.color[0], x.color[1], x.color[2])).unwrap_or(t.text_dim);
+        ui.horizontal(|ui| {
+            // The series' own colour: a data-driven swatch, as palettes are.
+            let (r, _) = ui.allocate_exact_size(vec2(14.0, 14.0), egui::Sense::hover());
+            ui.painter().rect_filled(r, 2.0, col);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let fill = kit::button(ui, lang.tr("Fill…"), false);
+                egui::Popup::menu(&fill).show(|ui| {
                     if let Some(c) = crate::widgets::color_palette_fixed(ui, &theme.colors, "Automatic") {
                         app.run_or_alert(
                             "chart.formatSelection",
@@ -214,42 +238,66 @@ fn format_chart(app: &mut SheetApp, ui: &mut Ui) {
                         ui.close();
                     }
                 });
+                // Name and range in what is left, cut short rather than pushing the pane wider.
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.add(egui::Label::new(egui::RichText::new(&name).font(theme::ui_font(13.0)).color(t.text)).truncate());
+                    ui.add(egui::Label::new(egui::RichText::new(&s.values).font(theme::ui_font(11.5)).color(t.text_dim)).truncate());
+                });
             });
+        });
+    }
+
+    kit::rule(ui);
+    kit::heading(ui, lang.tr("Colors & Layout"));
+    ui.horizontal_wrapped(|ui| {
+        for (p, label) in [
+            ("colorful", "Colorful"),
+            ("monochrome", "Monochrome"),
+            ("accent1", "Accent 1"),
+            ("accent2", "Accent 2"),
+            ("accent3", "Accent 3"),
+            ("accent4", "Accent 4"),
+            ("accent5", "Accent 5"),
+            ("accent6", "Accent 6"),
+        ] {
+            if kit::button(ui, lang.tr(label), false).clicked() {
+                app.run_or_alert("chart.changeColors", json!({"chart": id, "palette": p}));
+            }
         }
     });
-    ui.collapsing("Colors & Layout", |ui| {
-        ui.horizontal_wrapped(|ui| {
-            for p in ["colorful", "monochrome", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6"] {
-                if ui.button(p).clicked() {
-                    app.run_or_alert("chart.changeColors", json!({"chart": id, "palette": p}));
-                }
-            }
-        });
-        ui.horizontal(|ui| {
-            for n in 1..=6 {
-                if ui.button(format!("Layout {n}")).clicked() {
-                    app.run_or_alert("chart.quickLayout", json!({"chart": id, "layout": n}));
-                }
-            }
-        });
-    });
-    ui.collapsing("Size", |ui| {
-        // Keep the value being typed or dragged between frames; reloading it from the chart every frame threw the edit away.
-        let draft = egui::Id::unique(("mkmatrix.chart_size_draft", id));
-        let (mut w, mut h) = ui.data_mut(|d| d.get_temp::<(f32, f32)>(draft)).unwrap_or((chart.anchor.width, chart.anchor.height));
-        let a = ui.add(egui::DragValue::new(&mut w).prefix("Width ").range(40.0..=4000.0));
-        let b = ui.add(egui::DragValue::new(&mut h).prefix("Height ").range(40.0..=4000.0));
-        if a.drag_stopped() || a.lost_focus() || b.drag_stopped() || b.lost_focus() {
-            ui.data_mut(|d| d.remove::<(f32, f32)>(draft));
-            if !ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                app.run_or_alert("chart.set", json!({"chart": id, "width": w, "height": h}));
-            }
-        } else if a.dragged() || a.has_focus() || b.dragged() || b.has_focus() {
-            ui.data_mut(|d| d.insert_temp(draft, (w, h)));
-        } else {
-            ui.data_mut(|d| d.remove::<(f32, f32)>(draft));
+    kit::form(ui, "mkmatrix.chart_layout", |ui| {
+        kit::label(ui, lang.tr("Quick Layout"));
+        let layouts = [("1", "1"), ("2", "2"), ("3", "3"), ("4", "4"), ("5", "5"), ("6", "6")];
+        if let Some(n) = kit::segments(ui, "", &layouts, (beside / layouts.len() as f32).floor().min(32.0)) {
+            app.run_or_alert("chart.quickLayout", json!({"chart": id, "layout": n.parse::<u32>().unwrap_or(1)}));
         }
+        ui.end_row();
     });
+
+    kit::rule(ui);
+    kit::heading(ui, lang.tr("Size"));
+    // Keep the value being typed or dragged between frames; reloading it from the chart every frame threw the edit away.
+    let draft = egui::Id::unique(("mkmatrix.chart_size_draft", id));
+    let (mut w, mut h) = ui.data_mut(|d| d.get_temp::<(f32, f32)>(draft)).unwrap_or((chart.anchor.width, chart.anchor.height));
+    let mut sizes = Vec::new();
+    kit::form(ui, "mkmatrix.chart_size", |ui| {
+        kit::label(ui, lang.tr("Width"));
+        sizes.push(ui.add(egui::DragValue::new(&mut w).suffix(" pt").range(40.0..=4000.0)));
+        ui.end_row();
+        kit::label(ui, lang.tr("Height"));
+        sizes.push(ui.add(egui::DragValue::new(&mut h).suffix(" pt").range(40.0..=4000.0)));
+        ui.end_row();
+    });
+    if sizes.iter().any(|r| r.drag_stopped() || r.lost_focus()) {
+        ui.data_mut(|d| d.remove::<(f32, f32)>(draft));
+        if !ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            app.run_or_alert("chart.set", json!({"chart": id, "width": w, "height": h}));
+        }
+    } else if sizes.iter().any(|r| r.dragged() || r.has_focus()) {
+        ui.data_mut(|d| d.insert_temp(draft, (w, h)));
+    } else {
+        ui.data_mut(|d| d.remove::<(f32, f32)>(draft));
+    }
 }
 
 /// History (beyond Excel): the workbook's timeline. A slider and the list of steps, oldest first;

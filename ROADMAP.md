@@ -136,6 +136,7 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 | Date | What landed |
 |---|---|
 | 2026-11-06 | A quiet grid: gridlines a shade off the sheet (#F0EEEB on white), the row and column headings on the sheet itself with no grey band, row numbers set by the sheet, and the selected line shown by the accent and a 2 px tick instead of a grey box, in both themes |
+| 2026-11-03 | 0.14.0: big workbooks open and recalculate faster (rows read on all cores, cells packed by column, filled formulas sharing one tree and running as arithmetic kernels on all cores, aggregates and lookups that walk references, sorts that move cells in one pass), measured with `cargo xtask bench` and against LibreOffice Calc; Brazilian Portuguese formula syntax (`=SOMA(A1:A3; 1,5)`) and a Portuguese interface for menus and galleries; the PivotTable Fields pane with drag and drop, and header cells that sort and filter; the floating formula bar follows the formula, matches brackets and moves F2 between bar and cell; Conditional Formatting, Format as Table and Cell Styles in the dialogs' style and a vintage palette; a Comments pane with search; the release workflow runs macOS on the standard runner |
 | 2026-10-29 | 0.13.0: Alt+drag scrubs a typed number and Data › What-If Analysis › Sensitivity ranks a result's inputs in a tornado chart (`data.sensitivity`); the AutoFilter menu in the dialogs' style, with each value's row count and frequency bar, sorting that keeps the header and Clear Filter for every kind of filter; the app icon in terracotta on a transparent background; the floating formula bar moves by its grip and resizes by its edges |
 | 2026-10-29 | `=SQL(query, table1, …)`, beyond Excel: a SQL SELECT over ranges (each a table `t1`, `t2`… headed by its first row) with joins, GROUP BY/HAVING, ORDER BY and LIMIT; the result spills with a header row, recalculates with its data and is saved as `_xludf.SQL` |
 | 2026-10-28 | Every dialog in one style, Format Cells' (sections down a rail, muted labels, round options, framed lists, footer under a rule); Text to Columns previews the split. File › Print shows its settings as cards (what, orientation, paper, margins, scaling) that set the sheet's Page Setup, beside a full-height preview. F4 repeats the last action. Ctrl/Shift-click groups sheet tabs, and edits, deletes, hides and tab colours apply to every grouped sheet. Text boxes resize from all eight handles. The splash shows its new picture |
@@ -246,6 +247,7 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-03 | minor | Progress log: 0.14.0 (faster big workbooks, pt-BR formulas, PivotTable Fields pane, floating formula bar, release workflow on the standard macOS runner) |
 | 2026-10-29 | minor | Progress log: 0.13.0 (scrub and sensitivity, AutoFilter menu, terracotta icon, movable floating formula bar) |
 | 2026-10-29 | minor | Progress log: the SQL function |
 | 2026-10-28 | minor | Progress log: dialogs in one style, Print page, F4 Repeat, grouped sheets |
