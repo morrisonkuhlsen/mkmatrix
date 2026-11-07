@@ -44,7 +44,7 @@ fn answer(sheet: &Sheet, si: usize, c: CellRef, left: &[Key], kernels: &mut Kern
 
 /// Calculates and stores what kernels can answer among `dirty` (sorted); gives back the rest, still
 /// sorted, and how many it calculated.
-pub(super) fn run_kernels(wb: &mut Workbook, dirty: &[Key]) -> (Vec<Key>, usize) {
+pub(super) fn run_kernels(wb: &mut Workbook, dirty: &[Key], changes: &mut super::ChangeLog) -> (Vec<Key>, usize) {
     let mut left = dirty.to_vec();
     if dirty.len() < min_cells() || wb.calc.iterative {
         return (left, 0);
@@ -80,6 +80,7 @@ pub(super) fn run_kernels(wb: &mut Workbook, dirty: &[Key]) -> (Vec<Key>, usize)
                     && let Some(cell) = wb.sheet_mut(k.0).and_then(|s| s.cells.get_mut(k.1))
                 {
                     cell.value = value;
+                    changes.note(k);
                 }
             }
         }

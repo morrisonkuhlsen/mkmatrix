@@ -2814,3 +2814,45 @@ fn a_legacy_array_formula_is_not_a_kernels_to_answer() {
     assert_eq!(threads, interpreter);
     assert_eq!(one_thread, interpreter);
 }
+
+/// A recalculation lists the cells whose values it changed (for a front end to point them out),
+/// and only those; a full one says so.
+#[test]
+fn a_recalculation_lists_the_values_it_changed() {
+    let mut t = T::new();
+    t.set("A1", "2");
+    t.set("B1", "=A1*2");
+    t.set("C1", "5");
+    t.set("D1", "=C1+1");
+    t.set("E1", "=SEQUENCE(2)*A1");
+    let runs = t.calc.runs;
+    t.set("A1", "3");
+    assert!(t.calc.runs > runs);
+    assert!(!t.calc.last_full);
+    let changed: Vec<String> = t.calc.changes.keys.iter().map(|k| k.1.a1()).collect();
+    assert!(changed.contains(&"B1".to_string()), "{changed:?}");
+    assert!(changed.contains(&"E1".to_string()) && changed.contains(&"E2".to_string()), "the spill's values too: {changed:?}");
+    assert!(!changed.contains(&"D1".to_string()), "D1 kept its value: {changed:?}");
+    assert!(!t.calc.changes.overflow);
+    // A formula recalculated to the value it had is not listed (C1 set to what it held).
+    t.set("C1", "5");
+    assert!(t.calc.changes.keys.is_empty(), "{:?}", t.calc.changes.keys);
+    t.calc.recalc_all(&mut t.wb);
+    assert!(t.calc.last_full);
+}
+
+/// Past `ChangeLog::MAX` cells the list stops growing and says it overflowed.
+#[test]
+fn a_huge_recalculation_overflows_its_change_list() {
+    let mut t = T::new();
+    t.set("A1", "1");
+    let n = crate::ChangeLog::MAX as u32 + 10;
+    for r in 2..=n {
+        let cell = mkmatrix_core::CellRef::new(r - 1, 1);
+        t.wb.sheet_mut(0).unwrap().cells.set(cell, Cell::formula(Formula::new("=$A$1")));
+    }
+    t.calc.rebuild(&t.wb);
+    t.set("A1", "2");
+    assert_eq!(t.calc.changes.keys.len(), crate::ChangeLog::MAX);
+    assert!(t.calc.changes.overflow);
+}

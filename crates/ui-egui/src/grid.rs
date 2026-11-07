@@ -213,6 +213,11 @@ pub struct GridState {
     pub reveal_from: Option<CellRef>,
     pub last_title: Option<String>,
     pub drag_select: bool,
+    /// The recalculation the grid last saw (document, `Calc::runs`), to tell a new one.
+    pub flash_seen: Option<(u64, u64)>,
+    /// The cells a recalculation just changed, lit in the accent and fading, and when it began
+    /// (`egui` time).
+    pub flash: Option<(f64, Vec<(usize, CellRef)>)>,
     /// The status bar's matrix summary of the selection, and the hash of the block it is for.
     pub matrix_summary: Option<(u64, Option<String>)>,
     pub rect: Option<Rect>,

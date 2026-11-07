@@ -4,7 +4,7 @@ use mkmatrix_model::Workbook;
 
 use super::graph::Key;
 
-pub(super) fn run_kernels(_wb: &mut Workbook, dirty: &[Key]) -> (Vec<Key>, usize) {
+pub(super) fn run_kernels(_wb: &mut Workbook, dirty: &[Key], _changes: &mut super::ChangeLog) -> (Vec<Key>, usize) {
     (dirty.to_vec(), 0)
 }
 
