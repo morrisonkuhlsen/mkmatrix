@@ -416,10 +416,19 @@ pub fn small_split_button(ui: &mut Ui, icon: Icon, label: &str, tip: &str) -> (R
 /// A one-line text field for a value stored in the workbook, which callers reload every frame. The text being typed is
 /// kept in egui memory until the field loses focus, then returned to commit (`None` when Escape cancels the edit).
 pub fn committed_text(ui: &mut Ui, id: egui::Id, current: &str, width: Option<f32>) -> Option<String> {
+    committed_text_named(ui, id, current, width, None)
+}
+
+/// [`committed_text`] read by screen readers as `name` (the field has no label of its own beside
+/// it, or one they can't tie to it).
+pub fn committed_text_named(ui: &mut Ui, id: egui::Id, current: &str, width: Option<f32>, name: Option<&str>) -> Option<String> {
     let width = width.unwrap_or(ui.spacing().text_edit_width);
     let draft = id.with("draft");
     let mut text = ui.data_mut(|d| d.get_temp::<String>(draft)).unwrap_or_else(|| current.to_string());
-    let r = ui.add(egui::TextEdit::singleline(&mut text).id(id).desired_width(width));
+    let mut r = ui.add(egui::TextEdit::singleline(&mut text).id(id).desired_width(width));
+    if let Some(name) = name {
+        r = r.accessible_name(name.to_string());
+    }
     if r.lost_focus() {
         ui.data_mut(|d| d.remove::<String>(draft));
         return (!ui.input(|i| i.key_pressed(egui::Key::Escape))).then_some(text);

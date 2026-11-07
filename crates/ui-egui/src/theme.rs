@@ -132,9 +132,14 @@ const fn rgb(hex: u32) -> Color32 {
 }
 
 /// Reference colours on the white sheet, the same in both themes (the sheet does not follow the
-/// theme). The light theme's formula bar is white too, so it uses them as well.
+/// theme). The light theme's formula bar is white too, so it uses them as well. Red comes last:
+/// it is the colour of an error, and a formula's second reference in red read as one next to a
+/// shape mismatch (`=X@y`).
 const SHEET_REF_COLORS: [Color32; 8] =
-    [rgb(0x2E6FD8), rgb(0xD03C3C), rgb(0x7A4FC9), rgb(0x23803D), rgb(0xB5531A), rgb(0x16798A), rgb(0xB83B8E), rgb(0x77681A)];
+    [rgb(0x2E6FD8), rgb(0x7A4FC9), rgb(0x23803D), rgb(0xB5531A), rgb(0x16798A), rgb(0xB83B8E), rgb(0x77681A), rgb(0xD03C3C)];
+/// [`SHEET_REF_COLORS`] for the dark theme's formula bar and sheet, in the same order.
+const DARK_REF_COLORS: [Color32; 8] =
+    [rgb(0x6FA3F5), rgb(0xB394EE), rgb(0x6CCB85), rgb(0xF0A061), rgb(0x5CC9DA), rgb(0xE77FC4), rgb(0xD4C25A), rgb(0xF27C7C)];
 /// Code colours for one background; plain text uses the surface's own text colour.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Syntax {
@@ -223,17 +228,9 @@ impl Tokens {
                 [rgb(0x6EA8F7), rgb(0x5CC587), rgb(0xF0965A), rgb(0xF07B6E), rgb(0xB394EE), rgb(0x4CC7CF), rgb(0xF2C14E), rgb(0xA9B6C4)],
             ),
             paper: pick(dark, Color32::WHITE, rgb(0x2A2E37)),
-            ref_colors: pick(
-                dark,
-                SHEET_REF_COLORS,
-                [rgb(0x6FA3F5), rgb(0xF27C7C), rgb(0xB394EE), rgb(0x6CCB85), rgb(0xF0A061), rgb(0x5CC9DA), rgb(0xE77FC4), rgb(0xD4C25A)],
-            ),
+            ref_colors: pick(dark, SHEET_REF_COLORS, DARK_REF_COLORS),
             // On the dark sheet the references take the formula bar's dark-mode colours.
-            sheet_ref_colors: pick(
-                dark,
-                SHEET_REF_COLORS,
-                [rgb(0x6FA3F5), rgb(0xF27C7C), rgb(0xB394EE), rgb(0x6CCB85), rgb(0xF0A061), rgb(0x5CC9DA), rgb(0xE77FC4), rgb(0xD4C25A)],
-            ),
+            sheet_ref_colors: pick(dark, SHEET_REF_COLORS, DARK_REF_COLORS),
             syntax: pick(dark, LIGHT_SYNTAX, DARK_SYNTAX),
             warning: rgb(0xF2C32E),
             on_warning: rgb(0x1F1F1F),
@@ -450,6 +447,18 @@ mod contrast_tests {
         );
         for c in Cat::ALL {
             assert_ne!(l.cat(c), d.cat(c), "{c:?} has a dark-mode value of its own");
+        }
+    }
+
+    /// No reference but the last of eight takes the error colour's red (`=X@y` read as a mistake
+    /// with `y` in red beside a mismatch), and the two palettes keep one order.
+    #[test]
+    fn red_is_the_last_reference_colour() {
+        // Red: well above green and blue, which stay close (orange has more green, magenta more blue).
+        let reddish = |c: Color32| c.r() > c.g().saturating_add(60) && c.r() > c.b().saturating_add(60) && c.g().abs_diff(c.b()) < 24;
+        for set in [SHEET_REF_COLORS, DARK_REF_COLORS] {
+            assert!(set.iter().take(7).all(|c| !reddish(*c)), "{set:?}");
+            assert!(set.last().is_some_and(|c| reddish(*c)));
         }
     }
 }
