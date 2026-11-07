@@ -32,6 +32,7 @@ mod sparse_clear_invalidation;
 mod spill_conflicts;
 mod spill_reads_its_own_area;
 mod sql_function;
+mod status_stats_spill;
 mod stored_list_shape;
 mod table_resize_overlap;
 mod table_total_row_last_row;
