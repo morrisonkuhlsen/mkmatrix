@@ -19,5 +19,6 @@ concurrency:
 
 jobs:
   nix:
-    # Intentionally tracked at @main (not SHA-pinned) so org-wide CI improvements, security fixes, and build optimizations propagate without PR churn across all craftapp repos.
-    uses: storytold/craft-common-actions/.github/workflows/nix.yml@main
+    # Pinned (not @main) so a change upstream can't move this onto a paid runner: MK Matrix's
+    # GitHub use must cost nothing. Checked at this commit: standard ubuntu runners only.
+    uses: storytold/craft-common-actions/.github/workflows/nix.yml@eddaf203b2d4873525a69842240214b23bac65ba
