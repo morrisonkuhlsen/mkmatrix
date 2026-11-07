@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~25 points of "ready for real work" and ~160–240 h away
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-06 · **Change:** minor (quiet grid) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-06 · **Change:** minor (dark sheet) · **Target:** Microsoft Excel (Microsoft 365)
 
 MK Matrix aims at full Microsoft Excel parity, and at being better in places: faster, open (XLSX
 is the native format), fully scriptable by agents (MCP, control channel, CLI), and on the web.
@@ -135,6 +135,7 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | What landed |
 |---|---|
+| 2026-11-06 | The dark sheet shows charts, tables and data bars in its own colours: a chart sits on a graphite card with the theme's text, gridlines and axes (printing and export keep the white page), a table style's light bands become a wash over the dark sheet, data bars are translucent so their value keeps the theme's ink, and a sparkline too dark to read takes a lighter shade of its colour. Fills a cell or a rule chose are kept |
 | 2026-11-06 | The bars around the sheet (title bar, ribbon, formula bar, sheet tabs, status bar) and the panes sit on the sheet's own colour, white or the dark theme's graphite: one surface, with the cells' grid the only drawing on it |
 | 2026-11-06 | A quiet grid: gridlines a shade off the sheet (#F0EEEB on white), the row and column headings on the sheet itself with no grey band, row numbers set by the sheet, and the selected line shown by the accent and a 2 px tick instead of a grey box, in both themes |
 | 2026-11-03 | 0.14.0: big workbooks open and recalculate faster (rows read on all cores, cells packed by column, filled formulas sharing one tree and running as arithmetic kernels on all cores, aggregates and lookups that walk references, sorts that move cells in one pass), measured with `cargo xtask bench` and against LibreOffice Calc; Brazilian Portuguese formula syntax (`=SOMA(A1:A3; 1,5)`) and a Portuguese interface for menus and galleries; the PivotTable Fields pane with drag and drop, and header cells that sort and filter; the floating formula bar follows the formula, matches brackets and moves F2 between bar and cell; Conditional Formatting, Format as Table and Cell Styles in the dialogs' style and a vintage palette; a Comments pane with search; the release workflow runs macOS on the standard runner |

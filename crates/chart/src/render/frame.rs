@@ -44,7 +44,7 @@ pub(super) fn axis_titles(ctx: &mut Ctx, chart: &Chart, mut area: Bx) -> Bx {
     let lh = AXIS_TITLE_SIZE * 1.4 + 2.0;
     if let Some(t) = chart.x_title.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
         let t = ctx.fit(t, AXIS_TITLE_SIZE, area.w);
-        ctx.text(area.cx(), area.bottom(), &t, AXIS_TITLE_SIZE, TEXT, HAlign::Center, VAlign::Bottom);
+        ctx.text(area.cx(), area.bottom(), &t, AXIS_TITLE_SIZE, ctx.ink.text, HAlign::Center, VAlign::Bottom);
         area.h -= lh;
     }
     if let Some(t) = chart.y_title.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
@@ -55,7 +55,7 @@ pub(super) fn axis_titles(ctx: &mut Ctx, chart: &Chart, mut area: Bx) -> Bx {
                 y: area.cy(),
                 text: t,
                 size: AXIS_TITLE_SIZE,
-                color: TEXT,
+                color: ctx.ink.text,
                 bold: false,
                 align: HAlign::Center,
                 valign: VAlign::Top,
@@ -121,19 +121,19 @@ pub(super) fn frame(ctx: &mut Ctx, area: Bx, cat: CatAxis, y: &ValAxis, y2: Opti
         for (v, t) in &ylabels {
             let yy = plot.bottom() - y.scale.frac(*v) * plot.h;
             if grid {
-                ctx.hline(plot.x, plot.right(), yy, GRID, 0.75);
+                ctx.hline(plot.x, plot.right(), yy, ctx.ink.grid, 0.75);
             }
-            ctx.text(plot.x - 4.0, yy, t, ls, TEXT, HAlign::Right, VAlign::Middle);
+            ctx.text(plot.x - 4.0, yy, t, ls, ctx.ink.text, HAlign::Right, VAlign::Middle);
         }
         if let (Some(a), Some(l)) = (y2, &y2labels) {
             for (v, t) in l {
                 let yy = plot.bottom() - a.scale.frac(*v) * plot.h;
-                ctx.text(plot.right() + 4.0, yy, t, ls, TEXT, HAlign::Left, VAlign::Middle);
+                ctx.text(plot.right() + 4.0, yy, t, ls, ctx.ink.text, HAlign::Left, VAlign::Middle);
             }
         }
         let zero = if y.scale.min <= 0.0 && y.scale.max >= 0.0 { 0.0 } else { y.scale.min };
         let y0 = plot.bottom() - y.scale.frac(zero) * plot.h;
-        ctx.hline(plot.x, plot.right(), y0, AXIS, 0.75);
+        ctx.hline(plot.x, plot.right(), y0, ctx.ink.axis, 0.75);
         match cat {
             CatAxis::Labels(l, outer) => {
                 let n = l.len().max(1);
@@ -142,7 +142,7 @@ pub(super) fn frame(ctx: &mut Ctx, area: Bx, cat: CatAxis, y: &ValAxis, y2: Opti
                 let k = (((lw + 6.0) / cw.max(1e-3)).ceil() as usize).clamp(1, n);
                 for (j, t) in l.iter().enumerate().step_by(k) {
                     let t = ctx.fit(t, ls, cw * k as f32 - 2.0);
-                    ctx.text(plot.x + (j as f32 + 0.5) * cw, plot.bottom() + 3.0, &t, ls, TEXT, HAlign::Center, VAlign::Top);
+                    ctx.text(plot.x + (j as f32 + 0.5) * cw, plot.bottom() + 3.0, &t, ls, ctx.ink.text, HAlign::Center, VAlign::Top);
                 }
                 // Outer levels, one row each below the labels: a group's name centred under its
                 // categories, and a separator at each group boundary down through the rows.
@@ -152,13 +152,13 @@ pub(super) fn frame(ctx: &mut Ctx, area: Bx, cat: CatAxis, y: &ValAxis, y2: Opti
                         let (x0, x1) = (plot.x + first as f32 * cw, plot.x + end as f32 * cw);
                         if let Some(t) = level.get(first).filter(|t| !t.is_empty()) {
                             let t = ctx.fit(t, ls, x1 - x0 - 2.0);
-                            ctx.text((x0 + x1) / 2.0, top, &t, ls, TEXT, HAlign::Center, VAlign::Top);
+                            ctx.text((x0 + x1) / 2.0, top, &t, ls, ctx.ink.text, HAlign::Center, VAlign::Top);
                         }
                         if first > 0 {
-                            ctx.vline(x0, plot.bottom(), top + lh - 2.0, AXIS, 0.75);
+                            ctx.vline(x0, plot.bottom(), top + lh - 2.0, ctx.ink.axis, 0.75);
                         }
                     }
-                    ctx.vline(plot.right(), plot.bottom(), top + lh - 2.0, AXIS, 0.75);
+                    ctx.vline(plot.right(), plot.bottom(), top + lh - 2.0, ctx.ink.axis, 0.75);
                 }
             }
             CatAxis::Numeric(s, f) => {
@@ -169,11 +169,11 @@ pub(super) fn frame(ctx: &mut Ctx, area: Bx, cat: CatAxis, y: &ValAxis, y2: Opti
                 let k = (((lw + 6.0) / slot.max(1e-3)).ceil() as usize).max(1);
                 for (v, t) in ticks.iter().zip(&labels).step_by(k) {
                     let xx = plot.x + s.frac(*v) * plot.w;
-                    ctx.text(xx, plot.bottom() + 3.0, t, ls, TEXT, HAlign::Center, VAlign::Top);
+                    ctx.text(xx, plot.bottom() + 3.0, t, ls, ctx.ink.text, HAlign::Center, VAlign::Top);
                 }
                 if s.min <= 0.0 && s.max >= 0.0 {
                     let xx = plot.x + s.frac(0.0) * plot.w;
-                    ctx.vline(xx, plot.y, plot.bottom(), AXIS, 0.75);
+                    ctx.vline(xx, plot.y, plot.bottom(), ctx.ink.axis, 0.75);
                 }
             }
         }
@@ -199,21 +199,21 @@ pub(super) fn frame(ctx: &mut Ctx, area: Bx, cat: CatAxis, y: &ValAxis, y2: Opti
         for (i, (v, t)) in ylabels.iter().enumerate() {
             let xx = plot.x + y.scale.frac(*v) * plot.w;
             if grid {
-                ctx.vline(xx, plot.y, plot.bottom(), GRID, 0.75);
+                ctx.vline(xx, plot.y, plot.bottom(), ctx.ink.grid, 0.75);
             }
             if i % k == 0 {
-                ctx.text(xx, plot.bottom() + 3.0, t, ls, TEXT, HAlign::Center, VAlign::Top);
+                ctx.text(xx, plot.bottom() + 3.0, t, ls, ctx.ink.text, HAlign::Center, VAlign::Top);
             }
         }
         let zero = if y.scale.min <= 0.0 && y.scale.max >= 0.0 { 0.0 } else { y.scale.min };
         let x0 = plot.x + y.scale.frac(zero) * plot.w;
-        ctx.vline(x0, plot.y, plot.bottom(), AXIS, 0.75);
+        ctx.vline(x0, plot.y, plot.bottom(), ctx.ink.axis, 0.75);
         let n = labels.len().max(1);
         let ch = plot.h / n as f32;
         let k = ((lh / ch.max(1e-3)).ceil() as usize).clamp(1, n);
         for (j, t) in labels.iter().enumerate().step_by(k) {
             let t = ctx.fit(t, ls, lw - 6.0);
-            ctx.text(plot.x - 4.0, plot.bottom() - (j as f32 + 0.5) * ch, &t, ls, TEXT, HAlign::Right, VAlign::Middle);
+            ctx.text(plot.x - 4.0, plot.bottom() - (j as f32 + 0.5) * ch, &t, ls, ctx.ink.text, HAlign::Right, VAlign::Middle);
         }
         // Outer levels: a group's name centred beside its categories, separators at the
         // boundaries running right to the axis.
@@ -224,13 +224,13 @@ pub(super) fn frame(ctx: &mut Ctx, area: Bx, cat: CatAxis, y: &ValAxis, y2: Opti
                 let (y0, y1) = (plot.bottom() - end as f32 * ch, plot.bottom() - first as f32 * ch);
                 if let Some(t) = level.get(first).filter(|t| !t.is_empty()) {
                     let t = ctx.fit(t, ls, w - 4.0);
-                    ctx.text((x0 + x1) / 2.0, (y0 + y1) / 2.0, &t, ls, TEXT, HAlign::Center, VAlign::Middle);
+                    ctx.text((x0 + x1) / 2.0, (y0 + y1) / 2.0, &t, ls, ctx.ink.text, HAlign::Center, VAlign::Middle);
                 }
                 if first > 0 {
-                    ctx.hline(x0, plot.x, y1, AXIS, 0.75);
+                    ctx.hline(x0, plot.x, y1, ctx.ink.axis, 0.75);
                 }
             }
-            ctx.hline(x0, plot.x, plot.y, AXIS, 0.75);
+            ctx.hline(x0, plot.x, plot.y, ctx.ink.axis, 0.75);
             x1 = x0;
         }
         plot
