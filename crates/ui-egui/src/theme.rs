@@ -132,9 +132,14 @@ const fn rgb(hex: u32) -> Color32 {
 }
 
 /// Reference colours on the white sheet, the same in both themes (the sheet does not follow the
-/// theme). The light theme's formula bar is white too, so it uses them as well.
+/// theme). The light theme's formula bar is white too, so it uses them as well. Red comes last:
+/// it is the colour of an error, and a formula's second reference in red read as one next to a
+/// shape mismatch (`=X@y`).
 const SHEET_REF_COLORS: [Color32; 8] =
-    [rgb(0x2E6FD8), rgb(0xD03C3C), rgb(0x7A4FC9), rgb(0x23803D), rgb(0xB5531A), rgb(0x16798A), rgb(0xB83B8E), rgb(0x77681A)];
+    [rgb(0x2E6FD8), rgb(0x7A4FC9), rgb(0x23803D), rgb(0xB5531A), rgb(0x16798A), rgb(0xB83B8E), rgb(0x77681A), rgb(0xD03C3C)];
+/// [`SHEET_REF_COLORS`] for the dark theme's formula bar and sheet, in the same order.
+const DARK_REF_COLORS: [Color32; 8] =
+    [rgb(0x6FA3F5), rgb(0xB394EE), rgb(0x6CCB85), rgb(0xF0A061), rgb(0x5CC9DA), rgb(0xE77FC4), rgb(0xD4C25A), rgb(0xF27C7C)];
 /// Code colours for one background; plain text uses the surface's own text colour.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Syntax {
@@ -169,7 +174,9 @@ impl Tokens {
     fn palette(dark: bool) -> Tokens {
         Tokens {
             dark,
-            window: pick(dark, Color32::from_rgb(0xF3, 0xF3, 0xF3), Color32::from_rgb(0x14, 0x16, 0x1C)),
+            // The bars around the sheet (title, ribbon, formula bar, sheet tabs, status bar) and the
+            // panes sit on the sheet's own colour: one surface, the cells' grid the only drawing on it.
+            window: pick(dark, Color32::WHITE, Color32::from_rgb(0x2B, 0x2F, 0x38)),
             ribbon: pick(dark, Color32::from_rgb(0xFF, 0xFF, 0xFF), Color32::from_rgb(0x1B, 0x1E, 0x25)),
             ribbon_border: pick(dark, Color32::from_rgb(0xE3, 0xE3, 0xE3), Color32::from_rgb(0x26, 0x2A, 0x33)),
             text: pick(dark, Color32::from_rgb(0x24, 0x24, 0x24), Color32::from_rgb(0xE6, 0xE8, 0xEC)),
@@ -184,12 +191,14 @@ impl Tokens {
             // The sheet: white in light mode; a graphite a step lighter than the ink in dark mode.
             grid_bg: pick(dark, Color32::WHITE, Color32::from_rgb(0x2B, 0x2F, 0x38)),
             desk: pick(dark, Color32::from_rgb(0xDE, 0xDE, 0xDE), Color32::from_rgb(0x0F, 0x11, 0x15)),
-            gridline: pick(dark, Color32::from_rgb(0xE1, 0xE1, 0xE1), Color32::from_rgb(0x3A, 0x3F, 0x4A)),
-            // The row and column headings sit on the window's own colour.
-            header_bg: pick(dark, Color32::from_rgb(0xF3, 0xF3, 0xF3), Color32::from_rgb(0x14, 0x16, 0x1C)),
-            header_text: pick(dark, Color32::from_rgb(0x42, 0x42, 0x42), Color32::from_rgb(0x8B, 0x93, 0xA1)),
-            header_line: pick(dark, Color32::from_rgb(0xD6, 0xD6, 0xD6), Color32::from_rgb(0x26, 0x2A, 0x33)),
-            header_sel_bg: pick(dark, Color32::from_rgb(0xE1, 0xE1, 0xE1), Color32::from_rgb(0x2E, 0x24, 0x20)),
+            // Quiet: the gridlines only hint at the cells, so the numbers come first.
+            gridline: pick(dark, Color32::from_rgb(0xF0, 0xEE, 0xEB), Color32::from_rgb(0x34, 0x38, 0x41)),
+            // The row and column headings sit on the sheet itself, with no band of their own: a
+            // selected line shows in the accent and a 2 px tick, not a grey box.
+            header_bg: pick(dark, Color32::WHITE, Color32::from_rgb(0x2B, 0x2F, 0x38)),
+            header_text: pick(dark, Color32::from_rgb(0x6F, 0x6B, 0x66), Color32::from_rgb(0x9A, 0xA1, 0xAD)),
+            header_line: pick(dark, Color32::from_rgb(0xE6, 0xE4, 0xE1), Color32::from_rgb(0x3A, 0x3F, 0x4A)),
+            header_sel_bg: pick(dark, Color32::WHITE, Color32::from_rgb(0x2B, 0x2F, 0x38)),
             header_sel_text: pick(dark, Color32::from_rgb(0x85, 0x42, 0x22), Color32::from_rgb(0xF0, 0xA9, 0x84)),
             header_all_bg: pick(dark, Color32::from_rgb(0xEB, 0xCD, 0xBB), Color32::from_rgb(0x5A, 0x33, 0x24)),
             sel_fill: pick(dark, Color32::from_rgba_unmultiplied(0xC0, 0x6A, 0x40, 0x22), Color32::from_rgba_unmultiplied(0xE0, 0x8A, 0x5F, 0x22)),
@@ -198,9 +207,9 @@ impl Tokens {
             input_border: pick(dark, Color32::from_rgb(0xD1, 0xD1, 0xD1), Color32::from_rgb(0x2E, 0x33, 0x3D)),
             field_hover: pick(dark, Color32::from_rgb(0xE8, 0xE8, 0xE8), Color32::from_rgb(0x0F, 0x11, 0x15)),
             field_active: pick(dark, Color32::from_rgb(0xDE, 0xDE, 0xDE), Color32::from_rgb(0x0A, 0x0B, 0x0E)),
-            tab_bar: pick(dark, Color32::from_rgb(0xF3, 0xF3, 0xF3), Color32::from_rgb(0x14, 0x16, 0x1C)),
+            tab_bar: pick(dark, Color32::WHITE, Color32::from_rgb(0x2B, 0x2F, 0x38)),
             tab_active: pick(dark, Color32::WHITE, Color32::from_rgb(0x1F, 0x23, 0x2B)),
-            status_bar: pick(dark, Color32::from_rgb(0xF3, 0xF3, 0xF3), Color32::from_rgb(0x14, 0x16, 0x1C)),
+            status_bar: pick(dark, Color32::WHITE, Color32::from_rgb(0x2B, 0x2F, 0x38)),
             cell_text: pick(dark, Color32::BLACK, Color32::from_rgb(0xE6, 0xE8, 0xEC)),
             menu_bg: pick(dark, Color32::WHITE, Color32::from_rgb(0x1B, 0x1E, 0x25)),
             shadow: pick(dark, Color32::from_black_alpha(40), Color32::from_black_alpha(140)),
@@ -219,17 +228,9 @@ impl Tokens {
                 [rgb(0x6EA8F7), rgb(0x5CC587), rgb(0xF0965A), rgb(0xF07B6E), rgb(0xB394EE), rgb(0x4CC7CF), rgb(0xF2C14E), rgb(0xA9B6C4)],
             ),
             paper: pick(dark, Color32::WHITE, rgb(0x2A2E37)),
-            ref_colors: pick(
-                dark,
-                SHEET_REF_COLORS,
-                [rgb(0x6FA3F5), rgb(0xF27C7C), rgb(0xB394EE), rgb(0x6CCB85), rgb(0xF0A061), rgb(0x5CC9DA), rgb(0xE77FC4), rgb(0xD4C25A)],
-            ),
+            ref_colors: pick(dark, SHEET_REF_COLORS, DARK_REF_COLORS),
             // On the dark sheet the references take the formula bar's dark-mode colours.
-            sheet_ref_colors: pick(
-                dark,
-                SHEET_REF_COLORS,
-                [rgb(0x6FA3F5), rgb(0xF27C7C), rgb(0xB394EE), rgb(0x6CCB85), rgb(0xF0A061), rgb(0x5CC9DA), rgb(0xE77FC4), rgb(0xD4C25A)],
-            ),
+            sheet_ref_colors: pick(dark, SHEET_REF_COLORS, DARK_REF_COLORS),
             syntax: pick(dark, LIGHT_SYNTAX, DARK_SYNTAX),
             warning: rgb(0xF2C32E),
             on_warning: rgb(0x1F1F1F),
@@ -272,10 +273,10 @@ pub fn contrast(a: Color32, b: Color32) -> f32 {
 }
 
 /// The gridline MK Matrix keeps over a filled cell: a shade of the fill itself, darker on a light
-/// fill and lighter on a dark one, so it shows on pale yellow as on navy, in either theme. On
-/// white, the darker shade is the gridline grey (#E1E1E1).
+/// fill and lighter on a dark one, so it shows on pale yellow as on navy, in either theme. As
+/// quiet as the sheet's own gridlines: on white, the darker shade is #EDEDED.
 pub fn gridline_over(fill: Color32) -> Color32 {
-    if luminance(fill) > 0.18 { Color32::from_black_alpha(30) } else { Color32::from_white_alpha(36) }
+    if luminance(fill) > 0.18 { Color32::from_black_alpha(18) } else { Color32::from_white_alpha(28) }
 }
 
 /// Installs light and dark token visuals in both theme slots, keeps the 2-3 px widget and 8-10 px window/menu corner radii from 0.36, and sets spacing, text styles and the active theme.
@@ -432,9 +433,13 @@ mod contrast_tests {
     #[test]
     fn the_dark_sheet_is_graphite_its_controls_stay_light() {
         let (l, d) = (Tokens::light(), Tokens::dark());
-        // MK Matrix's dark sheet: a graphite a step lighter than the ink around it.
+        // MK Matrix's sheet: white, or a graphite on the dark theme, and the bars around it on
+        // the same colour.
         assert_eq!(l.grid_bg, Color32::WHITE);
-        assert!(contrast(d.grid_bg, d.window) > 1.2 && contrast(d.cell_text, d.grid_bg) >= 4.5);
+        assert!(contrast(d.cell_text, d.grid_bg) >= 4.5);
+        for t in [&l, &d] {
+            assert_eq!((t.window, t.tab_bar, t.status_bar), (t.grid_bg, t.grid_bg, t.grid_bg), "dark={}", t.dark);
+        }
         assert_ne!(l.sheet_ref_colors, d.sheet_ref_colors);
         assert_eq!(
             (l.sheet_control_bg, l.sheet_control_border, l.sheet_control_text, l.sheet_track),
@@ -442,6 +447,18 @@ mod contrast_tests {
         );
         for c in Cat::ALL {
             assert_ne!(l.cat(c), d.cat(c), "{c:?} has a dark-mode value of its own");
+        }
+    }
+
+    /// No reference but the last of eight takes the error colour's red (`=X@y` read as a mistake
+    /// with `y` in red beside a mismatch), and the two palettes keep one order.
+    #[test]
+    fn red_is_the_last_reference_colour() {
+        // Red: well above green and blue, which stay close (orange has more green, magenta more blue).
+        let reddish = |c: Color32| c.r() > c.g().saturating_add(60) && c.r() > c.b().saturating_add(60) && c.g().abs_diff(c.b()) < 24;
+        for set in [SHEET_REF_COLORS, DARK_REF_COLORS] {
+            assert!(set.iter().take(7).all(|c| !reddish(*c)), "{set:?}");
+            assert!(set.last().is_some_and(|c| reddish(*c)));
         }
     }
 }

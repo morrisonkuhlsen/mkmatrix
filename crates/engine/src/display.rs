@@ -195,10 +195,9 @@ pub fn stats(sheet: &Sheet, ranges: &[RangeRef]) -> Stats {
             None => continue,
         };
         let mut visit = |c: CellRef, v: &Value| {
-            if !seen.insert(c) || sheet.is_row_hidden(c.row) {
-                return;
-            }
-            if v.is_empty() {
+            // Blank first: a formatted cell under a spill is stored blank, and the spilled value
+            // over it is the one to count.
+            if v.is_empty() || !seen.insert(c) || sheet.is_row_hidden(c.row) {
                 return;
             }
             s.count += 1;

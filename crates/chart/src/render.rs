@@ -33,6 +33,29 @@ const STOCK: Rgba = [0x40, 0x40, 0x40, 0xFF];
 pub(crate) const UP: Rgba = [0x3E, 0x9B, 0x5F, 0xFF];
 pub(crate) const DOWN: Rgba = [0xD6, 0x4F, 0x45, 0xFF];
 
+/// The chart's own colours around the data: its ground, text, gridlines, axes and the stock
+/// chart's candles. Series colours come from the chart. [`Ink::PAPER`] is the printed chart (and
+/// the light sheet's); the dark sheet passes its own so a chart sits on it instead of glaring.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Ink {
+    /// Background, and the thin separators drawn in it (between slices, around markers).
+    pub paper: Rgba,
+    pub text: Rgba,
+    pub grid: Rgba,
+    pub axis: Rgba,
+    pub stock: Rgba,
+}
+
+impl Ink {
+    pub const PAPER: Ink = Ink { paper: WHITE, text: TEXT, grid: GRID, axis: AXIS, stock: STOCK };
+}
+
+impl Default for Ink {
+    fn default() -> Self {
+        Ink::PAPER
+    }
+}
+
 const TITLE_SIZE: f32 = 14.0;
 const LABEL_SIZE: f32 = 9.0;
 const AXIS_TITLE_SIZE: f32 = 10.0;
@@ -48,6 +71,7 @@ const MAX_LABELS: usize = 200;
 struct Ctx<'a> {
     out: Vec<Prim>,
     m: &'a dyn Measure,
+    ink: Ink,
 }
 
 impl Ctx<'_> {
@@ -122,20 +146,26 @@ fn sanitize(d: &ChartData) -> ChartData {
     }
 }
 
-/// Lays out and draws a chart into a `w`×`h` box at the origin. Empty for a degenerate box.
+/// Lays out and draws a chart into a `w`×`h` box at the origin, as printed. Empty for a
+/// degenerate box.
 pub fn render(chart: &Chart, data: &ChartData, w: f32, h: f32, m: &dyn Measure) -> Vec<Prim> {
+    render_inked(chart, data, w, h, m, Ink::PAPER)
+}
+
+/// [`render`] in the colours of `ink` (the dark sheet's, on screen).
+pub fn render_inked(chart: &Chart, data: &ChartData, w: f32, h: f32, m: &dyn Measure, ink: Ink) -> Vec<Prim> {
     if !(w.is_finite() && h.is_finite()) || w < 1.0 || h < 1.0 || w > 1e7 || h > 1e7 {
         return vec![];
     }
     let data = sanitize(data);
-    let mut ctx = Ctx { out: Vec::new(), m };
-    ctx.out.push(Prim::Rect { x: 0.0, y: 0.0, w, h, fill: Some(WHITE), stroke: Some((GRID, 1.0)), radius: 0.0 });
+    let mut ctx = Ctx { out: Vec::new(), m, ink };
+    ctx.out.push(Prim::Rect { x: 0.0, y: 0.0, w, h, fill: Some(ctx.ink.paper), stroke: Some((ctx.ink.grid, 1.0)), radius: 0.0 });
     let pad = (w.min(h) * 0.04).clamp(2.0, 10.0);
     let mut area = Bx { x: pad, y: pad, w: w - 2.0 * pad, h: h - 2.0 * pad };
     if let Some(t) = chart_title(chart, &data) {
         let size = TITLE_SIZE.min(h * 0.12).max(4.0);
         let t = ctx.fit(&t, size, area.w);
-        ctx.text(w / 2.0, area.y, &t, size, TEXT, HAlign::Center, VAlign::Top);
+        ctx.text(w / 2.0, area.y, &t, size, ctx.ink.text, HAlign::Center, VAlign::Top);
         let used = size * 1.3 + 4.0;
         area.y += used;
         area.h -= used;

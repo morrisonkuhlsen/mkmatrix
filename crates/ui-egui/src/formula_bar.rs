@@ -1024,8 +1024,11 @@ pub fn editor_widget(app: &mut SheetApp, ui: &mut egui::Ui, id: egui::Id, font: 
             app.run_or_alert("view.expandFormulaBar", json!({}));
         }
     }
-    // The text widget.
-    let refs = formula_refs(&ed.text);
+    // The text widget. Named matrices take reference colours too, in the same sequence.
+    let (refs, cited) = match app.session.active() {
+        Some(d) if ed.is_formula() => crate::editor::refs_and_matrices(&ed.text, &crate::matrices::all(&d.wb)),
+        _ => (formula_refs(&ed.text), Vec::new()),
+    };
     // The bracket at the caret (just before or after it) and its partner, and any bracket left
     // without one.
     let (matched, unmatched) = if ed.is_formula() { brackets(&ed.text, ed.caret) } else { (None, Vec::new()) };
@@ -1041,6 +1044,7 @@ pub fn editor_widget(app: &mut SheetApp, ui: &mut egui::Ui, id: egui::Id, font: 
         // in the accent on a tint, an unmatched one in the danger colour.
         let mut spans: Vec<(usize, usize, egui::Color32, egui::Color32)> =
             refs.iter().filter(|r| r.1 <= s.len()).map(|r| (r.0, r.1, t.ref_color(r.4, on_sheet), egui::Color32::TRANSPARENT)).collect();
+        spans.extend(cited.iter().filter(|m| m.1 <= s.len()).map(|m| (m.0, m.1, t.ref_color(m.4, on_sheet), egui::Color32::TRANSPARENT)));
         for at in matched.iter().flat_map(|(a, b)| [*a, *b]) {
             spans.push((at, at + 1, t.accent, t.accent.gamma_multiply(0.18)));
         }
