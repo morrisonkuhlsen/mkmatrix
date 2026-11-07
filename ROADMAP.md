@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~25 points of "ready for real work" and ~160–240 h away
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-06 · **Change:** minor (dark sheet) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-06 · **Change:** minor (matrix brackets) · **Target:** Microsoft Excel (Microsoft 365)
 
 MK Matrix aims at full Microsoft Excel parity, and at being better in places: faster, open (XLSX
 is the native format), fully scriptable by agents (MCP, control channel, CLI), and on the web.
@@ -135,6 +135,7 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | What landed |
 |---|---|
+| 2026-11-06 | Matrix brackets: finer (1.5 px); a matrix's name takes the first place beside, under or over it that covers no other cell's contents; the matrix under the pointer or holding the active cell shows a tag with its name and shape (`X · 8×3`), and a spill shows light brackets and its shape (`3×3`) the same way |
 | 2026-11-06 | The dark sheet shows charts, tables and data bars in its own colours: a chart sits on a graphite card with the theme's text, gridlines and axes (printing and export keep the white page), a table style's light bands become a wash over the dark sheet, data bars are translucent so their value keeps the theme's ink, and a sparkline too dark to read takes a lighter shade of its colour. Fills a cell or a rule chose are kept |
 | 2026-11-06 | The bars around the sheet (title bar, ribbon, formula bar, sheet tabs, status bar) and the panes sit on the sheet's own colour, white or the dark theme's graphite: one surface, with the cells' grid the only drawing on it |
 | 2026-11-06 | A quiet grid: gridlines a shade off the sheet (#F0EEEB on white), the row and column headings on the sheet itself with no grey band, row numbers set by the sheet, and the selected line shown by the accent and a 2 px tick instead of a grey box, in both themes |
