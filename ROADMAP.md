@@ -135,6 +135,7 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | What landed |
 |---|---|
+| 2026-11-06 | While a formula is typed, the named matrices it cites take reference colours like ranges, in the formula bar and on their brackets, names and tags; the preview of where the result spills carries its shape (`→ 3×1`), and when the shapes don't fit the cell typed in is tagged with why (`X@y: 8×3 @ 8×1, 3 vs 8`) |
 | 2026-11-06 | Matrix brackets: finer (1.5 px); a matrix's name takes the first place beside, under or over it that covers no other cell's contents; the matrix under the pointer or holding the active cell shows a tag with its name and shape (`X · 8×3`), and a spill shows light brackets and its shape (`3×3`) the same way |
 | 2026-10-29 | 0.13.0: Alt+drag scrubs a typed number and Data › What-If Analysis › Sensitivity ranks a result's inputs in a tornado chart (`data.sensitivity`); the AutoFilter menu in the dialogs' style, with each value's row count and frequency bar, sorting that keeps the header and Clear Filter for every kind of filter; the app icon in terracotta on a transparent background; the floating formula bar moves by its grip and resizes by its edges |
 | 2026-10-29 | `=SQL(query, table1, …)`, beyond Excel: a SQL SELECT over ranges (each a table `t1`, `t2`… headed by its first row) with joins, GROUP BY/HAVING, ORDER BY and LIMIT; the result spills with a header row, recalculates with its data and is saved as `_xludf.SQL` |

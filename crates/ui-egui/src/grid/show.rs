@@ -227,18 +227,27 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     }
     let objects = crate::chartview::paint_objects(app, &painter.with_clip_rect(geo.cells), &geo, &wb, si, sh);
     paint_overlays(app, ui, &painter.with_clip_rect(geo.cells), &geo, &wb, si, sh, &sel);
-    // While a formula with a matrix result is typed: where that result will spill.
-    if let Some(crate::shapes::Verdict::Fits((rows, cols))) = app.editing_shape()
-        && rows.saturating_mul(cols) > 1
-    {
-        let at = sel.active;
-        let end = mkmatrix_engine::core::CellRef::new(
-            at.row.saturating_add(rows - 1).min(mkmatrix_engine::core::MAX_ROWS - 1),
-            at.col.saturating_add(cols - 1).min(mkmatrix_engine::core::MAX_COLS - 1),
-        );
-        let r = geo.mirror_rect(geo.range_rect(sh, RangeRef::new(at, end)));
+    // While a formula with a matrix result is typed: where that result will spill, tagged with
+    // its shape; when the shapes don't fit, the cell typed in, dashed in the danger colour and
+    // tagged with why.
+    let preview = match app.editing_shape() {
+        Some(crate::shapes::Verdict::Fits((rows, cols))) if rows.saturating_mul(cols) > 1 => {
+            let at = sel.active;
+            let end = mkmatrix_engine::core::CellRef::new(
+                at.row.saturating_add(rows - 1).min(mkmatrix_engine::core::MAX_ROWS - 1),
+                at.col.saturating_add(cols - 1).min(mkmatrix_engine::core::MAX_COLS - 1),
+            );
+            Some((RangeRef::new(at, end), format!("→ {rows}×{cols}"), t.accent))
+        }
+        Some(crate::shapes::Verdict::Mismatch(why)) => Some((RangeRef::cell(sel.active), why, t.danger)),
+        _ => None,
+    };
+    if let Some((range, tag, ink)) = &preview {
+        let r = geo.mirror_rect(geo.range_rect(sh, *range));
         let pts = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
-        painter.with_clip_rect(geo.cells).extend(egui::Shape::dashed_line(&pts, Stroke::new(1.5, t.accent), 5.0, 3.0));
+        let pc = painter.with_clip_rect(geo.cells);
+        pc.extend(egui::Shape::dashed_line(&pts, Stroke::new(1.5, *ink), 5.0, 3.0));
+        crate::matrices::paint_tag(&pc, &geo, r, tag, *ink, t.grid_bg);
     }
     if app.ui.matrix_brackets {
         let hover = ui.input(|i| i.pointer.hover_pos()).filter(|h| geo.cells.contains(*h)).map(|h| geo.mirror_pos(h));
@@ -251,6 +260,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
             t.grid_bg,
             hover,
             Some(sel.active),
+            &cited_matrices(app, &wb, &t),
         );
     }
     if sh.view == mkmatrix_engine::model::SheetViewMode::PageBreakPreview {
@@ -827,6 +837,13 @@ fn paint_pages(app: &mut SheetApp, p: &Painter, geo: &Geo, sh: &Sheet) {
         );
     }
     p.rect_stroke(pr, 0.0, Stroke::new(3.0, blue), StrokeKind::Outside);
+}
+
+/// The named matrices the formula being typed cites, each with its reference colour (the same
+/// sequence the formula bar colours them in).
+fn cited_matrices(app: &SheetApp, wb: &mkmatrix_engine::model::Workbook, t: &Tokens) -> Vec<(String, egui::Color32)> {
+    let Some(ed) = app.editor.as_ref().filter(|e| e.is_formula()) else { return Vec::new() };
+    crate::editor::refs_and_matrices(&ed.text, &crate::matrices::all(wb)).1.into_iter().map(|m| (m.2, t.ref_color(m.4, true))).collect()
 }
 
 /// The + that shows on a column or row heading's edge under the pointer. Over it, it fills with
