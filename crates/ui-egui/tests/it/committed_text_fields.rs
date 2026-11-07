@@ -47,8 +47,6 @@ fn typing_a_chart_title_in_format_chart_area_sets_it() {
     h.state_mut().selected_chart = Some(id);
     h.state_mut().grid.pane = Some("formatChart".into());
     h.run_steps(2);
-    h.get_by_role_and_label(Role::DisclosureTriangle, "Chart Title").click();
-    h.run_steps(2);
     // The pane sits on the right; the formula bar and name box are further left.
     let field = h.get_all_by_role(Role::TextInput).map(|n| n.rect()).find(|r| r.left() > 850.0).unwrap();
     retype(&mut h, field, "Sales");

@@ -69,21 +69,41 @@ fn spill_range_operator() {
 
 #[test]
 fn arrays_that_spill_as_before_do_not_requeue_their_dependents() {
-    // Two arrays that each read the other's spill area, and a formula reading both spills.
+    // An array that reads another's spill area, and a formula reading both spills.
     let mut t = T::new();
     t.set("A1", "=SEQUENCE(2)+0*B2");
+    t.set("B1", "=SEQUENCE(2)");
+    t.set("C1", "=SUM(A1#)+SUM(B1#)");
+    assert_eq!(t.num("C1"), 6.0);
+    // Laid out the other way round, B1 reads A1's spill: an edit that spills the same values
+    // again takes one round, not one per round up to the limit.
+    t.set("A1", "=SEQUENCE(2)");
     t.set("B1", "=SEQUENCE(2)+0*A2");
     t.set("C1", "=SUM(A1#)+SUM(B1#)");
     // An edit that spills the same values again: one round, not one per round up to the limit.
-    t.set("A1", "=SEQUENCE(2)+0*B2+0");
+    t.set("A1", "=SEQUENCE(2)+0");
     assert_eq!((t.num("A2"), t.num("B2"), t.num("C1")), (2.0, 2.0, 6.0));
     assert!(t.calc.last_recalc_cells <= 3, "{} formulas evaluated for one edit", t.calc.last_recalc_cells);
     // Only the anchor's value changes: formulas reading the whole spill still see it.
-    t.set("A1", "={7;2}+0*B2");
+    t.set("A1", "={7;2}");
     assert_eq!((t.num("A1"), t.num("C1")), (7.0, 12.0));
     // A spill that does change still reaches its dependents.
-    t.set("A1", "=SEQUENCE(2)*10+0*B2");
+    t.set("A1", "=SEQUENCE(2)*10");
     assert_eq!((t.num("A2"), t.num("C1")), (20.0, 33.0));
+}
+
+/// Two arrays that each read the other's spill area are a circular reference (#114).
+#[test]
+fn arrays_reading_each_others_spill_are_circular() {
+    let mut t = T::new();
+    t.set("A1", "=SEQUENCE(2)+0*B2");
+    t.set("B1", "=SEQUENCE(2)+0*A2");
+    assert!(!t.calc.circular.is_empty());
+    assert!([t.get("A1"), t.get("B1")].contains(&Value::Error(CellError::Circ)), "{:?} {:?}", t.get("A1"), t.get("B1"));
+    // Breaking the loop clears it.
+    t.set("B1", "=SEQUENCE(2)");
+    assert!(t.calc.circular.is_empty(), "{:?}", t.calc.circular);
+    assert_eq!((t.num("A2"), t.num("B2")), (2.0, 2.0));
 }
 
 #[test]

@@ -14,6 +14,27 @@ fn rgba(c: [u8; 4]) -> Color32 {
     Color32::from_rgba_unmultiplied(c[0], c[1], c[2], c[3])
 }
 
+/// The colours a chart draws around its data on screen. The light sheet shows a chart as it
+/// prints; the dark sheet shows it on a card a shade lighter than the sheet, with the theme's own
+/// text, gridline and muted axis colours, instead of a white sheet of paper.
+pub(crate) fn chart_ink(t: &Tokens) -> mkmatrix_chart::Ink {
+    if !t.dark {
+        return mkmatrix_chart::Ink::PAPER;
+    }
+    let c = |c: Color32| [c.r(), c.g(), c.b(), 0xFF];
+    mkmatrix_chart::Ink { paper: c(chart_card(t)), text: c(t.text_dim), grid: c(t.gridline), axis: c(t.text_disabled), stock: c(t.text) }
+}
+
+/// A chart's card on the sheet: the sheet itself on the light theme, a shade lighter on the dark.
+pub(crate) fn chart_card(t: &Tokens) -> Color32 {
+    if !t.dark {
+        return t.grid_bg;
+    }
+    let mix = |a: u8, b: u8| ((u16::from(a) * 24 + u16::from(b)) / 25) as u8;
+    let (g, w) = (t.grid_bg, t.text);
+    Color32::from_rgb(mix(g.r(), w.r()), mix(g.g(), w.g()), mix(g.b(), w.b()))
+}
+
 struct EguiMeasure<'a> {
     painter: &'a Painter,
     z: f32,
@@ -37,7 +58,7 @@ pub fn paint_chart(p: &Painter, rect: Rect, wb: &Workbook, sheet: usize, chart: 
     let origin = rect.center() - vec2(w * z, h * z) / 2.0;
     let data = mkmatrix_chart::resolve(wb, sheet, chart);
     let m = EguiMeasure { painter: p, z };
-    let prims = mkmatrix_chart::render(chart, &data, w, h, &m);
+    let prims = mkmatrix_chart::render_inked(chart, &data, w, h, &m, chart_ink(&Tokens::get(p.ctx())));
     paint_prims(&p.with_clip_rect(rect.intersect(p.clip_rect())), origin, &prims, z);
 }
 
@@ -355,12 +376,13 @@ pub(crate) fn paint_objects(app: &SheetApp, p: &Painter, geo: &Geo, wb: &Workboo
             continue;
         }
         let start = p.add(egui::Shape::Noop);
-        // Soft shadow + white card.
+        // Soft shadow + the chart's card.
+        let tk = Tokens::get(p.ctx());
         p.rect_filled(r.translate(vec2(0.0, 1.5)), 2.0, Color32::from_black_alpha(18));
-        p.rect_filled(r, 0.0, Tokens::get(p.ctx()).grid_bg);
+        p.rect_filled(r, 0.0, chart_card(&tk));
         let data = mkmatrix_chart::resolve(wb, si, ch);
         let m = EguiMeasure { painter: p, z: geo.z };
-        let prims = mkmatrix_chart::render(ch, &data, ch.anchor.width, ch.anchor.height, &m);
+        let prims = mkmatrix_chart::render_inked(ch, &data, ch.anchor.width, ch.anchor.height, &m, chart_ink(&tk));
         paint_prims(&p.with_clip_rect(r.intersect(p.clip_rect())), r.min, &prims, geo.z);
         if app.selected_chart == Some(ch.id) {
             selection_frame(p, r);

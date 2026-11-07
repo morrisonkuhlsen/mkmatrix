@@ -8,6 +8,28 @@ pub(super) struct Look {
     pub(super) text_color: Color32,
     /// The font colour is Automatic: black on the light sheet, the theme's ink on the dark one.
     pub(super) auto_text: bool,
+    /// The fill is a table style's band or body, not one the cell (or a rule) chose.
+    pub(super) table_fill: bool,
+}
+
+/// How much of a table's light band shows through on the dark sheet (see [`for_sheet`]).
+const DARK_WASH: f32 = 0.09;
+
+/// A look as the sheet shows it. On the dark sheet a table style's light band (a wash made for
+/// white paper) becomes the same wash of its colour over the dark sheet, so the rows still band
+/// without glaring; the text then reads in the theme's ink. Fills a cell or a rule chose are
+/// kept as they are.
+pub(super) fn for_sheet(mut lk: Look, t: &Tokens) -> Look {
+    if t.dark
+        && lk.table_fill
+        && let Some(f) = lk.fill
+        && theme::luminance(f) > 0.45
+    {
+        let mix = |g: u8, c: u8| (f32::from(g) * (1.0 - DARK_WASH) + f32::from(c) * DARK_WASH).round() as u8;
+        let g = t.grid_bg;
+        lk.fill = Some(Color32::from_rgb(mix(g.r(), f.r()), mix(g.g(), f.g()), mix(g.b(), f.b())));
+    }
+    lk
 }
 
 pub(super) fn col32(c: Color, wb: &Workbook, default: Color32) -> Color32 {
@@ -29,8 +51,11 @@ pub(super) fn center_across_end(start: u32, limit: u32, continues: impl Fn(u32) 
 
 pub(super) fn look(wb: &Workbook, si: usize, sh: &Sheet, c: CellRef, cf: &mut CfCache) -> (Look, Option<CfLook>) {
     let mut style = wb.styles.get(sh.style_id(c)).clone();
+    let own_fill = style.fill.pattern != PatternType::None;
+    let mut table_fill = false;
     if let Some(t) = sh.table_at(c) {
         style = mkmatrix_engine::tables::table_cell_style(wb, si, t, c);
+        table_fill = !own_fill && style.fill.pattern != PatternType::None;
     }
     let cfl = cf.look(wb, si, c);
     if let Some(l) = &cfl
@@ -38,6 +63,7 @@ pub(super) fn look(wb: &Workbook, si: usize, sh: &Sheet, c: CellRef, cf: &mut Cf
     {
         if st.fill.pattern != PatternType::None {
             style.fill = st.fill;
+            table_fill = false;
         }
         if st.font.color != Color::Auto {
             style.font.color = st.font.color;
@@ -87,10 +113,11 @@ pub(super) fn look(wb: &Workbook, si: usize, sh: &Sheet, c: CellRef, cf: &mut Cf
         && let Some(rgb) = l.scale_fill
     {
         fill = Some(theme::color32(rgb));
+        table_fill = false;
     }
     let text_color = col32(style.font.color, wb, Color32::BLACK);
     let auto_text = style.font.color.resolve(&wb.theme).is_none();
-    (Look { style, fill, text_color, auto_text }, cfl)
+    (Look { style, fill, text_color, auto_text, table_fill }, cfl)
 }
 
 /// Text for a value with General narrowing to the available width.
@@ -323,5 +350,30 @@ pub(super) fn painted_halign(h: HAlign, rtl: bool) -> HAlign {
         HAlign::Left if rtl => HAlign::Right,
         HAlign::Right if rtl => HAlign::Left,
         h => h,
+    }
+}
+
+#[cfg(test)]
+mod dark_sheet_tests {
+    use super::*;
+
+    fn look_with(fill: Color32, table_fill: bool) -> Look {
+        Look { style: Style::default(), fill: Some(fill), text_color: Color32::BLACK, auto_text: true, table_fill }
+    }
+
+    /// A table's light band becomes a wash over the dark sheet, close to it but still banding,
+    /// and a cell's own fill (or any fill on the light sheet) stays as it is.
+    #[test]
+    fn a_tables_light_band_washes_into_the_dark_sheet() {
+        let band = Color32::from_rgb(0xD9, 0xE2, 0xDF);
+        let (dark, light) = (Tokens::dark(), Tokens::light());
+        let washed = for_sheet(look_with(band, true), &dark).fill.unwrap_or(band);
+        assert!(contrast(washed, dark.grid_bg) > 1.05 && contrast(washed, dark.grid_bg) < 1.6, "{washed:?} bands without glaring");
+        assert!(contrast(dark.cell_text, washed) >= 4.5, "the theme's ink reads on {washed:?}");
+        assert_eq!(for_sheet(look_with(band, false), &dark).fill, Some(band), "a cell's own fill is kept");
+        assert_eq!(for_sheet(look_with(band, true), &light).fill, Some(band), "the light sheet shows the style as printed");
+        // A dark header fill already reads on the dark sheet.
+        let header = Color32::from_rgb(0x2E, 0x5C, 0x5C);
+        assert_eq!(for_sheet(look_with(header, true), &dark).fill, Some(header));
     }
 }

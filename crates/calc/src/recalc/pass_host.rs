@@ -35,6 +35,8 @@ pub(super) struct PassHost<'a> {
     pub(super) results: HashMap<Key, Value>,
     pending: HashSet<Key>,
     in_progress: HashSet<Key>,
+    /// The formula being evaluated now (the innermost of `in_progress`).
+    innermost: Option<Key>,
     /// New spills found during the pass: anchor → array.
     pub(super) spills: HashMap<Key, std::sync::Arc<Array>>,
     /// Used range per sheet: the workbook doesn't change during a pass, and working it out walks
@@ -90,6 +92,7 @@ impl<'a> PassHost<'a> {
             results: HashMap::with_capacity_and_hasher(exprs.len(), Default::default()),
             pending: exprs.keys().copied().collect(),
             in_progress: HashSet::default(),
+            innermost: None,
             spills: HashMap::default(),
             used: HashMap::default(),
             rng,
@@ -289,11 +292,13 @@ impl PassHost<'_> {
         }
         let (expr, rows, cols) = (std::sync::Arc::clone(&expr.0), expr.1, expr.2);
         let outer_out_of_stack = std::mem::replace(&mut self.out_of_stack, false);
+        let outer_innermost = self.innermost.replace(k);
         let v = {
             let mut ev = Evaluator::new(self, k.0, k.1);
             ev.shift = (rows, cols);
             ev.value(&expr)
         };
+        self.innermost = outer_innermost;
         let out_of_stack = std::mem::replace(&mut self.out_of_stack, outer_out_of_stack);
         if out_of_stack && self.depth > 1 && self.suspend.is_none() {
             // It ran out of the stack left below the formulas that read it: it is calculated
@@ -370,15 +375,56 @@ impl PassHost<'_> {
         v
     }
 
-    /// The stored spill ranges on `sheet` whose anchor is being calculated now (on the stack):
-    /// their old values must not feed the new result.
-    fn busy_spills(&self, sheet: usize) -> Vec<(CellRef, RangeRef)> {
-        if self.in_progress.is_empty() {
-            return Vec::new();
+    /// What a cell of a spill stored before this pass reads when its anchor `a` is calculated in
+    /// this pass: the anchor is calculated first, as any formula read is, and the cell reads its
+    /// new array (blank where that no longer reaches). Reading it from inside the anchor's own
+    /// evaluation reads blank, as a full recalculation (which starts with no spills) does; reading
+    /// it from a formula the anchor is waiting on is a circular reference (#114), or the old
+    /// value when iterating. `None`: the anchor is not calculated in this pass, so its stored
+    /// spill stands.
+    fn stored_spill_read(&mut self, a: Key, c: CellRef) -> Option<Value> {
+        if !self.exprs.contains_key(&a) {
+            return None;
         }
-        let Some(sh) = self.wb.sheet(sheet) else { return Vec::new() };
-        // The stack is short; the sheet may hold many spills.
-        self.in_progress.iter().filter(|(s, _)| *s == sheet).filter_map(|(_, a)| sh.spill_ranges.get(a).map(|r| (*a, *r))).collect()
+        if self.innermost == Some(a) {
+            return Some(Value::Empty);
+        }
+        let busy = self.in_progress.contains(&a) || self.waiting.contains(&a);
+        let v = self.compute(a);
+        if busy {
+            return Some(match v {
+                Value::Error(CellError::Circ) => v,
+                // Iterating (the anchor's previous value), or unwinding to `calculate`.
+                _ if self.iterate => self.wb.sheet(a.0).map(|s| s.value(c)).unwrap_or_default(),
+                v => v,
+            });
+        }
+        Some(self.new_spill_value(a, c).unwrap_or(Value::Empty))
+    }
+
+    /// The value at `c` of the array `a` spilled in this pass, if it covers `c`.
+    fn new_spill_value(&mut self, a: Key, c: CellRef) -> Option<Value> {
+        let arr = self.spills.get(&a)?;
+        if c.row < a.1.row || c.col < a.1.col {
+            return None;
+        }
+        let (dr, dc) = ((c.row - a.1.row) as usize, (c.col - a.1.col) as usize);
+        if dr >= arr.rows || dc >= arr.cols {
+            return None;
+        }
+        if self.iterate && self.tainted.contains(&a) {
+            self.taint = true;
+        }
+        arr.get(dr, dc).cloned()
+    }
+
+    /// The anchor of the spill stored over `c` before this pass, if any.
+    fn stored_anchor(&self, sheet: usize, c: CellRef) -> Option<Key> {
+        let sh = self.wb.sheet(sheet)?;
+        if sh.cells.has(c) || !sh.spill.contains_key(&c) {
+            return None;
+        }
+        sh.spill_ranges.range(..=c).rev().find(|(a, r)| **a != c && r.contains(c)).map(|(a, _)| (sheet, *a))
     }
 
     /// A formula's previous value for iterative calculation: from the last iteration, else the
@@ -503,30 +549,26 @@ impl Host for PassHost<'_> {
         if self.pending.contains(&k) || self.results.contains_key(&k) {
             return self.compute(k);
         }
+        // A cell an array of this pass used to spill over reads that array as it is now.
+        if let Some(a) = self.stored_anchor(sheet, c)
+            && let Some(v) = self.stored_spill_read(a, c)
+        {
+            return v;
+        }
         // A cell covered by a spill computed in this pass.
-        for (anchor, arr) in &self.spills {
-            if anchor.0 == sheet && c.row >= anchor.1.row && c.col >= anchor.1.col {
-                let (dr, dc) = ((c.row - anchor.1.row) as usize, (c.col - anchor.1.col) as usize);
-                if dr < arr.rows && dc < arr.cols {
-                    if self.iterate && self.tainted.contains(anchor) {
-                        self.taint = true;
-                    }
-                    return arr.get(dr, dc).cloned().unwrap_or_default();
-                }
+        let anchors: Vec<Key> = self.spills.keys().filter(|a| a.0 == sheet && c.row >= a.1.row && c.col >= a.1.col).copied().collect();
+        for a in anchors {
+            if let Some(v) = self.new_spill_value(a, c) {
+                return v;
             }
         }
-        let Some(sh) = self.wb.sheet(sheet) else { return Value::Empty };
-        // The old spill of a formula being calculated right now reads as blank, as a full
-        // recalculation (which starts with no spills) reads it.
-        if !sh.cells.has(c) && sh.spill.contains_key(&c) && self.busy_spills(sheet).iter().any(|(a, r)| *a != c && r.contains(c)) {
-            return Value::Empty;
-        }
-        sh.value(c)
+        self.wb.sheet(sheet).map(|sh| sh.value(c)).unwrap_or_default()
     }
     fn range_values(&mut self, sheet: usize, range: RangeRef) -> Vec<Value> {
         let (h, w) = (range.height() as usize, range.width() as usize);
         let mut out = vec![Value::Empty; h * w];
-        let Some(sh) = self.wb.sheet(sheet) else { return out };
+        let wb = self.wb;
+        let Some(sh) = wb.sheet(sheet) else { return out };
         // Sparse walk: only stored cells; formula cells that are (or were) dirty go through
         // `compute`, constants are copied straight from the store.
         let mut formulas: Vec<(usize, CellRef)> = Vec::new();
@@ -538,21 +580,46 @@ impl Host for PassHost<'_> {
                 *slot = cell.value.clone();
             }
         }
-        // Only when the range holds spilled cells at all.
-        let busy = if sh.spill.range(range.start..=range.end).next().is_some() { self.busy_spills(sheet) } else { Vec::new() };
+        // Spills stored before this pass: an anchor calculated in this pass is calculated first
+        // and its cells read as `cell_value` reads them (its new array is laid over them below).
+        let mut live: Vec<(CellRef, RangeRef)> = Vec::new();
+        if sh.spill.range(range.start..=range.end).any(|(c, _)| range.contains(*c)) {
+            for (a, r) in &sh.spill_ranges {
+                if r.intersects(&range) && self.exprs.contains_key(&(sheet, *a)) {
+                    live.push((*a, *r));
+                }
+            }
+        }
+        let mut read: HashMap<CellRef, Value> = HashMap::default();
+        for &(a, r) in &live {
+            let Some(first) = r.iter().find(|c| *c != a && range.contains(*c)) else { continue };
+            let busy = self.innermost != Some((sheet, a)) && (self.in_progress.contains(&(sheet, a)) || self.waiting.contains(&(sheet, a)));
+            if let Some(v) = self.stored_spill_read((sheet, a), first)
+                && busy
+            {
+                read.insert(a, v);
+            }
+        }
         for (c, v) in sh.spill.range(range.start..=range.end) {
-            // The old spill of a formula being calculated right now reads as blank (see
-            // `cell_value`).
-            if busy.iter().any(|(a, r)| a != c && r.contains(*c)) {
+            if !range.contains(*c) {
                 continue;
             }
-            if range.contains(*c) {
-                let i = (c.row - range.start.row) as usize * w + (c.col - range.start.col) as usize;
-                if let Some(slot) = out.get_mut(i)
-                    && slot.is_empty()
-                {
-                    *slot = v.clone();
-                }
+            let i = (c.row - range.start.row) as usize * w + (c.col - range.start.col) as usize;
+            let v = match live.iter().find(|(a, r)| a != c && r.contains(*c)) {
+                // Recalculated: blank unless its new array still covers the cell (laid over below).
+                // In progress: what `stored_spill_read` gave for the first of its cells (#CIRC!,
+                // blank inside the anchor itself, the old value when iterating).
+                Some((a, _)) => match read.get(a) {
+                    Some(Value::Error(CellError::Circ)) => Value::Error(CellError::Circ),
+                    Some(_) if self.iterate => v.clone(),
+                    _ => continue,
+                },
+                None => v.clone(),
+            };
+            if let Some(slot) = out.get_mut(i)
+                && slot.is_empty()
+            {
+                *slot = v;
             }
         }
         for (i, c) in formulas {
