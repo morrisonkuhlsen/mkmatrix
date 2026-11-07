@@ -29,6 +29,7 @@ mod dialog_button_row;
 mod dialog_confirm;
 mod dialog_focus;
 mod dialog_move;
+mod dialog_sections_size;
 mod drag_cursor;
 mod error_checking_menu;
 mod explain_formula;

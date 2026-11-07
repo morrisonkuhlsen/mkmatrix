@@ -308,6 +308,8 @@ pub fn apply(ctx: &egui::Context, dark: bool) {
         v.window_corner_radius = egui::CornerRadius::ZERO;
         v.menu_corner_radius = egui::CornerRadius::ZERO;
         v.popup_shadow = egui::epaint::Shadow { offset: [0, 4], blur: 16, spread: 0, color: t.shadow };
+        // Dialogs sit flat on the app, outlined by their border: no shadow.
+        v.window_shadow = egui::epaint::Shadow::NONE;
         ctx.set_visuals_of(theme, v);
     }
     ctx.options_mut(|o| o.fallback_theme = egui::Theme::Light);
