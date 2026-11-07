@@ -83,7 +83,6 @@ pub(super) fn name_manager(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog
                 resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, &name));
                 let p = ui.painter();
                 if on {
-                    p.rect_filled(r, 0.0, t.accent_soft);
                     p.rect_filled(egui::Rect::from_min_size(r.min, vec2(2.0, r.height())), 0.0, t.accent);
                 } else if resp.hovered() {
                     p.rect_filled(r, 0.0, t.hover);

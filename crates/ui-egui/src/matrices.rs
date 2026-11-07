@@ -193,12 +193,27 @@ fn bracket_lines(r: Rect) -> Vec<[egui::Pos2; 2]> {
 /// A block's tag, `X · 8×3` (or `8×3` for a spill): over its top-left corner, under it when the
 /// sheet's edge leaves no room above. On the sheet's colour, so it reads over a heading.
 pub(crate) fn paint_tag(p: &Painter, geo: &Geo, r: Rect, text: &str, ink: Color32, ground: Color32) {
+    paint_tag_placed(p, geo, r, text, ink, ground, false);
+}
+
+/// A tag like [`paint_tag`]'s, under `r` (over it when the sheet's edge leaves no room below):
+/// for what is written about a block rather than its name, so the rows above stay in sight.
+pub(crate) fn paint_tag_under(p: &Painter, geo: &Geo, r: Rect, text: &str, ink: Color32, ground: Color32) {
+    paint_tag_placed(p, geo, r, text, ink, ground, true);
+}
+
+fn paint_tag_placed(p: &Painter, geo: &Geo, r: Rect, text: &str, ink: Color32, ground: Color32, under: bool) {
     let font = FontId::new(TAG_SIZE * geo.z, FontFamily::Name(crate::theme::MONO.into()));
     let galley = p.layout_no_wrap(text.to_string(), font, ink);
     let pad = vec2(4.0, 2.0) * geo.z;
     let size = galley.size() + pad * 2.0;
-    let above = r.top() - 3.0 - size.y;
-    let at = if above >= geo.cells.top() { pos2(r.left() - 3.0, above) } else { pos2(r.left() - 3.0, r.bottom() + 3.0) };
+    let (above, below) = (pos2(r.left() - 3.0, r.top() - 3.0 - size.y), pos2(r.left() - 3.0, r.bottom() + 3.0));
+    let at = match under {
+        false if above.y >= geo.cells.top() => above,
+        false => below,
+        true if below.y + size.y <= geo.cells.bottom() => below,
+        true => above,
+    };
     let tag = Rect::from_min_size(at, size);
     p.rect_filled(tag, 3.0 * geo.z, ground);
     p.rect_stroke(tag, 3.0 * geo.z, Stroke::new(1.0, ink.gamma_multiply(0.5)), egui::StrokeKind::Inside);
