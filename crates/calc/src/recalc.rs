@@ -353,7 +353,11 @@ impl Calc {
         }
     }
 
-    fn dirty_closure(&self, _wb: &Workbook, seeds: &[Key]) -> Vec<Key> {
+    /// The formulas to recalculate after `seeds` changed: their dependents, transitively. A
+    /// formula that spills is also read through its spill area, so what reads a cell of it is a
+    /// dependent too (#114): without that edge, a loop through a spill area that spills as
+    /// before is never evaluated as one.
+    fn dirty_closure(&self, wb: &Workbook, seeds: &[Key]) -> Vec<Key> {
         let mut seen: HashSet<Key> = HashSet::default();
         let mut queue: VecDeque<Key> = VecDeque::new();
         let mut deps = Vec::new();
@@ -382,6 +386,9 @@ impl Calc {
         while let Some(k) = queue.pop_front() {
             deps.clear();
             self.graph.dependents(k.0, k.1, &mut deps);
+            if let Some(r) = wb.sheet(k.0).filter(|s| !s.spill_ranges.is_empty()).and_then(|s| s.spill_ranges.get(&k.1)) {
+                self.graph.dependents_of_range(k.0, *r, &mut deps);
+            }
             for d in deps.drain(..) {
                 if seen.insert(d) {
                     queue.push_back(d);

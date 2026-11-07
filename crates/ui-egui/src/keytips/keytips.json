@@ -2568,11 +2568,10 @@
   },
   {
    "seq": "Q",
-   "kind": "command",
-   "target": "ui.search",
-   "pending": true,
+   "kind": "dialog",
+   "target": "commandSearch",
    "excel": "Search / Tell Me",
-   "note": "Alt+Q search box does not exist yet (issue #49)"
+   "note": "Opens Search Commands, as the title bar's search button does"
   }
  ]
 }
