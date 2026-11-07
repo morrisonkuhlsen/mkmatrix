@@ -7,7 +7,7 @@ use crate::theme::Tokens;
 /// Find and Replace's sections, as `d.tab` names them, with their icon.
 const SECTIONS: [(&str, Icon); 2] = [("Find", Icon::Search), ("Replace", Icon::Pen)];
 /// Find and Replace's body height: one size for both sections, so the window never jumps.
-const FIND_BODY_H: f32 = 236.0;
+const FIND_BODY_H: f32 = 245.0;
 /// Find and Replace's section rail.
 const FIND_NAV_W: f32 = 150.0;
 

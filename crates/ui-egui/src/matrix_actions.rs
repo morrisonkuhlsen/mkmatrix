@@ -1,7 +1,7 @@
 //! MK Matrix's actions on a selected matrix: a narrow floating column just past a selected block
 //! of numbers, in the gap before where its results go, so it never covers the labels above it. Naming it, transposing, inverting, its eigenvalues and SVD write the formula one column
 //! past the block (the result spills there); multiplying and solving start the formula, `=X@` or
-//! `=X\`, for the second matrix to be pointed at.
+//! `=X\`, for the second matrix to be pointed at. The last turns View › Matrix Heat Map on or off.
 
 use egui::{Align2, Rect, Sense, pos2, vec2};
 use mkmatrix_engine::core::{CellRef, MAX_COLS, MAX_ROWS, RangeRef};
@@ -47,9 +47,11 @@ enum Kind {
     Start(&'static str),
     /// Opens the Calculation by Hand panel.
     ByHand,
+    /// Turns View › Matrix Heat Map on or off.
+    HeatMap,
 }
 
-const ACTIONS: [Action; 8] = [
+const ACTIONS: [Action; 9] = [
     Action { glyph: "A", tip: "Name as a matrix", square: false, kind: Kind::Name, shape: one },
     Action { glyph: "X'", tip: "Transpose", square: false, kind: Kind::Write("={}'"), shape: transposed },
     Action { glyph: "inv", tip: "Inverse", square: true, kind: Kind::Write("=MX.INV({})"), shape: same },
@@ -58,6 +60,7 @@ const ACTIONS: [Action; 8] = [
     Action { glyph: "λ", tip: "Eigenvalues", square: true, kind: Kind::Write("=MX.EIG({})"), shape: eigen },
     Action { glyph: "σ", tip: "Singular values", square: false, kind: Kind::Write("=MX.SVD({})"), shape: singular },
     Action { glyph: "Σ", tip: "Calculation by hand", square: false, kind: Kind::ByHand, shape: one },
+    Action { glyph: "", tip: "Heat map", square: false, kind: Kind::HeatMap, shape: one },
 ];
 
 /// Draws the column of actions just right of the selection, level with its top (left of it when
@@ -86,6 +89,7 @@ pub(crate) fn show(app: &mut SheetApp, ctx: &egui::Context, selection: Rect, cel
     let reference = crate::matrices::on_sheet(&d.wb, d.wb.active_sheet()).into_iter().find(|(_, m)| *m == r).map_or_else(|| r.a1(), |(n, _)| n);
     let t = Tokens::get(ctx);
     let lang = app.ui.language;
+    let heat_on = app.ui.matrix_heat_map;
     let (bw, bh) = (24.0, 22.0);
     let (width, height) = (bw + 4.0, bh * ACTIONS.len() as f32 + 4.0);
     // Clear of the matrix's bracket, which sits 3 points outside the block.
@@ -107,8 +111,18 @@ pub(crate) fn show(app: &mut SheetApp, ctx: &egui::Context, selection: Rect, cel
                         ui.painter().rect_filled(rect, 0.0, t.hover);
                     }
                     let ink = if enabled { t.text } else { t.text_disabled };
-                    if matches!(a.kind, Kind::Name) {
-                        crate::icons::paint(ui.painter(), Rect::from_center_size(rect.center(), vec2(14.0, 14.0)), crate::icons::Icon::Name, ink);
+                    let icon = match a.kind {
+                        Kind::Name => Some(crate::icons::Icon::Name),
+                        Kind::HeatMap => Some(crate::icons::Icon::HeatMap),
+                        _ => None,
+                    };
+                    if let Some(icon) = icon {
+                        // The heat map's glyph is lit while the map is on.
+                        let lit = matches!(a.kind, Kind::HeatMap) && heat_on;
+                        if lit {
+                            ui.painter().rect_stroke(rect.shrink(2.0), 0.0, egui::Stroke::new(1.0, t.accent), egui::StrokeKind::Inside);
+                        }
+                        crate::icons::paint(ui.painter(), Rect::from_center_size(rect.center(), vec2(14.0, 14.0)), icon, ink);
                     } else {
                         ui.painter().text(rect.center(), Align2::CENTER_CENTER, a.glyph, theme::ui_font(13.0), if enabled { t.accent } else { ink });
                     }
@@ -131,6 +145,7 @@ pub(crate) fn show(app: &mut SheetApp, ctx: &egui::Context, selection: Rect, cel
     match action.kind {
         Kind::Name => app.open_dialog("defineName", json!({})),
         Kind::ByHand => app.run_or_alert("view.byHand", json!({"on": true})),
+        Kind::HeatMap => app.run_or_alert("view.matrixHeatMap", json!({})),
         Kind::Write(f) => {
             let Some(target) = target() else { return };
             app.run_or_alert("cell.set", json!({"cell": target.a1(), "input": f.replace("{}", &reference)}));

@@ -374,7 +374,6 @@ fn history(app: &mut SheetApp, ui: &mut Ui) {
         resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, p == target, &label));
         let painter = ui.painter();
         if p == target {
-            painter.rect_filled(row, 0.0, t.accent_soft);
             painter.rect_filled(egui::Rect::from_min_size(row.min, vec2(2.0, row.height())), 0.0, t.accent);
         } else if resp.hovered() {
             painter.rect_filled(row, 0.0, t.hover);

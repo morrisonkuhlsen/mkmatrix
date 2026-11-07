@@ -190,6 +190,10 @@ impl SheetApp {
                 self.ui.matrix_brackets = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.matrix_brackets);
                 Ok(json!({"on": self.ui.matrix_brackets}))
             }
+            "view.matrixHeatMap" => {
+                self.ui.matrix_heat_map = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.matrix_heat_map);
+                Ok(json!({"on": self.ui.matrix_heat_map}))
+            }
             "view.numberedColumns" => {
                 self.ui.numbered_columns = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.numbered_columns);
                 Ok(json!({"on": self.ui.numbered_columns}))

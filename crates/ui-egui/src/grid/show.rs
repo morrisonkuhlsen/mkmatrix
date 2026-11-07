@@ -229,7 +229,8 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     let objects = crate::chartview::paint_objects(app, &painter.with_clip_rect(geo.cells), &geo, &wb, si, sh);
     paint_overlays(app, ui, &painter.with_clip_rect(geo.cells), &geo, &wb, si, sh, &sel);
     // While a formula with a matrix result is typed: where that result will spill, tagged with
-    // its shape; when the shapes don't fit, the cell typed in, dashed in the danger colour and
+    // its shape (in the danger colour, with the first cell in its way, when it would land on
+    // contents); when the shapes don't fit, the cell typed in, dashed in the danger colour and
     // tagged with why.
     let preview = match app.editing_shape() {
         Some(crate::shapes::Verdict::Fits((rows, cols))) if rows.saturating_mul(cols) > 1 => {
@@ -238,7 +239,14 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
                 at.row.saturating_add(rows - 1).min(mkmatrix_engine::core::MAX_ROWS - 1),
                 at.col.saturating_add(cols - 1).min(mkmatrix_engine::core::MAX_COLS - 1),
             );
-            Some((RangeRef::new(at, end), format!("→ {rows}×{cols}"), t.accent))
+            // Where something already sits in the way, the result would be #SPILL!: say where.
+            match app.editing_blocked((rows, cols)) {
+                Some(b) => {
+                    let why = app.ui.language.tr("blocked by {cell}").replace("{cell}", &b.a1());
+                    Some((RangeRef::new(at, end), format!("→ {rows}×{cols} · {why}"), t.danger))
+                }
+                None => Some((RangeRef::new(at, end), format!("→ {rows}×{cols}"), t.accent)),
+            }
         }
         Some(crate::shapes::Verdict::Mismatch(why)) => Some((RangeRef::cell(sel.active), why, t.danger)),
         _ => None,
@@ -263,6 +271,18 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
             Some(sel.active),
             &cited_matrices(app, &wb, &t),
         );
+    }
+    // Over a cell of a matrix product: the row and column that make it, and the sum written out.
+    // Not while typing, dragging or holding a button, when the pointer is busy elsewhere.
+    if app.editor.is_none() && app.grid.drag == super::Drag::None && !pointer_selecting {
+        let over = ui.input(|i| i.pointer.hover_pos()).filter(|h| geo.cells.contains(*h)).map(|h| geo.mirror_pos(h));
+        if let Some(h) = over {
+            let cell = mkmatrix_engine::core::CellRef::new(geo.row_at(sh, h.y), geo.col_at(sh, h.x));
+            if let Some(f) = crate::product_focus::at(&wb, si, sh, cell) {
+                let (a, b) = (t.ref_color(0, true), t.ref_color(1, true));
+                crate::product_focus::paint(&painter.with_clip_rect(geo.cells), &geo, sh, &f, a, b, t.accent, t.grid_bg);
+            }
+        }
     }
     if sh.view == mkmatrix_engine::model::SheetViewMode::PageBreakPreview {
         paint_pages(app, &painter.with_clip_rect(geo.cells), &geo, sh);
@@ -360,6 +380,20 @@ fn paint_preview(app: &SheetApp, p: &Painter, geo: &Geo, sh: &Sheet, t: &Tokens)
 
 /// Normal view: up to four panes (frozen rows/columns), each painted with its own clip.
 #[allow(clippy::too_many_arguments)]
+/// The matrices View › Matrix Heat Map shades in the quadrants on screen; none with it off.
+pub(crate) fn heat_map(app: &SheetApp, wb: &Workbook, si: usize, sh: &Sheet, quads: &[((u32, u32), (u32, u32), Rect)]) -> crate::heat_map::HeatMap {
+    if !app.ui.matrix_heat_map {
+        return crate::heat_map::HeatMap::default();
+    }
+    let rows = quads.iter().fold((u32::MAX, 0), |(a, b), (r, _, _)| (a.min(r.0), b.max(r.1)));
+    let cols = quads.iter().fold((u32::MAX, 0), |(a, b), (_, c, _)| (a.min(c.0), b.max(c.1)));
+    if rows.0 > rows.1 || cols.0 > cols.1 {
+        return crate::heat_map::HeatMap::default();
+    }
+    let visible = RangeRef::new(mkmatrix_engine::core::CellRef::new(rows.0, cols.0), mkmatrix_engine::core::CellRef::new(rows.1, cols.1));
+    crate::heat_map::HeatMap::new(wb, si, sh, visible)
+}
+
 fn paint_panes(
     app: &SheetApp,
     painter: &Painter,
@@ -388,12 +422,13 @@ fn paint_panes(
     if geo.fr > 0 && geo.fc > 0 {
         quads.push((fr_rows, fr_cols, Rect::from_min_max(geo.cells.min, split)));
     }
+    let heat = heat_map(app, wb, si, sh, &quads);
     for (rows, cols, clip) in &quads {
         if rows.0 > rows.1 || cols.0 > cols.1 {
             continue;
         }
         let p = painter.with_clip_rect(*clip);
-        paint_quadrant(&p, geo, wb, si, sh, *rows, *cols, cf, t, super::pivot_buttons::cached(app));
+        paint_quadrant(&p, geo, wb, si, sh, *rows, *cols, cf, t, super::pivot_buttons::cached(app), &heat);
         paint_selection(&p, geo, sh, sel, outline, t, app, *rows, *cols);
     }
     paint_preview(app, &painter.with_clip_rect(geo.cells), geo, sh, t);
