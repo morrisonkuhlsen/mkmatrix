@@ -162,7 +162,8 @@ pub(crate) fn paint_pages(
         painted += 1;
         let pc = p.with_clip_rect(clip);
         // The pages show the report as it prints: without its buttons.
-        grid::paint_quadrant(&pc, geo, wb, si, sh, rows, cols, cf, t, &[]);
+        let heat = grid::heat_map(app, wb, si, sh, &[(rows, cols, clip)]);
+        grid::paint_quadrant(&pc, geo, wb, si, sh, rows, cols, cf, t, &[], &heat);
         if !pg.is_data_page(i, j) {
             // "Click to add data" pages: faded until something is typed there.
             pc.rect_filled(clip, 0.0, t.grid_bg.gamma_multiply(0.75));

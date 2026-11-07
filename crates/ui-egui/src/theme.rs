@@ -250,6 +250,17 @@ impl Tokens {
         self.cat.get(c as usize).copied().unwrap_or(self.text)
     }
 
+    /// A matrix heat map's shade for a value placed at `t` on its scale: −1 the deepest cool
+    /// (negative), 0 the sheet itself, 1 the deepest warm (positive). Orange and blue, the
+    /// category palette's pair that colour-blind readers tell apart, mixed into the sheet's colour
+    /// and never fully, so the number over it still reads.
+    pub fn heat(&self, t: f32) -> Color32 {
+        const DEEPEST: f32 = 0.78;
+        let t = if t.is_finite() { t.clamp(-1.0, 1.0) } else { 0.0 };
+        let hue = if t < 0.0 { self.cat(Cat::Blue) } else { self.cat(Cat::Orange) };
+        self.grid_bg.lerp_to_gamma(hue, t.abs() * DEEPEST)
+    }
+
     /// The reference colour for a formula's `index`-th reference, on the bar or on the sheet.
     pub fn ref_color(&self, index: usize, on_sheet: bool) -> Color32 {
         let set = if on_sheet { &self.sheet_ref_colors } else { &self.ref_colors };

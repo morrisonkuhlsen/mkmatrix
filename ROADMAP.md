@@ -135,6 +135,7 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | What landed |
 |---|---|
+| 2026-11-07 | View › Matrix Heat Map (`view.matrixHeatMap`, also in a selected matrix's action column): each named matrix and spilled result shades its numbers by value on its own scale, positive in orange and negative in blue diverging from zero, one-sign blocks from lightest to deepest, the numbers kept readable |
 | 2026-11-07 | Dialogs are flat: no shadow, the title on the dialog's own colour, and the chosen section, list row, segment or option marked by the accent alone, with no tinted fill; a dialog keeps its size moving between its sections (Find ▸ Replace, Format Cells ▸ Border, About ▸ Contributors) and never shrinks while it is open |
 | 2026-11-06 | 0.15.0: a quieter, single-surface look (gridlines a shade off the sheet, headings and every bar on the sheet's colour, the tabs in the title bar in compact density); dark mode for charts, tables and data bars; matrix brackets with shape tags and cited matrices in reference colours; changed values light up after a recalculation; Format Chart Area and the chart menus in the house style; circular references through a spill area detected; status-bar statistics over styled spills; Alt, Q opens Search Commands |
 | 2026-11-06 | After a recalculation the cells whose values it changed light in the accent and fade (0.7 s): an edit's effect shows at a glance. Not on opening a file, after a full recalculation, past 500 cells, or with View › Animations off |

@@ -360,6 +360,20 @@ fn paint_preview(app: &SheetApp, p: &Painter, geo: &Geo, sh: &Sheet, t: &Tokens)
 
 /// Normal view: up to four panes (frozen rows/columns), each painted with its own clip.
 #[allow(clippy::too_many_arguments)]
+/// The matrices View › Matrix Heat Map shades in the quadrants on screen; none with it off.
+pub(crate) fn heat_map(app: &SheetApp, wb: &Workbook, si: usize, sh: &Sheet, quads: &[((u32, u32), (u32, u32), Rect)]) -> crate::heat_map::HeatMap {
+    if !app.ui.matrix_heat_map {
+        return crate::heat_map::HeatMap::default();
+    }
+    let rows = quads.iter().fold((u32::MAX, 0), |(a, b), (r, _, _)| (a.min(r.0), b.max(r.1)));
+    let cols = quads.iter().fold((u32::MAX, 0), |(a, b), (_, c, _)| (a.min(c.0), b.max(c.1)));
+    if rows.0 > rows.1 || cols.0 > cols.1 {
+        return crate::heat_map::HeatMap::default();
+    }
+    let visible = RangeRef::new(mkmatrix_engine::core::CellRef::new(rows.0, cols.0), mkmatrix_engine::core::CellRef::new(rows.1, cols.1));
+    crate::heat_map::HeatMap::new(wb, si, sh, visible)
+}
+
 fn paint_panes(
     app: &SheetApp,
     painter: &Painter,
@@ -388,12 +402,13 @@ fn paint_panes(
     if geo.fr > 0 && geo.fc > 0 {
         quads.push((fr_rows, fr_cols, Rect::from_min_max(geo.cells.min, split)));
     }
+    let heat = heat_map(app, wb, si, sh, &quads);
     for (rows, cols, clip) in &quads {
         if rows.0 > rows.1 || cols.0 > cols.1 {
             continue;
         }
         let p = painter.with_clip_rect(*clip);
-        paint_quadrant(&p, geo, wb, si, sh, *rows, *cols, cf, t, super::pivot_buttons::cached(app));
+        paint_quadrant(&p, geo, wb, si, sh, *rows, *cols, cf, t, super::pivot_buttons::cached(app), &heat);
         paint_selection(&p, geo, sh, sel, outline, t, app, *rows, *cols);
     }
     paint_preview(app, &painter.with_clip_rect(geo.cells), geo, sh, t);
