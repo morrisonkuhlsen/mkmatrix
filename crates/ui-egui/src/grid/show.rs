@@ -229,7 +229,8 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     let objects = crate::chartview::paint_objects(app, &painter.with_clip_rect(geo.cells), &geo, &wb, si, sh);
     paint_overlays(app, ui, &painter.with_clip_rect(geo.cells), &geo, &wb, si, sh, &sel);
     // While a formula with a matrix result is typed: where that result will spill, tagged with
-    // its shape; when the shapes don't fit, the cell typed in, dashed in the danger colour and
+    // its shape (in the danger colour, with the first cell in its way, when it would land on
+    // contents); when the shapes don't fit, the cell typed in, dashed in the danger colour and
     // tagged with why.
     let preview = match app.editing_shape() {
         Some(crate::shapes::Verdict::Fits((rows, cols))) if rows.saturating_mul(cols) > 1 => {
@@ -238,7 +239,14 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
                 at.row.saturating_add(rows - 1).min(mkmatrix_engine::core::MAX_ROWS - 1),
                 at.col.saturating_add(cols - 1).min(mkmatrix_engine::core::MAX_COLS - 1),
             );
-            Some((RangeRef::new(at, end), format!("→ {rows}×{cols}"), t.accent))
+            // Where something already sits in the way, the result would be #SPILL!: say where.
+            match app.editing_blocked((rows, cols)) {
+                Some(b) => {
+                    let why = app.ui.language.tr("blocked by {cell}").replace("{cell}", &b.a1());
+                    Some((RangeRef::new(at, end), format!("→ {rows}×{cols} · {why}"), t.danger))
+                }
+                None => Some((RangeRef::new(at, end), format!("→ {rows}×{cols}"), t.accent)),
+            }
         }
         Some(crate::shapes::Verdict::Mismatch(why)) => Some((RangeRef::cell(sel.active), why, t.danger)),
         _ => None,

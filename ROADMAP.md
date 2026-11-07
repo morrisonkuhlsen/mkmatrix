@@ -135,6 +135,7 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | What landed |
 |---|---|
+| 2026-11-07 | While a product or solve is typed the formula bar shows its operands' shapes, `3×8 @ 8×1 → 3×1`; when the result would land on cells that hold something, the preview turns to the danger colour and says where, `→ 3×3 · blocked by D17`, before Enter instead of a `#SPILL!` after |
 | 2026-11-07 | A matrix product, cell by cell: with the pointer over a cell of `A@B` or `MX.MUL(A, B)` (ranges or named matrices, transposed or not), the row of A and the column of B that make it light up in reference colours and the sum is written out under the result, `X'(2,:)·X(:,2) = 2·2 + 3·3 + … = 284` |
 | 2026-11-07 | View › Matrix Heat Map (`view.matrixHeatMap`, also in a selected matrix's action column): each named matrix and spilled result shades its numbers by value on its own scale, positive in orange and negative in blue diverging from zero, one-sign blocks from lightest to deepest, the numbers kept readable |
 | 2026-11-07 | Dialogs are flat: no shadow, the title on the dialog's own colour, and the chosen section, list row, segment or option marked by the accent alone, with no tinted fill; a dialog keeps its size moving between its sections (Find ▸ Replace, Format Cells ▸ Border, About ▸ Contributors) and never shrinks while it is open |

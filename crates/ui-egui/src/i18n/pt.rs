@@ -71,6 +71,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "{what}: {a} {op} {b}, {n} vs {m}" => "{what}: {a} {op} {b}, {n} contra {m}",
         "{what}: {a} vs {b}" => "{what}: {a} contra {b}",
         "{what}: {shape} isn't square" => "{what}: {shape} não é quadrada",
+        "blocked by {cell}" => "bloqueado por {cell}",
         "Bottom Border" => "Borda Inferior",
         "Top Border" => "Borda Superior",
         "Left Border" => "Borda Esquerda",
