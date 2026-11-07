@@ -1,4 +1,4 @@
-use super::controls::{act, anchor_keytip, control_keytip, invoke, menu_header, popup_command, sep};
+use super::controls::{act, anchor_keytip, control_keytip, invoke, menu_header, menu_items, popup_command, sep};
 use super::*;
 
 /// Draws the Insert tab: PivotTable, Table, Pictures, Shapes, Icons, charts, slicer, sparklines, checkbox, links, comments, text box, header/footer and symbols.
@@ -109,11 +109,9 @@ pub(super) fn insert(app: &mut SheetApp, ui: &mut Ui) {
                 let forced_c = invoke(app, cid);
                 egui::Popup::menu(&r).open_memory(popup_command(forced_c, r.clicked())).show(|ui| {
                     menu_header(app, ui, icon, tip, false);
-                    for (label, k, s) in &subs {
-                        if ui.button(*label).clicked() {
-                            act(app, "insert.chart", json!({"type": k, "subtype": s}));
-                        }
-                    }
+                    let items: Vec<(&str, &str, serde_json::Value)> =
+                        subs.iter().map(|(label, k, s)| (*label, "insert.chart", json!({"type": k, "subtype": s}))).collect();
+                    menu_items(app, ui, &items);
                 });
             }
         });
@@ -146,11 +144,9 @@ pub(super) fn insert(app: &mut SheetApp, ui: &mut Ui) {
                 let forced_c = invoke(app, cid);
                 egui::Popup::menu(&r).open_memory(popup_command(forced_c, r.clicked())).show(|ui| {
                     menu_header(app, ui, icon, tip, false);
-                    for (label, k, s) in &subs {
-                        if ui.button(*label).clicked() {
-                            act(app, "insert.chart", json!({"type": k, "subtype": s}));
-                        }
-                    }
+                    let items: Vec<(&str, &str, serde_json::Value)> =
+                        subs.iter().map(|(label, k, s)| (*label, "insert.chart", json!({"type": k, "subtype": s}))).collect();
+                    menu_items(app, ui, &items);
                 });
             }
         });
