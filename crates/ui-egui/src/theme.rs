@@ -189,12 +189,14 @@ impl Tokens {
             // The sheet: white in light mode; a graphite a step lighter than the ink in dark mode.
             grid_bg: pick(dark, Color32::WHITE, Color32::from_rgb(0x2B, 0x2F, 0x38)),
             desk: pick(dark, Color32::from_rgb(0xDE, 0xDE, 0xDE), Color32::from_rgb(0x0F, 0x11, 0x15)),
-            gridline: pick(dark, Color32::from_rgb(0xE1, 0xE1, 0xE1), Color32::from_rgb(0x3A, 0x3F, 0x4A)),
-            // The row and column headings sit on the window's own colour.
-            header_bg: pick(dark, Color32::from_rgb(0xF3, 0xF3, 0xF3), Color32::from_rgb(0x14, 0x16, 0x1C)),
-            header_text: pick(dark, Color32::from_rgb(0x42, 0x42, 0x42), Color32::from_rgb(0x8B, 0x93, 0xA1)),
-            header_line: pick(dark, Color32::from_rgb(0xD6, 0xD6, 0xD6), Color32::from_rgb(0x26, 0x2A, 0x33)),
-            header_sel_bg: pick(dark, Color32::from_rgb(0xE1, 0xE1, 0xE1), Color32::from_rgb(0x2E, 0x24, 0x20)),
+            // Quiet: the gridlines only hint at the cells, so the numbers come first.
+            gridline: pick(dark, Color32::from_rgb(0xF0, 0xEE, 0xEB), Color32::from_rgb(0x34, 0x38, 0x41)),
+            // The row and column headings sit on the sheet itself, with no band of their own: a
+            // selected line shows in the accent and a 2 px tick, not a grey box.
+            header_bg: pick(dark, Color32::WHITE, Color32::from_rgb(0x2B, 0x2F, 0x38)),
+            header_text: pick(dark, Color32::from_rgb(0x6F, 0x6B, 0x66), Color32::from_rgb(0x9A, 0xA1, 0xAD)),
+            header_line: pick(dark, Color32::from_rgb(0xE6, 0xE4, 0xE1), Color32::from_rgb(0x3A, 0x3F, 0x4A)),
+            header_sel_bg: pick(dark, Color32::WHITE, Color32::from_rgb(0x2B, 0x2F, 0x38)),
             header_sel_text: pick(dark, Color32::from_rgb(0x85, 0x42, 0x22), Color32::from_rgb(0xF0, 0xA9, 0x84)),
             header_all_bg: pick(dark, Color32::from_rgb(0xEB, 0xCD, 0xBB), Color32::from_rgb(0x5A, 0x33, 0x24)),
             sel_fill: pick(dark, Color32::from_rgba_unmultiplied(0xC0, 0x6A, 0x40, 0x22), Color32::from_rgba_unmultiplied(0xE0, 0x8A, 0x5F, 0x22)),
@@ -269,10 +271,10 @@ pub fn contrast(a: Color32, b: Color32) -> f32 {
 }
 
 /// The gridline MK Matrix keeps over a filled cell: a shade of the fill itself, darker on a light
-/// fill and lighter on a dark one, so it shows on pale yellow as on navy, in either theme. On
-/// white, the darker shade is the gridline grey (#E1E1E1).
+/// fill and lighter on a dark one, so it shows on pale yellow as on navy, in either theme. As
+/// quiet as the sheet's own gridlines: on white, the darker shade is #EDEDED.
 pub fn gridline_over(fill: Color32) -> Color32 {
-    if luminance(fill) > 0.18 { Color32::from_black_alpha(30) } else { Color32::from_white_alpha(36) }
+    if luminance(fill) > 0.18 { Color32::from_black_alpha(18) } else { Color32::from_white_alpha(28) }
 }
 
 /// Installs light and dark token visuals in both theme slots, keeps the 2-3 px widget and 8-10 px window/menu corner radii from 0.36, and sets spacing, text styles and the active theme.
