@@ -842,7 +842,9 @@ fn paint_insert_col_button(app: &SheetApp, ui: &egui::Ui, p: &Painter, geo: &Geo
         } else {
             [pos2(geo.cells.left(), at.y), pos2(geo.cells.right(), at.y)]
         };
-        p.with_clip_rect(geo.rect).line_segment(line, Stroke::new(2.0, t.accent));
+        // A fine dashed hint in the accent, half see-through: it shows where the line goes
+        // without cutting the sheet in two.
+        p.with_clip_rect(geo.rect).extend(egui::Shape::dashed_line(&line, Stroke::new(1.0, t.accent.gamma_multiply(0.55)), 4.0, 3.0));
     }
     let (fill, ink) = if over { (t.accent, t.on_accent) } else { (t.header_bg, t.accent) };
     p.circle_filled(at, INSERT_PLUS_R, fill);
