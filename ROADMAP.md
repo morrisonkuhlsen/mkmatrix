@@ -135,6 +135,7 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | What landed |
 |---|---|
+| 2026-11-06 | After a recalculation the cells whose values it changed light in the accent and fade (0.7 s): an edit's effect shows at a glance. Not on opening a file, after a full recalculation, past 500 cells, or with View › Animations off |
 | 2026-11-06 | Compact and Minimal density put the ribbon's tabs in the title bar, between the quick-access controls and the ones on the right, with the title centred in the room left: the sheet starts 27 px higher in Compact (from 144 to 117 at 1440×900). A window too narrow for them keeps the tabs in the ribbon; Normal density is unchanged |
 | 2026-11-06 | While a formula is typed, the named matrices it cites take reference colours like ranges, in the formula bar and on their brackets, names and tags; the preview of where the result spills carries its shape (`→ 3×1`), and when the shapes don't fit the cell typed in is tagged with why (`X@y: 8×3 @ 8×1, 3 vs 8`) |
 | 2026-11-06 | Matrix brackets: finer (1.5 px); a matrix's name takes the first place beside, under or over it that covers no other cell's contents; the matrix under the pointer or holding the active cell shows a tag with its name and shape (`X · 8×3`), and a spill shows light brackets and its shape (`3×3`) the same way |

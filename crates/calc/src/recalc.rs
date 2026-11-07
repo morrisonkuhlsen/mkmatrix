@@ -47,11 +47,48 @@ pub struct Calc {
     /// Cells whose formulas have errors from cycles.
     pub circular: Vec<Key>,
     pub last_recalc_cells: usize,
+    /// The cells whose shown value the last recalculation changed (formula results and spilled
+    /// values), so a front end can point them out.
+    pub changes: ChangeLog,
+    /// Recalculations so far: a front end tells a new one by it.
+    pub runs: u64,
+    /// Whether the last recalculation was a full one (loading, F9), which changes everything.
+    pub last_full: bool,
+}
+
+/// The cells a recalculation changed, up to [`ChangeLog::MAX`]; past it only that there were more.
+#[derive(Clone, Debug, Default)]
+pub struct ChangeLog {
+    pub keys: Vec<Key>,
+    pub overflow: bool,
+}
+
+impl ChangeLog {
+    /// Most cells listed: a front end has no use for more, and a million-row edit must not pay for
+    /// a million-entry list.
+    pub const MAX: usize = 4096;
+
+    pub(crate) fn note(&mut self, k: Key) {
+        if self.keys.len() < Self::MAX {
+            self.keys.push(k);
+        } else {
+            self.overflow = true;
+        }
+    }
 }
 
 impl Default for Calc {
     fn default() -> Self {
-        Calc { graph: Graph::default(), rng: 0x9E37_79B9_7F4A_7C15, fixed_now: None, circular: vec![], last_recalc_cells: 0 }
+        Calc {
+            graph: Graph::default(),
+            rng: 0x9E37_79B9_7F4A_7C15,
+            fixed_now: None,
+            circular: vec![],
+            last_recalc_cells: 0,
+            changes: ChangeLog::default(),
+            runs: 0,
+            last_full: false,
+        }
     }
 }
 
@@ -365,6 +402,9 @@ impl Calc {
     fn run(&mut self, wb: &mut Workbook, mut dirty: Vec<Key>, full: bool) {
         let mut dynamic_again = !self.graph.dynamic.is_empty();
         self.last_recalc_cells = 0;
+        self.changes = ChangeLog::default();
+        self.runs = self.runs.wrapping_add(1);
+        self.last_full = full;
         for _round in 0..8 {
             if dirty.is_empty() {
                 break;
@@ -376,7 +416,7 @@ impl Calc {
             #[cfg(not(test))]
             let declined = false;
             let tk = prof_now();
-            let (left, on_threads) = if declined { (dirty.clone(), 0) } else { threads::run_kernels(wb, &dirty) };
+            let (left, on_threads) = if declined { (dirty.clone(), 0) } else { threads::run_kernels(wb, &dirty, &mut self.changes) };
             if on_threads > 0 && std::env::var_os("MKMATRIX_PROFILE").is_some() {
                 eprintln!("  kernels on threads: {on_threads} formulas {:.1} ms", prof_now() - tk);
             }
@@ -432,6 +472,7 @@ impl Calc {
                 }
                 if let Some(cell) = wb.sheet_mut(k.0).and_then(|sheet| sheet.cells.get_mut(k.1)) {
                     cell.value = v.clone();
+                    self.changes.note(*k);
                 }
             }
             for k in &dirty {
@@ -496,7 +537,9 @@ impl Calc {
                     } else {
                         for (i, c) in range.iter().enumerate() {
                             if c != k.1 {
+                                // Reached only when the array spills differently from before.
                                 sheet.spill.insert(c, arr.data.get(i).cloned().unwrap_or_default());
+                                self.changes.note((k.0, c));
                             }
                         }
                         sheet.spill_ranges.insert(k.1, range);

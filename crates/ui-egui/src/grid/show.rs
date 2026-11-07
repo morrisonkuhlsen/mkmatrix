@@ -225,6 +225,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     if crate::chartview::objects_hidden(&wb) {
         app.selected_chart = None;
     }
+    paint_changed_values(app, ui, &painter.with_clip_rect(geo.cells), &geo, si, sh);
     let objects = crate::chartview::paint_objects(app, &painter.with_clip_rect(geo.cells), &geo, &wb, si, sh);
     paint_overlays(app, ui, &painter.with_clip_rect(geo.cells), &geo, &wb, si, sh, &sel);
     // While a formula with a matrix result is typed: where that result will spill, tagged with
@@ -840,6 +841,51 @@ fn paint_pages(app: &mut SheetApp, p: &Painter, geo: &Geo, sh: &Sheet) {
         );
     }
     p.rect_stroke(pr, 0.0, Stroke::new(3.0, blue), StrokeKind::Outside);
+}
+
+/// How long a changed value stays lit, in seconds.
+const FLASH_SECONDS: f64 = 0.7;
+/// Most cells lit at once; a recalculation that changes more lights none (it would be a wash).
+const FLASH_MAX: usize = 500;
+
+/// After a recalculation (an edit, an undo, F9 on part of the sheet), the cells whose values it
+/// changed light up in the accent and fade, so the effect of a change shows at a glance. Not
+/// after a full recalculation (opening a file changes everything), when too many changed, or
+/// with View › Animations off.
+fn paint_changed_values(app: &mut SheetApp, ui: &egui::Ui, p: &Painter, geo: &Geo, si: usize, sh: &Sheet) {
+    let now = ui.input(|i| i.time);
+    if let Some(d) = app.session.active() {
+        let seen = (d.uid, d.calc.runs);
+        if app.grid.flash_seen != Some(seen) {
+            // The first look at a document is its opening, not a change.
+            let same_doc = app.grid.flash_seen.is_some_and(|(uid, _)| uid == d.uid);
+            app.grid.flash_seen = Some(seen);
+            let c = &d.calc;
+            let animate = app.ui.animations && ui.ctx().global_style().animation_time > 0.0 && !app.shots.in_flight();
+            app.grid.flash =
+                (same_doc && animate && !c.last_full && !c.changes.overflow && c.changes.keys.len() <= FLASH_MAX && !c.changes.keys.is_empty())
+                    .then(|| (now, c.changes.keys.clone()));
+        }
+    }
+    let Some((start, keys)) = &app.grid.flash else { return };
+    let age = (now - start) / FLASH_SECONDS;
+    if !(0.0..1.0).contains(&age) {
+        app.grid.flash = None;
+        return;
+    }
+    let t = Tokens::get(p.ctx());
+    // Eases out: bright at once, then fading.
+    let strength = ((1.0 - age) * (1.0 - age)) as f32 * 0.35;
+    for &(s, c) in keys {
+        if s != si {
+            continue;
+        }
+        let r = geo.mirror_rect(geo.cell_rect(sh, c));
+        if r.intersects(p.clip_rect()) {
+            p.rect_filled(r, 0.0, t.accent.gamma_multiply(strength));
+        }
+    }
+    p.ctx().request_repaint();
 }
 
 /// The named matrices the formula being typed cites, each with its reference colour (the same
