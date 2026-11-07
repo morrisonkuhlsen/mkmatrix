@@ -1,4 +1,4 @@
-use super::controls::{act, anchor_keytip, control_keytip, keytip, menu_header, menu_items, sep};
+use super::controls::{act, anchor_keytip, control_keytip, keytip, menu_header, menu_items, menu_section, sep};
 use super::galleries::{paint_table_swatch, table_gallery};
 use super::*;
 
@@ -152,23 +152,19 @@ pub(super) fn chart_design(app: &mut SheetApp, ui: &mut Ui) {
     }
     egui::Popup::menu(&ct).show(|ui| {
         menu_header(app, ui, Icon::ChartBar, "Change Chart Type", false);
-        for (label, k, s) in [
-            ("Clustered Column", "column", ""),
-            ("Stacked Column", "column", "stacked"),
-            ("Bar", "bar", ""),
-            ("Line", "line", "markers"),
-            ("Area", "area", ""),
-            ("Pie", "pie", ""),
-            ("Doughnut", "doughnut", ""),
-            ("Scatter", "scatter", ""),
-            ("Radar", "radar", ""),
-            ("Waterfall", "waterfall", ""),
-            ("Funnel", "funnel", ""),
-            ("Treemap", "treemap", ""),
+        // In sections, as Insert's chart menus group them.
+        let lang = app.ui.language;
+        for (section, kinds) in [
+            ("Column or Bar", &[("Clustered Column", "column", ""), ("Stacked Column", "column", "stacked"), ("Bar", "bar", "")][..]),
+            ("Line or Area", &[("Line", "line", "markers"), ("Area", "area", "")][..]),
+            ("Pie or Doughnut", &[("Pie", "pie", ""), ("Doughnut", "doughnut", "")][..]),
+            ("Scatter or Bubble", &[("Scatter", "scatter", "")][..]),
+            ("Hierarchy & more", &[("Radar", "radar", ""), ("Waterfall", "waterfall", ""), ("Funnel", "funnel", ""), ("Treemap", "treemap", "")][..]),
         ] {
-            if ui.button(label).clicked() {
-                act(app, "chart.set", json!({"chart": id, "type": k, "subtype": s}));
-            }
+            menu_section(ui, lang.tr(section));
+            let items: Vec<(&str, &str, serde_json::Value)> =
+                kinds.iter().map(|(label, k, s)| (*label, "chart.set", json!({"chart": id, "type": k, "subtype": s}))).collect();
+            menu_items(app, ui, &items);
         }
     });
     if big_button(ui, Icon::Settings, "Format\nPane", "Format Chart pane", false).clicked() {
