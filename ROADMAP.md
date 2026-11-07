@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~25 points of "ready for real work" and ~160–240 h away
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-29 · **Change:** minor (SQL function) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-06 · **Change:** minor (dark sheet) · **Target:** Microsoft Excel (Microsoft 365)
 
 MK Matrix aims at full Microsoft Excel parity, and at being better in places: faster, open (XLSX
 is the native format), fully scriptable by agents (MCP, control channel, CLI), and on the web.
@@ -135,6 +135,7 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | What landed |
 |---|---|
+| 2026-11-06 | The dark sheet shows charts, tables and data bars in its own colours: a chart sits on a graphite card with the theme's text, gridlines and axes (printing and export keep the white page), a table style's light bands become a wash over the dark sheet, data bars are translucent so their value keeps the theme's ink, and a sparkline too dark to read takes a lighter shade of its colour. Fills a cell or a rule chose are kept |
 | 2026-10-29 | 0.13.0: Alt+drag scrubs a typed number and Data › What-If Analysis › Sensitivity ranks a result's inputs in a tornado chart (`data.sensitivity`); the AutoFilter menu in the dialogs' style, with each value's row count and frequency bar, sorting that keeps the header and Clear Filter for every kind of filter; the app icon in terracotta on a transparent background; the floating formula bar moves by its grip and resizes by its edges |
 | 2026-10-29 | `=SQL(query, table1, …)`, beyond Excel: a SQL SELECT over ranges (each a table `t1`, `t2`… headed by its first row) with joins, GROUP BY/HAVING, ORDER BY and LIMIT; the result spills with a header row, recalculates with its data and is saved as `_xludf.SQL` |
 | 2026-10-28 | Every dialog in one style, Format Cells' (sections down a rail, muted labels, round options, framed lists, footer under a rule); Text to Columns previews the split. File › Print shows its settings as cards (what, orientation, paper, margins, scaling) that set the sheet's Page Setup, beside a full-height preview. F4 repeats the last action. Ctrl/Shift-click groups sheet tabs, and edits, deletes, hides and tab colours apply to every grouped sheet. Text boxes resize from all eight handles. The splash shows its new picture |

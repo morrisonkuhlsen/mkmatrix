@@ -1,11 +1,14 @@
 use super::cell_paint::{
-    Look, cell_text_y, center_across_end, col32, contrast, display_text, ink_on, look, merged_edges, paint_border, paint_cf_icon, painted_halign,
-    rotated_text_pos, shrink_font, wrapped_cell_text_y,
+    Look, cell_text_y, center_across_end, col32, contrast, display_text, for_sheet, ink_on, look, merged_edges, paint_border, paint_cf_icon,
+    painted_halign, rotated_text_pos, shrink_font, wrapped_cell_text_y,
 };
 use super::geo::Geo;
 use super::pivot_buttons::{self, PivotButton};
 use super::tables::{filter_button_rect, paint_filter_button};
 use super::*;
+
+/// How strongly a data bar shows on the dark sheet (its colour's opacity at the start).
+const DARK_BAR: f32 = 0.55;
 
 /// Mirror what the grid painted into `layer` (the shape indices in `range`) for a right-to-left
 /// sheet. Geometry is reflected; text and meshes (glyphs, pictures) keep their reading direction
@@ -140,6 +143,7 @@ pub(crate) fn paint_quadrant(
             None => (geo.cell_rect(sh, c), c),
         };
         let (lk, cfl) = look(wb, si, sh, anchor, cf);
+        let lk = for_sheet(lk, t);
         if let Some(f) = lk.fill {
             p.rect_filled(rect.expand(0.0), 0.0, f);
         } else if in_merge(c).is_some() {
@@ -174,6 +178,7 @@ pub(crate) fn paint_quadrant(
         for n in [left, right].into_iter().flatten() {
             if same_pane(n.col) && sh.col_width(n.col) > 0.0 && in_merge(n).is_none() {
                 let (lk, cfl) = look(wb, si, sh, n, cf);
+                let lk = for_sheet(lk, t);
                 outside.push((n, geo.cell_rect(sh, n), lk, cfl));
             }
         }
@@ -190,14 +195,20 @@ pub(crate) fn paint_quadrant(
             && let Some((frac, rgb, gradient)) = l.bar
         {
             let bar = Rect::from_min_size(pos2(rect.left() + 2.0, rect.top() + 2.0), vec2((rect.width() - 4.0) * frac, rect.height() - 4.0));
-            let col = theme::color32(rgb);
+            // On the dark sheet the bar is a translucent wash of its colour, fading into the sheet,
+            // so the value over it keeps the theme's ink; on the light sheet it fades to white.
+            let col = if t.dark { theme::color32(rgb).gamma_multiply(DARK_BAR) } else { theme::color32(rgb) };
             if gradient {
                 let mut mesh = egui::Mesh::default();
-                let light = Color32::from_rgb(
-                    ((rgb[0] as u16 + 255 * 3) / 4) as u8,
-                    ((rgb[1] as u16 + 255 * 3) / 4) as u8,
-                    ((rgb[2] as u16 + 255 * 3) / 4) as u8,
-                );
+                let light = if t.dark {
+                    theme::color32(rgb).gamma_multiply(DARK_BAR * 0.25)
+                } else {
+                    Color32::from_rgb(
+                        ((rgb[0] as u16 + 255 * 3) / 4) as u8,
+                        ((rgb[1] as u16 + 255 * 3) / 4) as u8,
+                        ((rgb[2] as u16 + 255 * 3) / 4) as u8,
+                    )
+                };
                 let i = mesh.vertices.len() as u32;
                 for (pt, cc) in [(bar.left_top(), col), (bar.right_top(), light), (bar.right_bottom(), light), (bar.left_bottom(), col)] {
                     mesh.colored_vertex(pt, cc);
@@ -484,7 +495,19 @@ pub(crate) fn paint_quadrant(
             Value::Array(a) => a.data.iter().map(Value::as_f64).collect(),
             v => vec![v.as_f64()],
         };
-        let col = sp.color.resolve(&wb.theme).unwrap_or([0x2B, 0x7C, 0xD3]);
+        let base = sp.color.resolve(&wb.theme).unwrap_or([0x2B, 0x7C, 0xD3]);
+        // On the dark sheet a line colour made for white paper (a navy) that no longer reads
+        // gives way to a lighter shade of itself, as automatic text does.
+        let mut col = base;
+        if t.dark {
+            for step in 1..=8u8 {
+                if contrast(theme::color32(col), t.grid_bg) >= 3.0 {
+                    break;
+                }
+                let k = f32::from(step) / 10.0;
+                col = base.map(|v| (f32::from(v) + (255.0 - f32::from(v)) * k).round() as u8);
+            }
+        }
         let prims = mkmatrix_chart::render_sparkline(sp.kind, &vals, [col[0], col[1], col[2], 255], sp.markers, rect.width(), rect.height());
         crate::chartview::paint_prims(p, rect.min, &prims, 1.0);
     }

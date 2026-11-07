@@ -161,6 +161,6 @@ pub(super) fn draw_trend_labels(ctx: &mut Ctx, plot: Bx, labels: &[String]) {
             break;
         }
         let t = ctx.fit(t, LABEL_SIZE, plot.w - 8.0);
-        ctx.text(plot.right() - 4.0, y, &t, LABEL_SIZE, TEXT, HAlign::Right, VAlign::Top);
+        ctx.text(plot.right() - 4.0, y, &t, LABEL_SIZE, ctx.ink.text, HAlign::Right, VAlign::Top);
     }
 }

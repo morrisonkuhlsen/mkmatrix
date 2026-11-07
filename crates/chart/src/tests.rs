@@ -1255,3 +1255,51 @@ fn box_whisker_draws_each_series_quartile_method() {
     // The boxes span 3.5 and 2.5 data units on the same value axis.
     assert!((heights[0] / heights[1] - 1.4).abs() < 0.001);
 }
+
+/// The printed chart is [`Ink::PAPER`]'s: `render` and `render_inked` with it agree.
+#[test]
+fn render_is_render_inked_on_paper() {
+    let m = ApproxMeasure;
+    for kind in ALL_KINDS {
+        let (c, d) = (chart(kind), sample(kind));
+        assert_eq!(render(&c, &d, 640.0, 400.0, &m), render_inked(&c, &d, 640.0, 400.0, &m, Ink::PAPER), "{kind:?}");
+    }
+}
+
+/// With a dark ink no chart keeps a white ground or separators, and its text (but for labels
+/// set on a series' own colour) is in the ink's.
+#[test]
+fn a_dark_ink_leaves_no_paper_white() {
+    const WHITE: Rgba = [0xFF, 0xFF, 0xFF, 0xFF];
+    let ink = Ink {
+        paper: [0x30, 0x34, 0x3D, 0xFF],
+        text: [0x9A, 0xA1, 0xAD, 0xFF],
+        grid: [0x3A, 0x3F, 0x4A, 0xFF],
+        axis: [0x5C, 0x63, 0x70, 0xFF],
+        stock: [0xE6, 0xE8, 0xEC, 0xFF],
+    };
+    let m = ApproxMeasure;
+    for kind in ALL_KINDS {
+        let (c, d) = (chart(kind), sample(kind));
+        let prims = render_inked(&c, &d, 640.0, 400.0, &m, ink);
+        assert!(
+            matches!(prims.first(), Some(Prim::Rect { fill: Some(f), stroke: Some((s, _)), .. }) if *f == ink.paper && *s == ink.grid),
+            "{kind:?}: the ground is the ink's paper"
+        );
+        for p in &prims {
+            match p {
+                Prim::Rect { fill, stroke, .. } => {
+                    assert_ne!(*fill, Some(WHITE), "{kind:?}: a white fill");
+                    assert_ne!(stroke.map(|s| s.0), Some(WHITE), "{kind:?}: a white outline");
+                }
+                Prim::Wedge { stroke, .. } | Prim::Circle { stroke, .. } => {
+                    assert_ne!(stroke.map(|s| s.0), Some(WHITE), "{kind:?}: a white separator");
+                }
+                _ => {}
+            }
+        }
+        if let Some(Prim::Text { color, .. }) = prims.iter().find(|p| matches!(p, Prim::Text { text, .. } if text == "Quarterly Sales")) {
+            assert_eq!(*color, ink.text, "{kind:?}: the title is in the ink's text colour");
+        }
+    }
+}
