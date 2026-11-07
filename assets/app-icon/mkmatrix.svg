@@ -1,24 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <!-- MK Matrix icon: its mark, a matrix's brackets around a 3×3 of cells with the diagonal lit,
-       in MK Matrix terracotta on no background (transparent); the same mark the splash screen
-       draws in code (crates/ui-egui/src/splash.rs, BRAND). Original work. Colour: #e08a5f. -->
+  <!-- MK Matrix icon: its mark, [aᵢⱼ], a matrix written as mathematics writes one: square
+       brackets around its general element a with the subscripts i and j (row and column). In MK
+       Matrix terracotta on no background (transparent); the same mark the splash screen draws in
+       code (crates/ui-egui/src/splash.rs, BRAND). The letters are monoline strokes drawn by hand
+       for this mark, slanted as italics; no font. Original work. Colour: #e08a5f.
+       Sizes up to 24 px use mkmatrix-small.svg, the a alone. -->
   <g transform="translate(256 256) scale(1.25) translate(-256 -256)">
     <g fill="none" stroke="#e08a5f" stroke-width="26" stroke-linecap="square">
       <path d="M152 112 H108 V400 H152"/>
       <path d="M360 112 H404 V400 H360"/>
     </g>
-    <g fill="#e08a5f">
-      <rect x="160" y="160" width="52" height="52" rx="10"/>
-      <rect x="230" y="230" width="52" height="52" rx="10"/>
-      <rect x="300" y="300" width="52" height="52" rx="10"/>
-    </g>
-    <g fill="#e08a5f" fill-opacity="0.45">
-      <rect x="230" y="160" width="52" height="52" rx="10"/>
-      <rect x="300" y="160" width="52" height="52" rx="10"/>
-      <rect x="160" y="230" width="52" height="52" rx="10"/>
-      <rect x="300" y="230" width="52" height="52" rx="10"/>
-      <rect x="160" y="300" width="52" height="52" rx="10"/>
-      <rect x="230" y="300" width="52" height="52" rx="10"/>
+    <g transform="translate(0 316) skewX(-12) translate(0 -316)">
+      <g fill="none" stroke="#e08a5f" stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="208" cy="266" rx="42" ry="52" stroke-width="24"/>
+        <path d="M254 210 V298 Q254 318 274 318" stroke-width="24"/>
+        <path d="M300 300 V340 Q300 352 311 352" stroke-width="15"/>
+        <path d="M334 300 V360 Q334 384 312 384" stroke-width="15"/>
+      </g>
+      <g fill="#e08a5f">
+        <circle cx="300" cy="276" r="9"/>
+        <circle cx="334" cy="276" r="9"/>
+      </g>
     </g>
   </g>
 </svg>

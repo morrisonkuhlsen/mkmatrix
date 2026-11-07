@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- MK Matrix icon at 24 px and under: the mark of mkmatrix.svg with the a alone, larger and
+       heavier, since its subscripts can't be told apart at that size. Original work. Colour:
+       #e08a5f. -->
+  <g transform="translate(256 256) scale(1.25) translate(-256 -256)">
+    <g fill="none" stroke="#e08a5f" stroke-width="30" stroke-linecap="square">
+      <path d="M152 112 H108 V400 H152"/>
+      <path d="M360 112 H404 V400 H360"/>
+    </g>
+    <g fill="none" stroke="#e08a5f" stroke-width="34" stroke-linecap="round" stroke-linejoin="round" transform="translate(0 330) skewX(-12) translate(0 -330)">
+      <ellipse cx="236" cy="262" rx="54" ry="68"/>
+      <path d="M296 190 V302 Q296 330 322 330"/>
+    </g>
+  </g>
+</svg>

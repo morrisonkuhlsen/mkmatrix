@@ -1,18 +1,23 @@
 # MK Matrix app icon
 
-MK Matrix's mark on no background (transparent): a matrix's square brackets around a 3×3 of
-rounded cells, the diagonal lit and the rest at 45 %, in MK Matrix terracotta. The splash
-screen draws the same mark in code (`crates/ui-egui/src/splash.rs`). It is original geometry
-written by hand for this repository.
+MK Matrix's mark on no background (transparent): **[aᵢⱼ]**, a matrix as mathematics writes one,
+square brackets around its general element *a* with the subscripts *i* and *j* (the row and the
+column), in MK Matrix terracotta. It says what the app is: every cell a number, aᵢⱼ. The letters
+are monoline strokes drawn by hand for the mark and slanted 12° as italics; no font is used. The
+splash screen and the File view draw the same mark in code (`crates/ui-egui/src/splash.rs`). It
+is original geometry written by hand for this repository.
 
-To change it, edit `mkmatrix.svg` and run `packaging/icons.sh` (it needs `resvg`; on Linux,
-`rsvg-convert` renders the same PNGs, and the `.icns` can be assembled from PNG entries).
+At 24 px and under the subscripts can't be read, so those sizes use `mkmatrix-small.svg`: the
+brackets around the *a* alone, larger and heavier (the code draws it under 32 points).
+
+To change it, edit `mkmatrix.svg` (and `mkmatrix-small.svg`) and run `packaging/icons.sh` (it
+needs `resvg`; the `.icns` comes from `iconutil` on macOS and `cargo xtask icns` elsewhere).
 
 ## Palette
 
 | Colour | Hex | Used for |
 |---|---|---|
-| MK Matrix terracotta (app colour, `splash::BRAND`) | `#e08a5f` | The brackets and cells |
+| MK Matrix terracotta (app colour, `splash::BRAND`) | `#e08a5f` | The brackets and letters |
 | — | transparent | The background: no tile, so the mark sits on the taskbar, Dock or desktop |
 
 ## Geometry
@@ -26,6 +31,7 @@ body with a transparent margin.
 | File | Use |
 |---|---|
 | `mkmatrix.svg` | Canonical artwork; also `hicolor/scalable` |
+| `mkmatrix-small.svg` | The mark at 24 px and under (the a alone) |
 | `mkmatrix-1024.png` | 1024 px render of the full tile |
 | `mkmatrix-macos-512.png` | Runtime Dock icon on macOS (for `apps/mkmatrix` to embed) |
 | `mkmatrix.icns` | macOS bundle icon (`CFBundleIconFile`) |
@@ -39,6 +45,7 @@ ID and `packaging/linux/com.morrisonkuhlsen.mkmatrix.desktop`.
 
 ## Regenerate
 
-Edit `mkmatrix.svg`, then run `packaging/icons.sh`. Every shape is a rounded rectangle, so any
-renderer that antialiases gives the same PNGs. It needs `resvg`, and `iconutil` for the
-`.icns` (macOS only). It packs the `.ico` with `cargo xtask ico`.
+Edit `mkmatrix.svg` (and `mkmatrix-small.svg`), then run `packaging/icons.sh`. Every shape is
+a stroked path, ellipse or circle, so any renderer that antialiases gives the same PNGs. It needs
+`resvg`; it packs the `.ico` with `cargo xtask ico` and the `.icns` with `iconutil` on macOS or
+`cargo xtask icns` elsewhere. Keep `splash::mark` in step with the SVGs.
