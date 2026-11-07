@@ -3,8 +3,9 @@
 //! functions, so the formula bar can say what the result will be (`→ 3×1`) or why the dimensions
 //! don't fit (`X@y: 8×3 @ 8×1, 3 vs 8`) before Enter.
 
+use mkmatrix_engine::core::CellRef;
 use mkmatrix_engine::formula::{BinOp, Expr, UnOp};
-use mkmatrix_engine::model::Workbook;
+use mkmatrix_engine::model::{Sheet, Workbook};
 
 use crate::i18n::Language;
 
@@ -32,6 +33,53 @@ pub fn of_formula(text: &str, wb: &Workbook, si: usize, lang: Language) -> Optio
         Err(why) => Some(Verdict::Mismatch(why.text(lang))),
     }
 }
+
+/// The shapes a product or solve at the top of formula text meets, `3×8 @ 8×1`, so the bar can
+/// show how the result's shape comes about; `None` for any other formula, or when a shape isn't
+/// known.
+pub fn operands(text: &str, wb: &Workbook, si: usize) -> Option<String> {
+    let body = text.strip_prefix('=')?;
+    let expr = mkmatrix_engine::formula::parse_closing_parens(body, mkmatrix_engine::formula::parse).ok()?;
+    let matrices = crate::matrices::on_sheet(wb, si);
+    let mut top = &expr;
+    while let Expr::Paren(x) = top {
+        top = x;
+    }
+    let (op, a, b) = match top {
+        Expr::Binary(BinOp::MatMul, a, b) => ("@", a.as_ref(), b.as_ref()),
+        Expr::Binary(BinOp::Solve, a, b) => ("\\", a.as_ref(), b.as_ref()),
+        Expr::Call(name, args) if name == "MX.MUL" || name == "MX.SOLVE" => match args.as_slice() {
+            [a, b] => (if name == "MX.MUL" { "@" } else { "\\" }, a, b),
+            _ => return None,
+        },
+        _ => return None,
+    };
+    let mut depth = 0;
+    let (Ok(Some(x)), Ok(Some(y))) = (shape(a, &matrices, &mut depth), shape(b, &matrices, &mut depth)) else { return None };
+    Some(format!("{} {op} {}", fmt(x), fmt(y)))
+}
+
+/// The first cell a result of `shape` spilling from `at` would land on that holds something of
+/// its own (a value, a formula, another formula's spill): what would make it `#SPILL!`. The
+/// result's own spill, from an earlier edit of the same cell, is no obstacle. Past
+/// [`MAX_BLOCK_CHECK`] cells nothing is checked.
+pub fn blocked(sh: &Sheet, at: CellRef, (rows, cols): Shape) -> Option<CellRef> {
+    if u64::from(rows) * u64::from(cols) > MAX_BLOCK_CHECK {
+        return None;
+    }
+    let last_row = at.row.checked_add(rows.checked_sub(1)?)?.min(mkmatrix_engine::core::MAX_ROWS - 1);
+    let last_col = at.col.checked_add(cols.checked_sub(1)?)?.min(mkmatrix_engine::core::MAX_COLS - 1);
+    (at.row..=last_row).flat_map(|row| (at.col..=last_col).map(move |col| CellRef::new(row, col))).find(|&c| {
+        if c == at {
+            return false;
+        }
+        let own = sh.cell(c).is_some_and(|cell| cell.formula.is_some() || !cell.value.is_empty());
+        own || sh.spill_anchor(c).is_some_and(|a| a != at)
+    })
+}
+
+/// The largest result whose landing place is checked for obstacles, in cells.
+const MAX_BLOCK_CHECK: u64 = 65_536;
 
 fn has_matrix(e: &Expr) -> bool {
     let mut found = false;
@@ -198,6 +246,33 @@ mod tests {
         assert_eq!(pt("=X@y"), Some(Verdict::Mismatch("X@y: 8×3 @ 8×1, 3 contra 8".into())));
         assert_eq!(pt("=MX.INV(X)"), Some(Verdict::Mismatch("MX.INV: 8×3 não é quadrada".into())));
         assert_eq!(pt("=X+y"), Some(Verdict::Mismatch("X+y: 8×3 contra 8×1".into())));
+    }
+
+    #[test]
+    fn products_and_solves_show_their_operands() {
+        let ops = |t: &str| operands(t, &book(), 0);
+        assert_eq!(ops("=X'@y").as_deref(), Some("3×8 @ 8×1"));
+        assert_eq!(ops("=(X\\y)").as_deref(), Some("8×3 \\ 8×1"));
+        assert_eq!(ops("=MX.MUL(X',X)").as_deref(), Some("3×8 @ 8×3"));
+        for t in ["=X'", "=2*X", "=SUM(X)", "=Z@y", "hello"] {
+            assert_eq!(ops(t), None, "{t}");
+        }
+    }
+
+    #[test]
+    fn a_result_landing_on_contents_is_blocked() {
+        let mut wb = book();
+        let at = |a1: &str| CellRef::parse(a1).unwrap_or(CellRef::new(0, 0));
+        if let Some(sh) = wb.sheet_mut(0) {
+            sh.set_value(at("H3"), mkmatrix_engine::core::Value::Number(1.0));
+            sh.set_value(at("H1"), mkmatrix_engine::core::Value::Text("typed here".into()));
+        }
+        let Some(sh) = wb.sheet(0) else { panic!("a sheet") };
+        assert_eq!(blocked(sh, at("H1"), (3, 1)), Some(at("H3")), "a value in the way");
+        assert_eq!(blocked(sh, at("H1"), (2, 1)), None, "the cell typed in doesn't count");
+        assert_eq!(blocked(sh, at("J1"), (5, 5)), None);
+        assert_eq!(blocked(sh, at("A1"), (100_000, 100)), None, "too big to check");
+        assert_eq!(blocked(sh, at("A1"), (0, 3)), None);
     }
 
     #[test]

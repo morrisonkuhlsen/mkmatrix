@@ -8,6 +8,7 @@
 mod assets;
 mod bench;
 mod i18n_report;
+mod icns;
 mod ico;
 mod keytips;
 mod layers;
@@ -41,6 +42,8 @@ commands:
   version [set X.Y.Z[-pre]]
                   print or set the workspace version ([workspace.package] in Cargo.toml)
   stats [--exact] count tests and lines per crate (--exact: ask the test harness via `-- --list`)
+  icns <out.icns> <dir.iconset>
+                  pack an iconset's PNGs into a macOS .icns, off macOS too (see packaging/icons.sh)
   ico <out.ico> <in.png>...
                   pack square PNGs (<= 256 px) into a Windows .ico (see packaging/icons.sh)
 ";
@@ -59,6 +62,7 @@ fn main() -> ExitCode {
         Some("stats") => stats::run(&root(), rest.contains(&"--exact")),
         Some("parity") => parity::run(&root(), &rest),
         Some("keytips") => keytips::run(&root(), &rest),
+        Some("icns") => icns::run(&rest),
         Some("ico") => ico::run(&rest),
         Some("version") => version::run(&root(), &rest),
         Some("-h" | "--help" | "help") | None => {
