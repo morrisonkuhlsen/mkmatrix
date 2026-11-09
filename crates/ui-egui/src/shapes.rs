@@ -59,6 +59,64 @@ pub fn operands(text: &str, wb: &Workbook, si: usize) -> Option<String> {
     Some(format!("{} {op} {}", fmt(x), fmt(y)))
 }
 
+/// A caution for formula text whose operators act entry by entry on matrices, where someone from
+/// MATLAB or a textbook may mean the matrix operation (#30): `X^-1` on a square matrix inverts
+/// each entry (`MX.INV(X)` is the inverse), and `A*B` between two matrices multiplies entry by entry
+/// (`A@B` is the product). Only where a named matrix or a matrix operation is involved: `*` and
+/// `^` over plain ranges are the spreadsheet's own, as in Excel. Worded in `lang`.
+pub fn caution(text: &str, wb: &Workbook, si: usize, lang: Language) -> Option<String> {
+    let body = text.strip_prefix('=')?;
+    let expr = mkmatrix_engine::formula::parse_closing_parens(body, mkmatrix_engine::formula::parse).ok()?;
+    let matrices = crate::matrices::on_sheet(wb, si);
+    let matrix_like = |e: &Expr| {
+        let mut found = has_matrix(e);
+        e.walk(&mut |x| found |= matches!(x, Expr::Name(n) if matrices.iter().any(|(m, _)| mkmatrix_engine::formula::same_name(m, n))));
+        found
+    };
+    let known = |e: &Expr| {
+        let mut depth = 0;
+        shape(e, &matrices, &mut depth).ok().flatten()
+    };
+    let minus_one = |e: &Expr| match e {
+        Expr::Number(n) => *n == -1.0,
+        Expr::Unary(UnOp::Neg, x) => matches!(x.as_ref(), Expr::Number(n) if *n == 1.0),
+        _ => false,
+    };
+    let mut found = None;
+    expr.walk(&mut |x| {
+        if found.is_some() {
+            return;
+        }
+        match x {
+            Expr::Binary(BinOp::Pow, a, b) if minus_one(b) && matrix_like(a) => {
+                if let Some((r, c)) = known(a)
+                    && r == c
+                    && r > 1
+                {
+                    // `MX.INV(X'@X)` for `(X'@X)^-1`: the call's own parentheses do.
+                    let mut inner = a.as_ref();
+                    while let Expr::Paren(x) = inner {
+                        inner = x;
+                    }
+                    let (a, m) = (mkmatrix_engine::formula::print(a), mkmatrix_engine::formula::print(inner));
+                    found = Some(lang.tr("{a}^-1 inverts each entry: MX.INV({m}) is the inverse").replace("{a}", &a).replace("{m}", &m));
+                }
+            }
+            Expr::Binary(BinOp::Mul, a, b) if matrix_like(a) || matrix_like(b) => {
+                if let (Some(x), Some(y)) = (known(a), known(b))
+                    && x != (1, 1)
+                    && y != (1, 1)
+                {
+                    let (a, b) = (mkmatrix_engine::formula::print(a), mkmatrix_engine::formula::print(b));
+                    found = Some(lang.tr("{a}*{b} multiplies entry by entry: {a}@{b} is the matrix product").replace("{a}", &a).replace("{b}", &b));
+                }
+            }
+            _ => {}
+        }
+    });
+    found
+}
+
 /// The first cell a result of `shape` spilling from `at` would land on that holds something of
 /// its own (a value, a formula, another formula's spill): what would make it `#SPILL!`. The
 /// result's own spill, from an earlier edit of the same cell, is no obstacle. Past
@@ -273,6 +331,21 @@ mod tests {
         assert_eq!(blocked(sh, at("J1"), (5, 5)), None);
         assert_eq!(blocked(sh, at("A1"), (100_000, 100)), None, "too big to check");
         assert_eq!(blocked(sh, at("A1"), (0, 3)), None);
+    }
+
+    #[test]
+    fn entrywise_operators_on_matrices_say_what_they_do() {
+        let say = |t: &str| caution(t, &book(), 0, Language::En);
+        assert_eq!(say("=(X'@X)^-1").as_deref(), Some("(X'@X)^-1 inverts each entry: MX.INV(X'@X) is the inverse"));
+        assert_eq!(say("=X'*X").as_deref(), Some("X'*X multiplies entry by entry: X'@X is the matrix product"));
+        assert_eq!(say("=X*X").as_deref(), Some("X*X multiplies entry by entry: X@X is the matrix product"));
+        assert!(caution("=X^-1", &book(), 0, Language::PtBr).is_none(), "X is 8×3, not square: nothing to invert");
+        // The spreadsheet's own: plain ranges, a scalar, other powers, other operators.
+        for t in ["=B7:D14*B7:D14", "=2*X", "=X*2", "=(X'@X)^2", "=X+X", "=SUM(X)", "=A1^-1", "hello"] {
+            assert_eq!(say(t), None, "{t}");
+        }
+        let pt = caution("=X'*X", &book(), 0, Language::PtBr).unwrap_or_default();
+        assert!(pt.contains("elemento a elemento") && pt.contains("X'@X"), "{pt}");
     }
 
     #[test]

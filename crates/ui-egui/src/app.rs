@@ -335,6 +335,13 @@ impl SheetApp {
         crate::shapes::operands(&ed.text, &d.wb, d.wb.active_sheet())
     }
 
+    /// A caution for the formula being typed whose `*` or `^-1` acts entry by entry on matrices.
+    pub fn editing_caution(&self) -> Option<String> {
+        let ed = self.editor.as_ref().filter(|e| e.is_formula())?;
+        let d = self.session.active()?;
+        crate::shapes::caution(&ed.text, &d.wb, d.wb.active_sheet(), self.ui.language)
+    }
+
     /// The first cell a result of `shape` typed in the active cell would spill onto that is taken.
     pub fn editing_blocked(&self, shape: crate::shapes::Shape) -> Option<mkmatrix_engine::core::CellRef> {
         let d = self.session.active()?;

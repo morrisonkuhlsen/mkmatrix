@@ -251,6 +251,11 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
         Some(crate::shapes::Verdict::Mismatch(why)) => Some((RangeRef::cell(sel.active), why, t.danger)),
         _ => None,
     };
+    // An entrywise `*` or `^-1` where the matrix operation may be meant, after the shape (#30).
+    let preview = match (preview, app.editing_caution()) {
+        (Some((range, tag, _)), Some(caution)) => Some((range, format!("{tag} · {caution}"), t.danger)),
+        (preview, _) => preview,
+    };
     if let Some((range, tag, ink)) = &preview {
         let r = geo.mirror_rect(geo.range_rect(sh, *range));
         let pts = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
