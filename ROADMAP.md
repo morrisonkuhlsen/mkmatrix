@@ -135,6 +135,7 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | What landed |
 |---|---|
+| 2026-11-08 | The README describes the matrix syntax as it is (`A@B`, `A'`, `A\b` and the `MX.` functions; `*`, `/` and `^` entry by entry, as in Excel), and the formula bar warns while typing when `*` or `^-1` acts entry by entry on matrices, naming `A@B` or `MX.INV(A)` (#30) |
 | 2026-11-07 | 0.16.0: the [aᵢⱼ] mark in every icon, the splash screen and the File view; flat dialogs (no shadow, no tinted fills) that keep their size between sections; View › Matrix Heat Map; a matrix product explained cell by cell under the pointer; operand shapes and spill obstacles shown while a formula is typed |
 | 2026-11-07 | A new mark, [aᵢⱼ]: a matrix as mathematics writes one, its general element between square brackets, letters drawn by hand (the a alone at 24 px and under); in every app icon, the splash screen and the File view. `cargo xtask icns` packs the macOS icon off macOS |
 | 2026-11-07 | While a product or solve is typed the formula bar shows its operands' shapes, `3×8 @ 8×1 → 3×1`; when the result would land on cells that hold something, the preview turns to the danger colour and says where, `→ 3×3 · blocked by D17`, before Enter instead of a `#SPILL!` after |

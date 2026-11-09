@@ -147,6 +147,11 @@ fn contents(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens, font: &FontId, ro
             }
             crate::shapes::Verdict::Mismatch(why) => (why.clone(), t.danger),
         };
+        // An entrywise `*` or `^-1` where the matrix operation may be meant, after the shape (#30).
+        let (text, color) = match app.editing_caution() {
+            Some(caution) => (format!("{text} · {caution}"), t.danger),
+            None => (text, color),
+        };
         let galley = ui.painter().layout_no_wrap(text, theme::ui_font(12.0), color);
         let w = galley.size().x.min(field.width() * 0.6);
         let at = egui::pos2(field.right() - 8.0 - w, field.top() + (one_line(row_h).min(field.height()) - galley.size().y) / 2.0);

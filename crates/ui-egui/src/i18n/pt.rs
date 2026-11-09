@@ -638,6 +638,10 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Drag to freeze rows" => "Arraste para congelar linhas",
         "Command\nPalette" => "Paleta de\nComandos",
         "Agent\nControl" => "Controle\ndo Agente",
+        "{a}^-1 inverts each entry: MX.INV({m}) is the inverse" => "{a}^-1 inverte cada elemento: MX.INV({m}) é a inversa",
+        "{a}*{b} multiplies entry by entry: {a}@{b} is the matrix product" => {
+            "{a}*{b} multiplica elemento a elemento: {a}@{b} é o produto de matrizes"
+        }
         "Action\nJournal" => "Registro\nde Ações",
         "About\nMK Matrix" => "Sobre o\nMK Matrix",
         "Share" => "Compartilhar",
