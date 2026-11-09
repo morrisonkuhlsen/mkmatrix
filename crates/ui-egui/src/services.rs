@@ -35,6 +35,11 @@ pub struct Services {
     /// Web: hand PDF bytes to the browser's print flow directly (no download,
     /// no intermediate file) — opens the system print dialog on that PDF.
     pub print: Option<Box<dyn Fn(&[u8])>>,
+    /// Desktop: turn the control channel on, on a free loopback port, for an agent started in
+    /// the Terminal pane; returns the port and where its requests arrive. Its token goes to the
+    /// file only this user can read, where the MCP server finds it.
+    #[allow(clippy::type_complexity)]
+    pub start_control: Option<Box<dyn Fn(&egui::Context) -> Result<(u16, std::sync::mpsc::Receiver<ControlRequest>), String>>>,
 }
 
 /// Shared queue of files read asynchronously (browser file picker, drag and drop).

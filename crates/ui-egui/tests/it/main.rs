@@ -115,6 +115,7 @@ mod system_theme;
 mod tab_split;
 mod table_headings;
 mod tabs_in_title;
+mod terminal_pane;
 mod text_box_editing;
 mod text_overflow_scroll;
 mod toolbar;

@@ -44,6 +44,10 @@ pub mod selection_glide;
 pub mod shapes;
 pub mod splash;
 pub mod tabs;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod terminal;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod terminal_pane;
 pub mod text_box;
 pub mod theme;
 #[cfg(not(target_arch = "wasm32"))]
@@ -330,6 +334,12 @@ pub struct SheetApp {
     /// without reaching input handling, so the hook must offer the same step again.
     pub(crate) synthetic_injected_at_pass: Option<u64>,
     pub control_rx: Option<std::sync::mpsc::Receiver<ControlRequest>>,
+    /// The port the control channel listens on, when it is on (`--control`, or turned on for an
+    /// agent started in the Terminal pane).
+    pub control_port: Option<u16>,
+    /// The Terminal pane's program (desktop only).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) terminal: terminal_pane::TerminalPane,
     pub grid: grid::GridState,
     pub perf: Perf,
     pub fonts_ready: bool,

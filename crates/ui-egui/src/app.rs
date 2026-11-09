@@ -38,6 +38,9 @@ impl SheetApp {
             synthetic_pending: false,
             synthetic_injected_at_pass: None,
             control_rx: None,
+            control_port: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            terminal: Default::default(),
             grid: grid::GridState {
                 last_border: "bottom".into(),
                 last_fill: "#FFFF00".into(),
@@ -206,6 +209,9 @@ impl SheetApp {
         if !self.chrome.file_tab {
             self.backstage = None;
         }
+        // The terminal takes the keys it has the focus for before anything else reads them.
+        #[cfg(not(target_arch = "wasm32"))]
+        self.terminal_keys(&ctx);
         // Keytips opened the File view (Alt, F): its letters keep working there.
         if self.backstage.is_none() || self.keytips.prefix().is_some() {
             self.ribbon_keys(&ctx);

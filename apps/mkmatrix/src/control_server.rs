@@ -49,6 +49,18 @@ pub fn start(port: u16, chosen_token: Option<String>, ctx: egui::Context) -> std
     Ok(rx)
 }
 
+/// The control channel on a free loopback port, for an agent started in the Terminal pane: a new
+/// random token, written to the token file of the port the system gave, where the MCP server
+/// (`mkmatrix --mcp-connect PORT`) and `mkmatrix-cli` find it.
+pub fn start_any(ctx: egui::Context) -> std::io::Result<(u16, Receiver<ControlRequest>)> {
+    let listener = TcpListener::bind(("127.0.0.1", 0))?;
+    let port = listener.local_addr()?.port();
+    let token: Arc<str> = make_token(port, None)?.into();
+    let rx = serve_listener(listener, token, ctx)?;
+    log::info!("control channel listening on 127.0.0.1:{port} for the terminal's agent");
+    Ok((port, rx))
+}
+
 /// Accept connections on `listener`; requests arrive on the returned receiver.
 fn serve_listener(listener: TcpListener, token: Arc<str>, ctx: egui::Context) -> std::io::Result<Receiver<ControlRequest>> {
     let (tx, rx) = channel();
@@ -350,5 +362,26 @@ mod tests {
     fn a_chosen_token_must_be_long_enough() {
         assert!(make_token(1, Some("short".into())).is_err());
         assert_eq!(make_token(1, Some(format!(" {TOKEN} "))).unwrap(), TOKEN);
+    }
+
+    /// The Terminal pane's agent: the window opens a free port with a fresh token in the user's
+    /// token file, and the MCP side (`mkmatrix --mcp-connect PORT`) finds both and is answered.
+    #[test]
+    fn an_agent_reaches_the_window_on_a_free_port() {
+        use mkmatrix_mcp::Backend as _;
+        let (port, rx) = start_any(egui::Context::default()).unwrap();
+        assert_ne!(port, 0);
+        // The window: answers each request with the method it was asked for.
+        std::thread::spawn(move || {
+            for req in rx {
+                let _ = req.reply.send(json!({"ok": true, "result": {"method": req.method}}));
+            }
+        });
+        let mut remote = mkmatrix_mcp::Remote::connect(&mkmatrix_mcp::control_addr(&port.to_string())).unwrap();
+        let reply = remote.call("document.inspect", json!({})).unwrap();
+        assert_eq!(reply["method"], "document.inspect");
+        if let Some(path) = control_auth::token_path(port) {
+            let _ = std::fs::remove_file(path);
+        }
     }
 }

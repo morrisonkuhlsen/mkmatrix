@@ -166,6 +166,18 @@ fn read_clipboard<T>(
     read(clipboard.as_mut()?).ok()
 }
 
+/// The MCP server for a running window at `port`, on stdio; logs go to standard error.
+fn mcp_connect(port: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+    use mkmatrix_mcp::{Remote, Server, control_addr};
+    let port = port.ok_or("--mcp-connect needs the window's control port")?;
+    let addr = control_addr(port);
+    let remote = Remote::connect(&addr).map_err(|e| format!("cannot connect to the MK Matrix window at {addr}: {e}"))?;
+    let stdin = std::io::stdin();
+    let stdout = std::io::stdout();
+    Server::new(Box::new(remote)).serve(stdin.lock(), stdout.lock())?;
+    Ok(())
+}
+
 fn services() -> Services {
     // Keep the owner alive: X11/Wayland serve clipboard data from this handle.
     let clipboard: Rc<RefCell<Option<arboard::Clipboard>>> = Rc::default();
@@ -180,6 +192,7 @@ fn services() -> Services {
         })),
         paste_html: Some(Box::new(move || read_clipboard(&html_clipboard, |clipboard| clipboard.get().html()))),
         paste_text: Some(Box::new(move || read_clipboard(&text_clipboard, |clipboard| clipboard.get_text()))),
+        start_control: Some(Box::new(|ctx: &egui::Context| control_server::start_any(ctx.clone()).map_err(|e| e.to_string()))),
         pick_open: Some(Box::new(|| {
             rfd::FileDialog::new()
                 .add_filter("Spreadsheets", &["xlsx", "xlsm", "xls", "xlsb", "ods", "csv", "tsv", "txt", "json"])
@@ -292,6 +305,15 @@ fn main() -> eframe::Result<()> {
         }
     }));
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // `--mcp-connect PORT`: be the MCP server, on standard input and output, for an agent driving
+    // a running window (the Terminal pane starts Claude Code and Codex with this); no window.
+    if args.first().map(String::as_str) == Some("--mcp-connect") {
+        if let Err(e) = mcp_connect(args.get(1).map(String::as_str)) {
+            let _ = std::io::Write::write_fmt(&mut std::io::stderr(), format_args!("mkmatrix: {e}\n"));
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
     // The restart helper a self-update spawns: it finishes the swap and relaunches, then exits.
     if let Some(done) = craft_update::self_update::finish(&mkmatrix_ui_egui::UPDATER_APP, &std::env::args_os().skip(1).collect::<Vec<_>>()) {
         if let Err(e) = done {
@@ -446,7 +468,10 @@ fn main() -> eframe::Result<()> {
                 SheetApp::setup_context_for_language(&cc.egui_ctx, app.ui.dark, app.ui.language);
                 if let Some(port) = control_port {
                     match control_server::start(port, control_token.clone(), cc.egui_ctx.clone()) {
-                        Ok(rx) => app.control_rx = Some(rx),
+                        Ok(rx) => {
+                            app.control_rx = Some(rx);
+                            app.control_port = Some(port);
+                        }
                         Err(e) => log::error!("control channel on port {port}: {e}"),
                     }
                 }

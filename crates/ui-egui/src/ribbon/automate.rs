@@ -10,6 +10,14 @@ pub(super) fn automate(app: &mut SheetApp, ui: &mut Ui) {
     if __k.clicked() {
         app.open_dialog("commandSearch", json!({}));
     }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let __k = big_button(ui, Icon::Terminal, "Claude\nCode", "Run Claude Code, Codex or a shell in a terminal connected to this workbook", false);
+        control_keytip(app, ui, &__k, "terminal");
+        if __k.clicked() {
+            app.run_or_alert("view.terminal", json!({"on": true}));
+        }
+    }
     let __k = big_button(ui, Icon::Script, "Agent\nControl", "How agents drive MK Matrix (MCP / control channel)", false);
     control_keytip(app, ui, &__k, "agents");
     if __k.clicked() {

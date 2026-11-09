@@ -194,6 +194,12 @@ impl SheetApp {
                 self.ui.numbered_columns = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.numbered_columns);
                 Ok(json!({"on": self.ui.numbered_columns}))
             }
+            #[cfg(not(target_arch = "wasm32"))]
+            "view.terminal" => {
+                let on = p.get("on").and_then(Json::as_bool).unwrap_or(self.grid.pane.as_deref() != Some(crate::terminal_pane::PANE));
+                self.grid.pane = on.then(|| crate::terminal_pane::PANE.to_string());
+                Ok(json!({"on": on}))
+            }
             "view.history" => {
                 let on = p.get("on").and_then(Json::as_bool).unwrap_or(self.grid.pane.as_deref() != Some("history"));
                 self.grid.pane = on.then(|| "history".to_string());
