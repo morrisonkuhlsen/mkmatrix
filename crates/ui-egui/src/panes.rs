@@ -23,7 +23,12 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     // Capped at half the window so a pane can never cover the sheet, whatever its content asks for.
     let max = (ui.available_width() / 2.0).max(300.0);
-    let panel = egui::Panel::right("task_pane").default_size(300.0).max_size(max).resizable(true);
+    // The terminal keeps a width of its own: a screen of text wants more room than a list.
+    let panel = if pane == "terminal" {
+        egui::Panel::right("terminal_pane").default_size(560.0_f32.min(max)).max_size(max).resizable(true)
+    } else {
+        egui::Panel::right("task_pane").default_size(300.0).max_size(max).resizable(true)
+    };
     panel.frame(egui::Frame::NONE.fill(t.ribbon).inner_margin(10)).show(ui, |ui| {
         ui.horizontal(|ui| {
             let title = match pane.as_str() {
@@ -32,6 +37,7 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                 "selection" => "Selection",
                 "formatChart" => "Format Chart Area",
                 "history" => "History",
+                "terminal" => "Terminal",
                 _ => "",
             };
             ui.label(egui::RichText::new(app.ui.language.tr(title)).font(theme::ui_bold(15.0)));
@@ -45,6 +51,12 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
             });
         });
         ui.separator();
+        // The terminal fills the pane with its own screen, which scrolls by itself.
+        #[cfg(not(target_arch = "wasm32"))]
+        if pane == "terminal" {
+            crate::terminal_pane::show(app, ui);
+            return;
+        }
         // Comments keeps its search and filters fixed above its own scrolling list.
         if pane == "comments" {
             crate::comments_pane::show(app, ui);

@@ -637,6 +637,29 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Drag to freeze rows" => "Arraste para congelar linhas",
         "Command\nPalette" => "Paleta de\nComandos",
         "Agent\nControl" => "Controle\ndo Agente",
+        "Claude\nCode" => "Claude\nCode",
+        "Run Claude Code, Codex or a shell in a terminal connected to this workbook" => {
+            "Executar o Claude Code, o Codex ou um shell num terminal conectado a esta pasta de trabalho"
+        }
+        "Terminal" => "Terminal",
+        "Run an agent beside the workbook" => "Execute um agente ao lado da pasta de trabalho",
+        "Claude Code and Codex start connected to this window: they read and change the open workbook through MK Matrix's tools, and every change can be undone." => {
+            "O Claude Code e o Codex começam conectados a esta janela: leem e alteram a pasta de trabalho aberta pelas ferramentas do MK Matrix, e toda alteração pode ser desfeita."
+        }
+        "Starts in {folder}" => "Começa em {folder}",
+        "Start {program} in the workbook's folder" => "Iniciar {program} na pasta da pasta de trabalho",
+        "The programs are your own: MK Matrix doesn't install them or see what they send." => {
+            "Os programas são seus: o MK Matrix não os instala nem vê o que enviam."
+        }
+        "{program} isn't installed, or isn't on your PATH." => "{program} não está instalado ou não está no seu PATH.",
+        "Can't start the terminal: {error}" => "Não foi possível iniciar o terminal: {error}",
+        "Can't connect the agent to this window: {error}" => "Não foi possível conectar o agente a esta janela: {error}",
+        "Connected to this window on port {port}" => "Conectado a esta janela na porta {port}",
+        "End the program" => "Encerrar o programa",
+        "The program ended" => "O programa terminou",
+        "The program ended with code {code}" => "O programa terminou com o código {code}",
+        "{lines} lines back" => "{lines} linhas acima",
+        "Ctrl+click to open {url}" => "Ctrl+clique para abrir {url}",
         "Action\nJournal" => "Registro\nde Ações",
         "About\nMK Matrix" => "Sobre o\nMK Matrix",
         "Share" => "Compartilhar",

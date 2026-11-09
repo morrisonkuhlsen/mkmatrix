@@ -6,6 +6,17 @@ Start the desktop app with a control port:
 mkmatrix --control 7979            # or MKMATRIX_CONTROL_PORT=7979
 ```
 
+## From the Terminal pane
+
+Automate › Claude Code opens a Terminal task pane (desktop only). Starting Claude Code, Codex or a
+shell there turns the control channel on if it is off, on a free loopback port with a fresh token
+written to that port's token file, and starts the program with the window's port in
+`MKMATRIX_CONTROL_PORT`. Claude Code gets the MCP server as
+`--mcp-config '{"mcpServers":{"mkmatrix":{"command":"<this mkmatrix>","args":["--mcp-connect","PORT"]}}}'`
+and a word on the workbook (`--append-system-prompt`); Codex gets the same server as
+`-c mcp_servers.mkmatrix.command=…` and `-c mcp_servers.mkmatrix.args=[…]`. `mkmatrix --mcp-connect
+PORT` is the MCP server on stdio for a running window, as `mkmatrix-cli mcp --connect PORT` is.
+
 ## Authentication
 
 The control port is reachable by every program on the machine, and by a web page that POSTs
