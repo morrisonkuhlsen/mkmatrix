@@ -5,7 +5,7 @@
 use mkmatrix_engine::formula::Expr;
 
 use super::factor::{marked, pivot_row};
-use super::{Ctx, Mat, Math, Step, call, det, magnitude, matrix, minor, number, op, root, row, square, told, var};
+use super::{Ctx, Mat, Math, ROUNDING_NOISE, Step, call, det, magnitude, matrix, minor, minus, number, op, root, row, snap, square, told, var};
 
 /// `(re, im)`: an eigenvalue, complex when a matrix isn't symmetric.
 type Complex = (f64, f64);
@@ -27,15 +27,7 @@ fn complex((re, im): Complex) -> Math {
 
 /// Rounding noise read as a hand would write it: the integer beside it, 0 for a tiny part.
 fn tidy_root((re, im): Complex, scale: f64) -> Complex {
-    let clean = |x: f64| {
-        if x.abs() < 1e-10 * scale.max(1.0) {
-            0.0
-        } else if (x - x.round()).abs() < 1e-9 * x.abs().max(1.0) {
-            x.round()
-        } else {
-            x
-        }
-    };
+    let clean = |x: f64| snap(x, ROUNDING_NOISE * scale);
     (clean(re), clean(im))
 }
 
@@ -108,19 +100,19 @@ fn shifted(m: &Mat) -> Math {
     )
 }
 
-/// The roots of `λ² + bλ + c`, by the quadratic formula.
-fn quadratic(b: f64, c: f64, scale: f64, steps: &mut Vec<Step>) -> [Complex; 2] {
-    let mut disc = b * b - 4.0 * c;
-    if disc.abs() <= 1e-12 * scale.max(1.0).powi(2) {
-        disc = 0.0;
-    }
+/// The roots of `λ² + bλ + c`, by the quadratic formula, with its discriminant `disc`.
+fn quadratic(b: f64, c: f64, disc: f64, scale: f64, steps: &mut Vec<Step>) -> [Complex; 2] {
     steps.push(Step::new(
         "The quadratic formula",
         row(vec![lambda(), op("="), op("("), Math::Num(-b), op("±"), root(Math::Num(disc)), op(")"), op("/"), Math::Num(2.0)]),
     ));
     let roots = if disc >= 0.0 {
+        // The root away from 0 by the formula, the other from their product: subtracting nearly
+        // equal numbers would lose a small root.
         let s = disc.sqrt();
-        [((-b + s) / 2.0, 0.0), ((-b - s) / 2.0, 0.0)]
+        let far = -(b + b.signum() * s) / 2.0;
+        let near = if far == 0.0 { 0.0 } else { c / far };
+        [(far.max(near), 0.0), (far.min(near), 0.0)]
     } else {
         let s = (-disc).sqrt() / 2.0;
         [(-b / 2.0, s), (-b / 2.0, -s)]
@@ -233,14 +225,20 @@ fn roots_by_hand(m: &Mat, shown: &Math, steps: &mut Vec<Step>) -> Vec<Complex> {
             vec![1.0, -tr, minors.iter().sum(), -d]
         }
     };
+    // The coefficient of λⁿ⁻ᵏ is a sum of products of k elements: its noise goes as scaleᵏ.
     let mut coef = coef;
-    let mut clean = vec![coef.clone()];
-    super::tidy(&mut clean, scale);
-    coef = clean.pop().unwrap_or(coef);
+    for (k, c) in coef.iter_mut().enumerate() {
+        let floor = ROUNDING_NOISE * scale.powi(k as i32);
+        if floor.is_finite() {
+            *c = snap(*c, floor);
+        }
+    }
     steps.push(Step::new("The characteristic polynomial", poly(&coef, "λ")));
     let mut roots: Vec<Complex> = match n {
         1 => vec![(-coef[1], 0.0)],
-        2 => quadratic(coef[1], coef[2], scale, steps).to_vec(),
+        // (a − d)² + 4bc is b² − 4c without subtracting nearly equal numbers, and the trace and
+        // determinant unrounded: close eigenvalues stay apart, as they do in the cell.
+        2 => quadratic(-(m[0][0] + m[1][1]), det(m), minus((m[0][0] - m[1][1]).powi(2), -4.0 * m[0][1] * m[1][0]), scale, steps).to_vec(),
         _ => cubic(&coef, scale, steps),
     };
     roots.iter_mut().for_each(|z| *z = tidy_root(*z, scale));
@@ -272,8 +270,8 @@ fn cubic(coef: &[f64], scale: f64, steps: &mut Vec<Step>) -> Vec<Complex> {
         depressed.push(poly(&[1.0, 0.0, p, q], "t"));
         steps.push(Step::new("No whole-number root. With λ = t − b/3, the λ² term goes", row(depressed)));
         let disc = (q / 2.0).powi(2) + (p / 3.0).powi(3);
-        let noise = 1e-12 * scale.max(1.0).powi(6);
-        let triple = p.abs() < 1e-14 * scale.max(1.0).powi(2);
+        let noise = 1e-12 * scale.powi(6);
+        let triple = p.abs() < 1e-14 * scale.powi(2);
         // The trigonometric formula needs p < 0: with p > 0 the roots are one real and a complex
         // pair whatever the discriminant's size, and √(−p/3) would be NaN.
         if disc <= noise && (p < 0.0 || triple) {
@@ -342,7 +340,9 @@ fn cubic(coef: &[f64], scale: f64, steps: &mut Vec<Step>) -> Vec<Complex> {
     divided.extend([op(")"), op("="), Math::Num(0.0)]);
     steps.push(Step::new("Dividing it out leaves a quadratic", row(divided)));
     let mut roots = vec![(first, 0.0)];
-    roots.extend(quadratic(b2, c2, scale, steps));
+    // What is left after dividing carries the first root's rounding: a discriminant that small is 0.
+    let disc = b2 * b2 - 4.0 * c2;
+    roots.extend(quadratic(b2, c2, if disc.abs() <= 1e-12 * scale.powi(2) { 0.0 } else { disc }, scale, steps));
     roots
 }
 
@@ -424,7 +424,7 @@ pub(super) fn eigvec_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
         return Err("Eigenvectors by hand: matrices up to 3×3.".into());
     }
     let scale = magnitude(&m);
-    if (0..n).any(|i| (i + 1..n).any(|j| (m[i][j] - m[j][i]).abs() > 1e-12 * scale.max(1.0))) {
+    if (0..n).any(|i| (i + 1..n).any(|j| (m[i][j] - m[j][i]).abs() > 1e-12 * scale)) {
         return Err("Eigenvectors by hand need a symmetric matrix, as MX.EIGVEC does.".into());
     }
     let mut steps = vec![Step::new("The matrix", row(vec![shown.clone(), op("="), matrix(&m)]))];
@@ -434,7 +434,7 @@ pub(super) fn eigvec_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
     let mut i = 0;
     while i < roots.len() {
         let l = roots[i].0;
-        let repeats = roots.iter().skip(i).take_while(|z| (z.0 - l).abs() <= 1e-8 * scale.max(1.0)).count();
+        let repeats = roots.iter().skip(i).take_while(|z| (z.0 - l).abs() <= 1e-8 * scale).count();
         i += repeats;
         let shifted: Mat =
             m.iter().enumerate().map(|(r, line)| line.iter().enumerate().map(|(c, x)| if r == c { x - l } else { *x }).collect()).collect();

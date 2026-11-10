@@ -40,6 +40,9 @@ fn square_mat(a: &[Arg], i: usize) -> R<DMatrix<f64>> {
     Ok(m)
 }
 
+/// Rounding noise, as a fraction of the scale it is measured against.
+pub const ROUNDING_NOISE: f64 = f64::EPSILON * 64.0;
+
 /// The largest absolute element: the scale noise is measured against.
 fn scale(m: &DMatrix<f64>) -> f64 {
     m.iter().fold(0.0f64, |acc, x| acc.max(x.abs()))
@@ -47,7 +50,7 @@ fn scale(m: &DMatrix<f64>) -> f64 {
 
 /// A matrix as a spilled array, with rounding noise (far below `scale`) read as 0.
 fn out(m: &DMatrix<f64>, scale: f64) -> R<Value> {
-    let noise = f64::EPSILON * 64.0 * scale.max(f64::MIN_POSITIVE);
+    let noise = ROUNDING_NOISE * scale.max(f64::MIN_POSITIVE);
     let mut data = Vec::with_capacity(m.len());
     for r in 0..m.nrows() {
         for c in 0..m.ncols() {
@@ -63,7 +66,7 @@ fn out(m: &DMatrix<f64>, scale: f64) -> R<Value> {
 fn out_solution(x: &DMatrix<f64>) -> R<Value> {
     let mut x = x.clone();
     for mut col in x.column_iter_mut() {
-        let noise = f64::EPSILON * 64.0 * col.iter().fold(0.0f64, |acc, v| acc.max(v.abs()));
+        let noise = ROUNDING_NOISE * col.iter().fold(0.0f64, |acc, v| acc.max(v.abs()));
         for v in col.iter_mut() {
             if v.abs() < noise {
                 *v = 0.0;
@@ -131,7 +134,7 @@ fn svd(m: DMatrix<f64>) -> R<(DMatrix<f64>, Vec<f64>, DMatrix<f64>)> {
 }
 
 /// The default tolerance below which a singular value counts as zero.
-fn rank_tolerance(rows: usize, cols: usize, largest: f64) -> f64 {
+pub fn rank_tolerance(rows: usize, cols: usize, largest: f64) -> f64 {
     rows.max(cols) as f64 * f64::EPSILON * largest
 }
 
@@ -238,7 +241,7 @@ pub(super) fn meigval(a: &[Arg], _c: &mut dyn Ctx) -> R<Value> {
     let schur = Schur::try_new(m, f64::EPSILON, MAX_ITERATIONS).ok_or(CellError::Num)?;
     let mut v: Vec<(f64, f64)> = schur.complex_eigenvalues().iter().map(|z| (z.re, z.im)).collect();
     v.sort_by(|x, y| y.0.total_cmp(&x.0).then(y.1.total_cmp(&x.1)));
-    let noise = f64::EPSILON * 64.0 * sc.max(f64::MIN_POSITIVE);
+    let noise = ROUNDING_NOISE * sc.max(f64::MIN_POSITIVE);
     if v.iter().all(|(_, im)| im.abs() < noise.max(1e-12 * sc)) {
         let re: Vec<f64> = v.iter().map(|(re, _)| *re).collect();
         return column(&re, sc);

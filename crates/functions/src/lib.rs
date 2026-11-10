@@ -81,7 +81,7 @@ pub(crate) mod util;
 
 pub use criteria::{Criterion, ExactKey, ifs_criteria};
 pub use ets::Timeline;
-pub use math::linalg::{MatrixSummary, SUMMARY_MAX, summarize};
+pub use math::linalg::{MatrixSummary, ROUNDING_NOISE, SUMMARY_MAX, rank_tolerance, summarize};
 pub use stat::{aggregate_values, aggregate_values_k};
 
 /// An evaluated argument. Ranges arrive as `Value::Array` (blank cells = `Value::Empty`) with

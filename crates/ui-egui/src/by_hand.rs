@@ -9,6 +9,7 @@ mod factor;
 
 use mkmatrix_engine::core::Value;
 use mkmatrix_engine::formula::{BinOp, Expr, UnOp};
+use mkmatrix_engine::functions::{ROUNDING_NOISE, rank_tolerance};
 use mkmatrix_engine::model::Workbook;
 
 /// Mathematical notation, enough for the steps.
@@ -209,7 +210,8 @@ impl Ctx<'_> {
                 let (m, shown) = self.value(&args[0], depth + 1)?;
                 let n = square(&m, "An inverse")?;
                 let mut aug = beside(&m, &identity(n));
-                eliminate(&mut aug, n, &mut Vec::new()).map_err(|()| "The matrix is singular: it has no inverse (a pivot is 0).".to_string())?;
+                eliminate(&mut aug, n, Singular::Inverse, &mut Vec::new())
+                    .map_err(|()| "The matrix is singular: it has no inverse (a pivot is 0).".to_string())?;
                 Ok((right_of(&aug, n), sup(shown, "−1")))
             }
             Expr::Binary(BinOp::MatMul, a, b) => {
@@ -427,13 +429,49 @@ fn det_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
     Ok(steps)
 }
 
-/// Rounding noise read as the number a hand would write: 0, or the integer it is beside.
+/// Rounding noise read as the number a hand would write: 0 below `floor`, or the whole number it
+/// is beside. A small number is never "beside 0": only `floor` can make it 0.
+fn snap(x: f64, floor: f64) -> f64 {
+    if x.abs() < floor {
+        return 0.0;
+    }
+    let whole = x.round();
+    if whole != 0.0 && (x - whole).abs() <= ROUNDING_NOISE * x.abs() { whole } else { x }
+}
+
+/// [`snap`] on every element, noise measured against `scale` as the cell measures it.
 fn tidy(m: &mut Mat, scale: f64) {
     for x in m.iter_mut().flatten() {
-        if x.abs() < 1e-12 * scale.max(1.0) {
-            *x = 0.0;
-        } else if (*x - x.round()).abs() < 1e-9 * x.abs().max(1.0) {
-            *x = x.round();
+        *x = snap(*x, ROUNDING_NOISE * scale);
+    }
+}
+
+/// `x − t`, a difference within rounding of what it cancelled read as 0. Measured against the two
+/// operands, so it means the same at any scale.
+fn minus(x: f64, t: f64) -> f64 {
+    let d = x - t;
+    if d.abs() <= ROUNDING_NOISE * x.abs().max(t.abs()) { 0.0 } else { d }
+}
+
+/// When elimination calls a matrix singular, and how the result's noise is read: each as the
+/// function in the cell does it.
+#[derive(Clone, Copy, PartialEq)]
+enum Singular {
+    /// `MX.INV`: a pivot at or below `1e-15` of the matrix's scale.
+    Inverse,
+    /// `MX.SOLVE` and `MX.POW`: the smallest pivot within the rank tolerance of the largest.
+    Pivots,
+}
+
+/// The right of `aug` with its noise read as 0, as the cell reads it: against `1/scale` for an
+/// inverse, against each column's own largest element for a solution.
+fn settle(aug: &mut Mat, n: usize, rule: Singular, scale: f64) {
+    let width = aug.first().map_or(0, Vec::len);
+    for col in n..width {
+        let largest = aug.iter().filter_map(|r| r.get(col)).fold(0.0f64, |acc, x| acc.max(x.abs()));
+        let floor = if rule == Singular::Inverse { 1e-15 / scale } else { ROUNDING_NOISE * largest };
+        for x in aug.iter_mut().filter_map(|r| r.get_mut(col)) {
+            *x = snap(*x, floor);
         }
     }
 }
@@ -453,25 +491,29 @@ fn right_of(aug: &Mat, n: usize) -> Mat {
 }
 
 /// Gauss–Jordan on the first `n` columns of `aug` (n rows), one step per column with the row
-/// operations named; `Err` when a pivot is 0.
-fn eliminate(aug: &mut Mat, n: usize, steps: &mut Vec<Step>) -> Result<(), ()> {
+/// operations named; `Err` when `rule` calls the matrix singular.
+fn eliminate(aug: &mut Mat, n: usize, rule: Singular, steps: &mut Vec<Step>) -> Result<(), ()> {
     if aug.len() != n || aug.iter().any(|r| r.len() < n) {
         return Err(());
     }
     let scale = aug.iter().flat_map(|r| r.iter().take(n)).fold(0.0f64, |acc, x| acc.max(x.abs())).max(1e-300);
+    let (mut largest, mut smallest) = (0.0f64, f64::INFINITY);
     for col in 0..n {
         // The pivot: the largest in the column, at or below the diagonal.
         let piv = (col..n).max_by(|&p, &q| aug[p][col].abs().total_cmp(&aug[q][col].abs())).unwrap_or(col);
-        if aug[piv][col].abs() <= scale * 1e-12 {
+        let size = aug[piv][col].abs();
+        if size == 0.0 || (rule == Singular::Inverse && size <= scale * 1e-15) {
             return Err(());
         }
+        largest = largest.max(size);
+        smallest = smallest.min(size);
         let mut ops = Vec::new();
         if piv != col {
             aug.swap(piv, col);
             ops.push(format!("R{} ↔ R{}", col + 1, piv + 1));
         }
         let p = aug[col][col];
-        if (p - 1.0).abs() > 1e-15 {
+        if p != 1.0 {
             for x in &mut aug[col] {
                 *x /= p;
             }
@@ -482,22 +524,28 @@ fn eliminate(aug: &mut Mat, n: usize, steps: &mut Vec<Step>) -> Result<(), ()> {
                 continue;
             }
             let f = aug[r][col];
-            if f.abs() <= 1e-15 {
+            if f == 0.0 {
                 continue;
             }
             let pivot_row = aug[col].clone();
             for (x, y) in aug[r].iter_mut().zip(&pivot_row) {
-                *x -= f * y;
+                *x = minus(*x, f * y);
             }
             ops.push(format!("R{} ← R{} − ({})·R{}", r + 1, r + 1, number(f), col + 1));
         }
-        tidy(aug, scale);
+        tidy(aug, 0.0);
+        if col + 1 == n {
+            settle(aug, n, rule, scale);
+        }
         let (caption, detail) = if ops.is_empty() {
             ("Column {}: already in place", (col + 1).to_string())
         } else {
             ("Column {}", format!("{}: {}", col + 1, ops.join(",  ")))
         };
         steps.push(Step { caption: caption.into(), detail, math: matrix(aug) });
+    }
+    if rule == Singular::Pivots && smallest <= rank_tolerance(n, n, largest) {
+        return Err(());
     }
     Ok(())
 }
@@ -508,7 +556,7 @@ fn inverse_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
     let mut aug = beside(&m, &identity(n));
     let mut steps =
         vec![Step::new("Next to the identity: [A | I]", row(vec![op("["), shown.clone(), op("|"), var("I"), op("]"), op("="), matrix(&aug)]))];
-    eliminate(&mut aug, n, &mut steps).map_err(|()| "The matrix is singular: it has no inverse (a pivot is 0).".to_string())?;
+    eliminate(&mut aug, n, Singular::Inverse, &mut steps).map_err(|()| "The matrix is singular: it has no inverse (a pivot is 0).".to_string())?;
     steps.push(Step::new("The right half is the inverse", row(vec![sup(shown, "−1"), op("="), matrix(&right_of(&aug, n))])));
     Ok(steps)
 }
@@ -571,7 +619,7 @@ fn pow_steps(ctx: &Ctx, a: &Expr, k: &Expr) -> Result<Vec<Step>, String> {
             "A negative power multiplies the inverse: first [A | I]",
             row(vec![op("["), shown.clone(), op("|"), var("I"), op("]"), op("="), matrix(&aug)]),
         ));
-        eliminate(&mut aug, n, &mut steps).map_err(|()| "The matrix is singular: it has no inverse (a pivot is 0).".to_string())?;
+        eliminate(&mut aug, n, Singular::Pivots, &mut steps).map_err(|()| "The matrix is singular: it has no inverse (a pivot is 0).".to_string())?;
         let inv = right_of(&aug, n);
         let inv_s = sup(shown, "−1");
         steps.push(Step::new("The right half is the inverse", row(vec![inv_s.clone(), op("="), matrix(&inv)])));
@@ -625,7 +673,8 @@ fn solve_steps(ctx: &Ctx, a: &Expr, b: &Expr) -> Result<Vec<Step>, String> {
     let n = square(&lhs, "A system")?;
     let mut aug = beside(&lhs, &rhs);
     steps.push(Step::new("The augmented matrix", row(vec![op("["), lhs_s, op("|"), rhs_s, op("]"), op("="), matrix(&aug)])));
-    eliminate(&mut aug, n, &mut steps).map_err(|()| "The system is singular: it has no single solution (a pivot is 0).".to_string())?;
+    eliminate(&mut aug, n, Singular::Pivots, &mut steps)
+        .map_err(|()| "The system is singular: it has no single solution (a pivot is 0).".to_string())?;
     steps.push(Step::new("The right part is the solution", row(vec![var("x"), op("="), matrix(&right_of(&aug, n))])));
     Ok(steps)
 }
@@ -933,6 +982,92 @@ mod tests {
         let repeated = derive("=MX.EIGVEC({2,0;0,2})", &book(), 0).unwrap();
         assert!(repeated.iter().any(|s| s.caption.starts_with("A repeated eigenvalue")));
         assert!(derive("=MX.EIGVEC(D1:F3)", &book(), 0).unwrap_err().contains("symmetric"));
+    }
+
+    /// By hand and the cell agree to within rounding of the matrix's own size, however small.
+    fn agrees_at_any_scale(formula: &str, rows: u32, cols: u32) {
+        let steps = derive(formula, &book(), 0).unwrap_or_else(|e| panic!("{formula}: {e}"));
+        let (got, want) = (result(&steps), engine(formula, rows, cols));
+        let size = want.iter().flatten().fold(0.0f64, |acc, x| acc.max(x.abs()));
+        let same = got.len() == want.len()
+            && got.iter().zip(&want).all(|(a, b)| a.len() == b.len() && a.iter().zip(b).all(|(x, y)| (x - y).abs() <= 1e-9 * size));
+        assert!(same, "{formula}: by hand {got:?}, the cell {want:?}");
+    }
+
+    /// The number ending the last step.
+    fn final_number(steps: &[Step]) -> f64 {
+        match last(steps) {
+            Math::Row(v) => match v.last() {
+                Some(Math::Num(n)) => *n,
+                other => panic!("{other:?}"),
+            },
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn small_and_badly_scaled_values_read_as_in_the_cell() {
+        // #14, its table.
+        agrees_at_any_scale("=MX.INV({1e-10,0;0,1e-10})", 2, 2);
+        agrees_at_any_scale("=MX.INV({1e10})", 1, 1);
+        agrees_at_any_scale("=MX.EIG({2e-10,1e-10;1e-10,2e-10})", 2, 1);
+        agrees_at_any_scale("={1e-5}@{1e-5}", 1, 1);
+        agrees_at_any_scale("=MX.LU({1,1;1,1.0000000000001},\"U\")", 2, 2);
+        // Close eigenvalues stay apart; a small one isn't lost beside a large one.
+        agrees_at_any_scale("=MX.EIG({1,0.0000001;0.0000001,1})", 2, 1);
+        // Their vectors too, up to sign: with equal components, which is "largest" is rounding.
+        let close_pair = "=MX.EIGVEC({1,0.0000001;0.0000001,1})";
+        let steps = derive(close_pair, &book(), 0).unwrap();
+        assert!(!steps.iter().any(|s| s.caption.starts_with("A repeated eigenvalue")));
+        let (got, want) = (result(&steps), engine(close_pair, 2, 2));
+        assert!(got.iter().flatten().zip(want.iter().flatten()).all(|(x, y)| (x.abs() - y.abs()).abs() < 1e-6), "by hand {got:?}, the cell {want:?}");
+        agrees_at_any_scale("=MX.EIG({1,0;0,1e-11})", 2, 1);
+        let small = result(&derive("=MX.EIG({1,0;0,1e-11})", &book(), 0).unwrap());
+        assert_eq!(small[1], vec![1e-11]);
+        let rank = |f: &str| final_number(&derive(f, &book(), 0).unwrap());
+        assert_eq!(rank("=MX.RANK({1e-10,0;0,1e-10})"), 2.0);
+        assert_eq!(rank("=MX.RANK({1,1;1,1.0000000001})"), 2.0);
+        // Rounding is still read as what it is.
+        assert_eq!(rank("=MX.RANK({0.1,0.2,0.3;0.4,0.5,0.6;0.7,0.8,0.9})"), 2.0);
+        assert_eq!(rank("=MX.RANK({1e-10,2e-10;2e-10,4e-10})"), 1.0);
+    }
+
+    #[test]
+    fn scaling_a_matrix_scales_the_steps() {
+        for s in ["e-20", "e-10", "e-3", "e3", "e10"] {
+            let m = |rows: &[&[i32]]| {
+                let line = |r: &&[i32]| r.iter().map(|x| format!("{x}{s}")).collect::<Vec<_>>().join(",");
+                format!("{{{}}}", rows.iter().map(line).collect::<Vec<_>>().join(";"))
+            };
+            let general = m(&[&[1, 2, 3], &[0, 1, 4], &[5, 6, 0]]);
+            let spd = m(&[&[4, 12, -16], &[12, 37, -43], &[-16, -43, 98]]);
+            let sym = m(&[&[2, 1, 0], &[1, 3, 1], &[0, 1, 5]]);
+            agrees_at_any_scale(&format!("=MX.INV({general})"), 3, 3);
+            agrees_at_any_scale(&format!("=MX.POW({general},-1)"), 3, 3);
+            agrees_at_any_scale(&format!("={general}@{general}"), 3, 3);
+            agrees_at_any_scale(&format!("={general}\\{}", m(&[&[1], &[2], &[3]])), 3, 1);
+            agrees_at_any_scale(&format!("=MX.LU({general},\"U\")"), 3, 3);
+            agrees_at_any_scale(&format!("=MX.LU({general},\"L\")"), 3, 3);
+            agrees_at_any_scale(&format!("=MX.CHOL({spd})"), 3, 3);
+            agrees_at_any_scale(&format!("=MX.EIG({sym})"), 3, 1);
+            agrees_at_any_scale(&format!("=MX.EIG({general})"), 3, 1);
+            agrees_at_any_scale(&format!("=MX.EIG({})", m(&[&[0, -1], &[1, 0]])), 2, 2);
+            agrees_at_any_scale(&format!("=MX.EIGVEC({sym})"), 3, 3);
+            assert_eq!(final_number(&derive(&format!("=MX.RANK({general})"), &book(), 0).unwrap()), 3.0, "{s}");
+            let lopsided = m(&[&[1, 2], &[1, 1]]).replacen(&format!("2{s}"), &format!("3{s}"), 1);
+            assert!(derive(&format!("=MX.CHOL({lopsided})"), &book(), 0).unwrap_err().contains("symmetric"), "{s}");
+        }
+    }
+
+    #[test]
+    fn each_function_calls_singular_as_the_cell_does() {
+        let wb = book();
+        // 1e-20 against 1: MX.SOLVE's rank tolerance refuses it, as MX.INV's 1e-15 of the scale does.
+        assert!(derive("={1e-20,0;0,1}\\{1;1}", &wb, 0).unwrap_err().contains("singular"));
+        assert!(derive("=MX.INV({1e-20,0;0,1})", &wb, 0).unwrap_err().contains("singular"));
+        // 1e-13 against 1 is above both.
+        agrees_at_any_scale("={1e-13,0;0,1}\\{1;1}", 2, 1);
+        agrees_at_any_scale("=MX.INV({1e-13,0;0,1})", 2, 2);
     }
 
     #[test]

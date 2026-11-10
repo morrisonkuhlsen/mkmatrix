@@ -3,7 +3,10 @@
 
 use mkmatrix_engine::formula::Expr;
 
-use super::{Ctx, HAND_MAX, Mat, Math, Step, idx, magnitude, matrix, number, op, root, row, signed, square, sub, symbol, tidy, told, unparen, var};
+use super::{
+    Ctx, HAND_MAX, Mat, Math, Step, idx, magnitude, matrix, minus, number, op, rank_tolerance, root, row, signed, square, sub, symbol, tidy, told,
+    unparen, var,
+};
 
 /// The row at or below `from` with the largest magnitude in column `col`, the first of equals
 /// (as the engine's LU picks it).
@@ -38,7 +41,7 @@ fn subtract(m: &mut Mat, r: usize, p: usize, f: f64, from: usize) -> String {
     let pivot_row = m.get(p).cloned().unwrap_or_default();
     if let Some(line) = m.get_mut(r) {
         for (x, y) in line.iter_mut().zip(&pivot_row).skip(from) {
-            *x -= f * y;
+            *x = minus(*x, f * y);
         }
     }
     format!("R{} ← R{} − ({})·R{}", r + 1, r + 1, number(f), p + 1)
@@ -57,7 +60,9 @@ pub(super) fn rank_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
         return Err(format!("By hand stops at {HAND_MAX} rows and {HAND_MAX} columns; this one is {rows}×{cols}."));
     }
     let scale = magnitude(&m);
-    let tol = scale * 1e-10;
+    // The cell counts singular values above this; the Frobenius norm stands in for the largest.
+    let norm = m.iter().flatten().map(|x| (x / scale).powi(2)).sum::<f64>().sqrt() * scale;
+    let tol = rank_tolerance(rows, cols, norm);
     let mut u = m.clone();
     let mut steps = vec![
         Step::new("The matrix", row(vec![shown.clone(), op("="), matrix(&m)])),
@@ -85,7 +90,7 @@ pub(super) fn rank_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
         }
         for i in r + 1..rows {
             let f = u[i][col] / u[r][col];
-            if f.abs() > 1e-15 {
+            if f != 0.0 {
                 ops.push(subtract(&mut u, i, r, f, col));
             }
             u[i][col] = 0.0;
@@ -131,7 +136,7 @@ pub(super) fn lu_steps(ctx: &Ctx, a: &Expr, part: Option<&Expr>) -> Result<Vec<S
     ];
     for col in 0..n {
         let piv = pivot_row(&u, col, col);
-        if u[piv][col].abs() <= scale * 1e-12 {
+        if u[piv][col] == 0.0 {
             for line in u.iter_mut().skip(col + 1) {
                 line[col] = 0.0;
             }
@@ -154,7 +159,7 @@ pub(super) fn lu_steps(ctx: &Ctx, a: &Expr, part: Option<&Expr>) -> Result<Vec<S
         for i in col + 1..n {
             let f = u[i][col] / u[col][col];
             l[i][col] = f;
-            if f.abs() > 1e-15 {
+            if f != 0.0 {
                 let done = subtract(&mut u, i, col, f, col);
                 ops.push(format!("l{}{} = {}: {done}", i + 1, col + 1, number(f)));
             }
@@ -193,7 +198,7 @@ pub(super) fn chol_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
     let shown = symbol(shown);
     let n = square(&m, "A Cholesky factorization")?;
     let scale = magnitude(&m);
-    if (0..n).any(|i| (i + 1..n).any(|j| (m[i][j] - m[j][i]).abs() > 1e-12 * scale.max(1.0))) {
+    if (0..n).any(|i| (i + 1..n).any(|j| (m[i][j] - m[j][i]).abs() > 1e-12 * scale)) {
         return Err("Cholesky needs a symmetric matrix.".into());
     }
     let k_lt_j = || sub(op("Σ"), op("k<j"));
@@ -223,8 +228,9 @@ pub(super) fn chol_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
     let mut l: Mat = vec![vec![0.0; n]; n];
     for j in 0..n {
         steps.push(told("Column {}", (j + 1).to_string(), row(vec![])));
-        let d = m[j][j] - (0..j).map(|k| l[j][k] * l[j][k]).sum::<f64>();
-        if d <= scale * 1e-12 {
+        // One term at a time, as the cell subtracts them: the same number, so the same verdict.
+        let d = (0..j).fold(m[j][j], |d, k| d - l[j][k] * l[j][k]);
+        if d <= 0.0 {
             return Err("The matrix isn't positive definite: a diagonal element would be the root of a number ≤ 0.".into());
         }
         l[j][j] = d.sqrt();
@@ -241,7 +247,7 @@ pub(super) fn chol_steps(ctx: &Ctx, a: &Expr) -> Result<Vec<Step>, String> {
         line.extend([root(row(numbers)), op("="), Math::Num(l[j][j])]);
         steps.push(Step::new("", row(line)));
         for i in j + 1..n {
-            l[i][j] = (m[i][j] - (0..j).map(|k| l[i][k] * l[j][k]).sum::<f64>()) / l[j][j];
+            l[i][j] = (0..j).fold(m[i][j], |x, k| x - l[i][k] * l[j][k]) / l[j][j];
             let mut line = vec![idx("l", i + 1, j + 1), op("=")];
             if j == 0 {
                 line.extend([Math::Num(m[i][j]), op("/"), Math::Num(l[j][j])]);
