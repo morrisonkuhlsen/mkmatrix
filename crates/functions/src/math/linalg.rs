@@ -12,29 +12,40 @@ use nalgebra::linalg::{Cholesky, SVD, Schur, SymmetricEigen};
 use super::matrix::{matrix, to_value_array};
 use super::*;
 
-/// The largest side a decomposition takes: the work grows as its cube.
-const MAX_SIDE: usize = 500;
-/// The most elements a decomposition takes.
+/// The most elements a decomposition takes. Its work grows as rows · columns · the shorter side,
+/// so the cap bounds the shorter side to 500 whichever way the matrix lies: a wide matrix is
+/// taken as readily as a tall one.
 const MAX_ELEMENTS: usize = 250_000;
 /// Iterations an iterative decomposition (SVD, eigen, Schur) may take before it gives up (#NUM!).
 const MAX_ITERATIONS: usize = 10_000;
 
-/// A numeric argument as a matrix, refusing sizes too large to decompose.
-fn mat(a: &[Arg], i: usize) -> R<DMatrix<f64>> {
+/// A numeric argument as a matrix, of any size the grid holds: for work no more than linear in
+/// its elements (trace, norms other than 2).
+fn any_mat(a: &[Arg], i: usize) -> R<DMatrix<f64>> {
     let (r, c, d) = matrix(&crate::util::arg(a, i)?.value)?;
     if r == 0 || c == 0 {
         return Err(CellError::Value);
     }
-    if r > MAX_SIDE.max(MAX_ELEMENTS / c.max(1)) || c > MAX_SIDE || r.saturating_mul(c) > MAX_ELEMENTS {
+    Ok(DMatrix::from_row_slice(r, c, &d))
+}
+
+/// Refuses (#NUM!) a matrix too large to decompose.
+fn decomposable(m: DMatrix<f64>) -> R<DMatrix<f64>> {
+    if m.nrows().saturating_mul(m.ncols()) > MAX_ELEMENTS {
         return Err(CellError::Num);
     }
-    Ok(DMatrix::from_row_slice(r, c, &d))
+    Ok(m)
+}
+
+/// A numeric argument as a matrix, refusing sizes too large to decompose.
+fn mat(a: &[Arg], i: usize) -> R<DMatrix<f64>> {
+    decomposable(any_mat(a, i)?)
 }
 
 /// A square numeric argument.
 fn square_mat(a: &[Arg], i: usize) -> R<DMatrix<f64>> {
     let m = mat(a, i)?;
-    if m.nrows() != m.ncols() || m.nrows() > MAX_SIDE {
+    if m.nrows() != m.ncols() {
         return Err(CellError::Value);
     }
     Ok(m)
@@ -190,19 +201,24 @@ pub(super) fn mrank(a: &[Arg], _c: &mut dyn Ctx) -> R<Value> {
     num_val(s.iter().filter(|x| **x > tol).count() as f64)
 }
 
-/// MTRACE(A): the sum of a square matrix's diagonal.
+/// MTRACE(A): the sum of a square matrix's diagonal, of any size (the work is linear).
 pub(super) fn mtrace(a: &[Arg], _c: &mut dyn Ctx) -> R<Value> {
-    num_val(square_mat(a, 0)?.trace())
+    let m = any_mat(a, 0)?;
+    if !m.is_square() {
+        return Err(CellError::Value);
+    }
+    num_val(m.trace())
 }
 
 /// MNORM(A, [type]): "F" Frobenius (default), 1 (largest column sum), 2 (largest singular
-/// value), "INF" (largest row sum) or "MAX" (largest element), all of absolute values.
+/// value), "INF" (largest row sum) or "MAX" (largest element), all of absolute values. Only
+/// type 2 decomposes, so only it is capped in size.
 pub(super) fn mnorm(a: &[Arg], _c: &mut dyn Ctx) -> R<Value> {
-    let m = mat(a, 0)?;
+    let m = any_mat(a, 0)?;
     let n = match opt_part(a, 1, "F")?.as_str() {
         "F" | "FRO" | "FROBENIUS" => m.norm(),
         "1" => (0..m.ncols()).map(|c| m.column(c).iter().map(|x| x.abs()).sum::<f64>()).fold(0.0, f64::max),
-        "2" => svd(m)?.1.first().copied().unwrap_or(0.0),
+        "2" => svd(decomposable(m)?)?.1.first().copied().unwrap_or(0.0),
         "INF" | "I" => (0..m.nrows()).map(|r| m.row(r).iter().map(|x| x.abs()).sum::<f64>()).fold(0.0, f64::max),
         "MAX" | "M" => scale(&m),
         _ => return Err(CellError::Value),
