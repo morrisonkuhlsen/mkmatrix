@@ -635,7 +635,38 @@ fn linear_algebra_survives_hostile_input() {
     }
     // Too large to decompose: #NUM!, not minutes of work.
     let big = av(arr(vec![vec![nv(1.0); 600]; 600]));
-    is_err(ev("MX.SVD", vec![big]), Num);
+    is_err(ev("MX.SVD", vec![big.clone()]), Num);
+    // Linear work takes any size: trace and the norms that don't decompose.
+    close(ev("MX.TRACE", vec![big.clone()]), 600.0);
+    close(ev("MX.NORM", vec![big.clone(), t("1")]), 600.0);
+    is_err(ev("MX.NORM", vec![big, n(2.0)]), Num);
+}
+
+/// #24: a wide matrix is taken as readily as a tall one.
+#[test]
+fn wide_matrices_decompose_like_tall_ones() {
+    let seq = |k: usize| (1..=k).map(|i| nv(i as f64)).collect::<Vec<_>>();
+    let row = av(arr(vec![seq(600)]));
+    let col = av(arr(seq(600).into_iter().map(|x| vec![x]).collect()));
+    let norm = (600.0f64 * 601.0 * 1201.0 / 6.0).sqrt();
+    for a in [&row, &col] {
+        close_tol(ev("MX.NORM", vec![a.clone()]), norm, 1e-6);
+        mat_close(ev("MX.SVD", vec![a.clone()]), &[&[norm]], 1e-6);
+    }
+    close_tol(ev("MX.NORM", vec![row.clone(), n(2.0)]), norm, 1e-6);
+    close(ev("MX.RANK", vec![row.clone()]), 1.0);
+    close(ev("MX.RANK", vec![col.clone()]), 1.0);
+    assert_eq!(rows_of(&ev("MX.PINV", vec![row.clone()])).len(), 600);
+    assert_eq!(rows_of(&ev("MX.QR", vec![row.clone(), t("R")])).first().map(Vec::len), Some(600));
+    // Underdetermined, 600 unknowns: the minimum-norm x with row · x = 1.
+    let x = rows_of(&ev("MX.SOLVE", vec![row.clone(), m(&[&[1.0]])]));
+    assert_eq!(x.len(), 600);
+    close_tol(x[599][0].clone(), 600.0 / (norm * norm), 1e-12);
+    // The cap is on elements, the same both ways round.
+    let wide = av(arr(vec![vec![nv(1.0); 600]; 500]));
+    let tall = av(arr(vec![vec![nv(1.0); 500]; 600]));
+    is_err(ev("MX.RANK", vec![wide]), Num);
+    is_err(ev("MX.RANK", vec![tall]), Num);
 }
 
 #[test]
