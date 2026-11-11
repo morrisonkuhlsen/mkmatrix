@@ -519,6 +519,32 @@ fn mdeterm_is_exact_for_integer_matrices() {
     close_tol(ev("MX.DET", vec![m(&[&[1e17, 0.0], &[0.0, 1e17]])]), 1e34, 1e20);
 }
 
+/// #25: sparse and banded integer matrices stay exact without n³ work, and a dense one leaves
+/// the answer to the float path once the exact work runs out.
+#[test]
+fn mdeterm_exact_path_is_bounded() {
+    use crate::math::linalg::exact_determinant;
+    let n = 2000;
+    let eye: Vec<f64> = (0..n * n).map(|i| if i / n == i % n { 1.0 } else { 0.0 }).collect();
+    assert_eq!(exact_determinant(n, &eye), Some(1.0));
+    // The (−1, 2, −1) tridiagonal: its determinant is n + 1.
+    let tri = |n: usize| -> Vec<f64> {
+        (0..n * n)
+            .map(|i| match (i / n).abs_diff(i % n) {
+                0 => 2.0,
+                1 => -1.0,
+                _ => 0.0,
+            })
+            .collect()
+    };
+    assert_eq!(exact_determinant(300, &tri(300)), Some(301.0));
+    // Dense ones below the diagonal: too much exact work at n = 400, but still an integer.
+    let lower = |n: usize| -> Vec<f64> { (0..n * n).map(|i| if i / n >= i % n { 1.0 } else { 0.0 }).collect() };
+    assert_eq!(exact_determinant(400, &lower(400)), None);
+    let rows: Vec<Vec<Value>> = lower(400).chunks(400).map(|r| r.iter().map(|x| nv(*x)).collect()).collect();
+    assert_eq!(ev("MX.DET", vec![av(arr(rows))]), nv(1.0));
+}
+
 #[test]
 fn msolve_square_least_squares_and_singular() {
     mat_close(ev("MX.SOLVE", vec![m(&[&[2.0, 1.0], &[1.0, 3.0]]), m(&[&[3.0], &[5.0]])]), &[&[0.8], &[1.4]], 1e-12);
