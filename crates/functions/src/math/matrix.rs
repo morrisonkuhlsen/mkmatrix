@@ -106,7 +106,12 @@ pub(super) fn mdeterm(a: &[Arg], _c: &mut dyn Ctx) -> R<Value> {
     if let Some(d) = super::linalg::exact_determinant(n, &m) {
         return num_val(d);
     }
+    let integers = m.iter().all(|x| x.fract() == 0.0);
     let d = determinant(n, m);
+    // Too large to work exactly, a matrix of integers still has an integer determinant.
+    if integers && d.abs() < 9_007_199_254_740_992.0 {
+        return num_val(d.round());
+    }
     // Tidy results that should be integers (e.g. 0.9999999999999998 → 1).
     num_val(if d.abs() > 1e-300 { to_sig_digits(d, 15) } else { d })
 }

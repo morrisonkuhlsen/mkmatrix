@@ -371,8 +371,17 @@ pub(super) fn mpower(a: &[Arg], _c: &mut dyn Ctx) -> R<Value> {
     out(&acc, sc)
 }
 
+/// The element updates the exact determinant may make (a dense n = 300, ~0.1 s) before it leaves
+/// the answer to the float path, which is several times faster per update.
+const EXACT_WORK: usize = 10_000_000;
+
 /// The exact determinant of a matrix of integers (Bareiss's fraction-free elimination), or
-/// `None` when an element isn't a small integer or an intermediate overflows.
+/// `None` when an element isn't a small integer, an intermediate overflows, or the work runs
+/// past [`EXACT_WORK`] (the float path then answers).
+///
+/// A row whose entry under the pivot is 0 only scales by pivot / previous pivot, so it is
+/// skipped when the two are equal (identity, triangular and permutation matrices) and only its
+/// non-zero entries are touched otherwise: sparse and banded matrices cost far less than n³.
 pub(super) fn exact_determinant(n: usize, m: &[f64]) -> Option<f64> {
     const LIMIT: f64 = 9_007_199_254_740_992.0; // 2^53: every integer below it is exact.
     let mut a: Vec<i128> = Vec::with_capacity(m.len());
@@ -385,6 +394,7 @@ pub(super) fn exact_determinant(n: usize, m: &[f64]) -> Option<f64> {
     let at = |a: &Vec<i128>, r: usize, c: usize| a.get(r * n + c).copied();
     let mut sign = 1i128;
     let mut prev = 1i128;
+    let mut work = 0usize;
     for k in 0..n {
         // A zero pivot: swap in a row below with a non-zero one, or the determinant is 0.
         if at(&a, k, k)? == 0 {
@@ -397,8 +407,22 @@ pub(super) fn exact_determinant(n: usize, m: &[f64]) -> Option<f64> {
         }
         let pivot = at(&a, k, k)?;
         for i in k + 1..n {
+            let below = at(&a, i, k)?;
+            if below == 0 && pivot == prev {
+                continue;
+            }
+            work = work.saturating_add(n - k - 1);
+            if work > EXACT_WORK {
+                return None;
+            }
             for j in k + 1..n {
-                let v = at(&a, i, j)?.checked_mul(pivot)?.checked_sub(at(&a, i, k)?.checked_mul(at(&a, k, j)?)?)?;
+                let x = at(&a, i, j)?;
+                let right = at(&a, k, j)?;
+                if x == 0 && (below == 0 || right == 0) {
+                    continue;
+                }
+                let cross = if below == 0 || right == 0 { 0 } else { below.checked_mul(right)? };
+                let v = x.checked_mul(pivot)?.checked_sub(cross)?;
                 *a.get_mut(i * n + j)? = v.checked_div(prev)?;
             }
         }
