@@ -46,7 +46,7 @@ pub type Inbox = std::sync::Arc<std::sync::Mutex<Vec<(String, Vec<u8>)>>>;
 /// host, not a user preference.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Chrome {
-    /// The title bar: AutoSave, Home, Save, Undo/Redo, the file name, Comments, Share, Search and
+    /// The title bar: AutoSave, Save, Undo/Redo, the file name, Comments, Share, Search and
     /// the theme switch.
     pub title_bar: bool,
     /// The ribbon's File tab and the Backstage view it opens (also reached by keyboard and
