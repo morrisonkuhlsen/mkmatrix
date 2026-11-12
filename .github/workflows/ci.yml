@@ -20,7 +20,7 @@ jobs:
   gate:
     # Pinned (not @main) so a change upstream can't move this onto a paid runner: MK Matrix's
     # GitHub use must cost nothing. Checked at this commit: standard ubuntu runners only.
-    uses: storytold/craft-common-actions/.github/workflows/gate.yml@eddaf203b2d4873525a69842240214b23bac65ba
+    uses: storytold/craft-common-actions/.github/workflows/gate.yml@293de72429d3ed5d9fa92aded5e500544c0fa28f
     with:
       # The same craft-fonts commit as release.yml and freebsd.yml, so the gate tests the fonts that ship.
       craft-fonts-ref: b076417b5880bd4154bd22f00695b1d28c6bea83
