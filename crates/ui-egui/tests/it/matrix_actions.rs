@@ -133,6 +133,30 @@ mod brackets {
         assert_eq!(h.state().session.active().unwrap().selection.current().a1(), "C3:D4");
     }
 
+    /// With numbers beside the matrix the name shares their column; a click on one of them
+    /// selects that cell, not the matrix (#22).
+    #[test]
+    fn a_click_on_a_number_under_the_name_selects_the_cell() {
+        let mut s = named();
+        s.execute("range.setValues", json!({"range": "B3", "values": [[7], [9]]})).unwrap();
+        s.execute("home.columnWidth", json!({"cols": "B:B", "width": 200})).unwrap();
+        s.execute("selection.set", json!({"range": "A1"})).unwrap();
+        let mut h = crate::support::harness(s, 4);
+        // Over numbers the name moves to the column's left edge, centred on the matrix's height.
+        let at = {
+            let app = h.state();
+            let sheet = app.session.active().unwrap().wb.active().unwrap();
+            let geo = Geo::new(sheet, app.grid.rect.unwrap(), app.view().scroll);
+            let b = geo.range_rect(sheet, mkmatrix_engine::core::RangeRef::parse("B3:B4").unwrap());
+            pos2(b.left() + 8.0 * geo.z, b.center().y + 3.0)
+        };
+        press(&mut h, at, true);
+        press(&mut h, at, false);
+        h.run_steps(2);
+        let sel = h.state().session.active().unwrap().selection.current().a1();
+        assert!(sel == "B3" || sel == "B4", "the click reached a cell of column B, not the matrix: {sel}");
+    }
+
     #[test]
     fn dragging_a_bracket_moves_the_matrix_and_its_name() {
         let mut h = crate::support::harness(named(), 4);
