@@ -636,6 +636,20 @@ fn merge(s: &mut Session, p: &Json, how: &str) -> Result<Json> {
     let ranges = target_ranges(s, p)?;
     let how =
         if how == "center" && s.doc()?.wb.sheet(sheet).is_some_and(|sh| ranges.iter().all(|r| sh.merges.contains(r))) { "unmerge" } else { how };
+    // Merge Across makes one area per row: over whole columns, a million of them, which no file
+    // keeps (#104). Count what the sheet would hold, kept merges included.
+    if how == "across"
+        && let Some(sh) = s.doc()?.wb.sheet(sheet)
+    {
+        let kept = sh.merges.iter().filter(|m| !ranges.iter().any(|r| m.intersects(r))).count();
+        let new = ranges.iter().filter(|r| r.width() > 1).fold(0usize, |n, r| n.saturating_add(r.height() as usize));
+        if kept.saturating_add(new) > mkmatrix_model::MAX_MERGES {
+            return Err(EngineError::Other(format!(
+                "Merge Across would leave more than {} merged areas on the sheet. Select fewer rows.",
+                mkmatrix_model::MAX_MERGES
+            )));
+        }
+    }
     edit(s, |cx| {
         let mut touched = Vec::new();
         // Areas whose merging changes: a merged cell blocks a dynamic array's spill.
