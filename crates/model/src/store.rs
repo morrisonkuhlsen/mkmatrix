@@ -11,7 +11,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use mkmatrix_core::{CellRef, RangeRef};
+use mkmatrix_core::{CellError, CellRef, RangeRef, Value};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::cell::Cell;
@@ -207,8 +207,14 @@ impl CellStore {
         let slot = column.slot(c.row % BAND);
         column.cells.get_mut(slot)
     }
-    /// Stores a cell; a default (empty, unstyled) cell is removed instead.
-    pub fn set(&mut self, c: CellRef, cell: Cell) {
+    /// Stores a cell; a default (empty, unstyled) cell is removed instead. A constant (a cell with
+    /// no formula) can't be `#SPILL!` or `#CALC!`: those describe a formula's result, aren't error
+    /// literals of the file format, and a saved file keeps them as `#VALUE!`. A pasted value or a
+    /// typed one becomes `#VALUE!` here too, so the workbook reads the same after a reload (#104).
+    pub fn set(&mut self, c: CellRef, mut cell: Cell) {
+        if cell.formula.is_none() && matches!(cell.value, Value::Error(CellError::Spill | CellError::Calc)) {
+            cell.value = Value::Error(CellError::Value);
+        }
         if cell.is_blank() {
             self.remove(c);
             return;

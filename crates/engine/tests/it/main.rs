@@ -24,6 +24,7 @@ mod pivot_unknown_func;
 mod pivotchart_link;
 mod preview;
 mod range_fill_formats;
+mod reload_keeps_values;
 mod row_autofit;
 mod sensitivity;
 mod shared_formulas;
