@@ -157,15 +157,21 @@ fn covers_nothing(geo: &Geo, sh: &Sheet, range: RangeRef, rect: Rect) -> bool {
 }
 
 /// The named matrix whose bracket or name is at `p` (sheet coordinates): within a few points of
-/// either bracket's upright, along the matrix's height, or over its name.
+/// either bracket's upright, along the matrix's height, or over its name where the name lies on
+/// empty cells. Over a cell with contents (the numbers a name beside them shares a column with)
+/// the click belongs to the cell: it selects it, and a drag there never moves the matrix (#22).
 pub fn bracket_at(geo: &Geo, sh: &Sheet, matrices: &[(String, RangeRef)], p: egui::Pos2) -> Option<(String, RangeRef)> {
+    let under = CellRef::new(geo.row_at(sh, p.y), geo.col_at(sh, p.x));
     matrices
         .iter()
         .find(|(name, range)| {
             let r = geo.range_rect(sh, *range);
             let on_upright = (p.x - (r.left() - 3.0)).abs() <= 4.0 || (p.x - (r.right() + 3.0)).abs() <= 4.0;
-            (on_upright && p.y >= r.top() - 3.0 && p.y <= r.bottom() + 3.0)
-                || name_rect(geo, sh, *range, r, name).is_some_and(|n| n.expand(2.0).contains(p))
+            let on_name = || {
+                (range.contains(under) || sh.value(under).is_empty())
+                    && name_rect(geo, sh, *range, r, name).is_some_and(|n| n.expand(2.0).contains(p))
+            };
+            (on_upright && p.y >= r.top() - 3.0 && p.y <= r.bottom() + 3.0) || on_name()
         })
         .cloned()
 }
@@ -360,5 +366,32 @@ mod tests {
             let ink = label.shrink2(vec2(0.0, NAME_SIZE * geo.z * 0.2));
             assert!(covers_nothing(&geo, sh, *range, ink), "{name}'s name at {label:?} covers a cell");
         }
+    }
+
+    /// A name beside numbers shares their column: a click over one of those numbers reaches its
+    /// cell, not the matrix, while the bracket stays a handle (#22). (Over empty cells the name
+    /// is a handle: `a_click_on_the_name_beside_the_bracket_selects_the_matrix`.)
+    #[test]
+    fn a_name_over_numbers_leaves_their_cells_clickable() {
+        let mut wb = Workbook::new();
+        wb.names.push(DefinedName { name: "M".into(), scope: None, formula: "Sheet1!$C$3:$D$4".into(), comment: String::new(), hidden: false });
+        let Some(sh) = wb.sheet_mut(0) else { panic!("a sheet") };
+        sh.cols.insert(1, mkmatrix_engine::model::LineInfo { size: Some(160.0), ..Default::default() });
+        for (a1, v) in [("B3", 7.0), ("B4", 9.0), ("C3", 1.0), ("C4", 2.0), ("D3", 3.0), ("D4", 4.0)] {
+            let Some(c) = CellRef::parse(a1) else { panic!("{a1}") };
+            sh.set_value(c, Value::Number(v));
+        }
+        let Some(sh) = wb.sheet(0) else { panic!("a sheet") };
+        let geo = Geo::new(sh, Rect::from_min_size(pos2(0.0, 0.0), vec2(1400.0, 800.0)), vec2(0.0, 0.0));
+        let matrices = on_sheet(&wb, 0);
+        let Some((_, range)) = matrices.first() else { panic!("M is a matrix") };
+        let r = geo.range_rect(sh, *range);
+        let Some(label) = name_rect(&geo, sh, *range, r, "M") else { panic!("M has a place for its name") };
+        let b = geo.cell_rect(sh, CellRef::new(2, 1));
+        assert!(label.right() < b.center().x, "M hugs the left of column B, over its numbers: {label:?}");
+        for y in [label.top() + 2.0, label.center().y - 2.0, label.center().y + 2.0, label.bottom() - 2.0] {
+            assert!(bracket_at(&geo, sh, &matrices, pos2(label.center().x, y)).is_none(), "a click at y={y} reaches the cell");
+        }
+        assert!(bracket_at(&geo, sh, &matrices, pos2(r.left() - 3.0, r.center().y)).is_some(), "the bracket is a handle");
     }
 }
