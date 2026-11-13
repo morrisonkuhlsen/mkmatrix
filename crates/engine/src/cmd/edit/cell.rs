@@ -104,7 +104,7 @@ pub(crate) fn check_arg_counts(expr: &mkmatrix_formula::Expr) -> Result<()> {
     }
 }
 
-pub(super) fn cell_set(s: &mut Session, p: &Json) -> Result<Json> {
+pub(crate) fn cell_set(s: &mut Session, p: &Json) -> Result<Json> {
     let sheet = target_sheet(s, p)?;
     let at = match cell_param_on(s, p, "cell", sheet)? {
         Some(c) => c,

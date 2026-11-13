@@ -156,3 +156,38 @@ mod brackets {
         assert_eq!(m.formula.replace('$', ""), "Sheet1!C6:D7", "the name follows the block");
     }
 }
+
+/// A right-click on a selected block of numbers offers its matrix actions (#31); Determinant runs
+/// `matrix.determinant` and selects the result. A block that isn't square isn't offered it.
+#[test]
+fn the_cell_menu_offers_the_matrix_actions() {
+    use egui::{Event, Modifiers, PointerButton};
+    let right_click = |h: &mut crate::common::Harness, a1: &str| {
+        let pos = {
+            let app = h.state();
+            let sh = app.session.active().unwrap().wb.active().unwrap();
+            let geo = mkmatrix_ui_egui::grid::Geo::new(sh, app.grid.rect.unwrap(), app.view().scroll);
+            geo.cell_rect(sh, mkmatrix_engine::core::CellRef::parse(a1).unwrap()).center()
+        };
+        h.input_mut().events.push(Event::PointerMoved(pos));
+        for pressed in [true, false] {
+            h.input_mut().events.push(Event::PointerButton { pos, button: PointerButton::Secondary, pressed, modifiers: Modifiers::NONE });
+        }
+        h.run_steps(4);
+    };
+    let mut h = harness(block(), 4);
+    right_click(&mut h, "C3");
+    assert_eq!(h.state().session.active().unwrap().selection.current().a1(), "B2:C3", "the block stays selected");
+    h.get_by_label("Determinant").click();
+    h.run_steps(3);
+    assert_eq!(formula(&h, "E2").as_deref(), Some("MX.DET(B2:C3)"));
+    assert_eq!(h.state().session.active().unwrap().selection.active.a1(), "E2", "the result is selected");
+    // A 3×2 block: Transpose, but no Determinant.
+    let mut s = block();
+    s.execute("range.setValues", json!({"range": "B4", "values": [[5, 6]]})).unwrap();
+    s.execute("selection.set", json!({"range": "B2:C4"})).unwrap();
+    let mut h = harness(s, 4);
+    right_click(&mut h, "C3");
+    assert!(h.query_by_label("Determinant").is_none());
+    assert!(h.query_all_by_label("Transpose").count() >= 2, "the floating action and the menu item");
+}
