@@ -55,7 +55,7 @@ if (-not $haveCert -and -not $haveAzure) {
 }
 
 $script:SignTool = Find-SignTool
-$common = @('sign', '/v', '/fd', 'SHA256', '/td', 'SHA256', '/d', 'MK Matrix', '/du', 'https://github.com/storytold/gridcraft')
+$common = @('sign', '/v', '/fd', 'SHA256', '/td', 'SHA256', '/d', 'MK Matrix', '/du', 'https://github.com/morrisonkuhlsen/mkmatrix')
 $tmp = Join-Path ([IO.Path]::GetTempPath()) "mkmatrix-sign-$([IO.Path]::GetRandomFileName())"
 New-Item -ItemType Directory -Path $tmp | Out-Null
 
