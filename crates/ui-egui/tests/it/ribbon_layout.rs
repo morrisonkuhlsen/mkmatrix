@@ -2,7 +2,7 @@
 //! fitting the card's height.
 
 use egui::vec2;
-use egui_kittest::kittest::Queryable as _;
+use egui_kittest::kittest::{NodeT as _, Queryable as _};
 use mkmatrix_engine::Session;
 use mkmatrix_ui_egui::icons::Icon;
 use mkmatrix_ui_egui::ribbon::{RibbonOverflow, TABS};
@@ -34,6 +34,26 @@ fn every_tab_fits_the_card_height() {
         let o = RibbonOverflow::get(&h.ctx);
         assert!(o.visible_height > 0.0, "{tab}: the card was laid out");
         assert!(o.content_height <= o.visible_height + 0.5, "{tab}: {} px of groups in {} px", o.content_height, o.visible_height);
+    }
+}
+
+#[test]
+fn no_column_of_check_boxes_runs_into_the_group_name() {
+    // A column of check boxes holds two: a third is drawn over the group's name under it (View ›
+    // Show's Matrix Heat Map once sat under Numbered Columns and Matrix Brackets).
+    for tab in TABS {
+        let h = app_at(1440.0, tab);
+        let mut columns: Vec<(f32, Vec<String>)> = Vec::new();
+        for node in h.get_all_by_role(egui::accesskit::Role::CheckBox) {
+            let (x, label) = (node.rect().left(), node.accesskit_node().label().unwrap_or_default());
+            match columns.iter_mut().find(|(left, _)| (left - x).abs() < 1.0) {
+                Some((_, labels)) => labels.push(label),
+                None => columns.push((x, vec![label])),
+            }
+        }
+        for (_, labels) in columns {
+            assert!(labels.len() <= 2, "{tab}: {} check boxes stacked in one column: {labels:?}", labels.len());
+        }
     }
 }
 
