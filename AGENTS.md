@@ -1,6 +1,6 @@
 # MK Matrix — instructions for agents
 
-MK Matrix is a spreadsheet of matrices, a Morrison Kühlsen project: a fork of GridCraft (`storytold/gridcraft`, the `upstream` remote) whose methodology is linear algebra. It keeps the cell grid and makes matrices first-class: named matrices, `=A*B` as a matrix product, `A'`, `inv(A)`, `A\b`, results that spill onto the grid. It runs natively on macOS, Windows, Linux and BSD, and on the web via WASM. Siblings in the house style: `../mksigma`, `../mkperth` (splash screen, brand).
+MK Matrix is a spreadsheet of matrices, a Morrison Kühlsen project: a fork of GridCraft (`storytold/gridcraft`, the `upstream` remote) whose methodology is linear algebra. It keeps the cell grid and makes matrices first-class: named matrices, `=A@B` as the matrix product (`*` stays elementwise, as in Excel), `A'`, `MX.INV(A)` and the `MX.` family, `A\b`, results that spill onto the grid. It runs natively on macOS, Windows, Linux and BSD, and on the web via WASM. Siblings in the house style: `../mksigma`, `../mkperth` (splash screen, brand).
 
 Standards and learnings shared across the crafting apps live in `../../craftrules` (checked out next to the craft apps, or `storytold/craftrules`). Read its `AGENTS.md` at the start of a session, follow its standards, and contribute reusable learnings back there. Never code: repos don't share code.
 

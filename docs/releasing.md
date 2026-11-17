@@ -158,12 +158,12 @@ the MSI, and zips a portable build.
   the separate silent lifecycle test verifies installation behavior. Normal full UI presents
   the shortcut choice and then completion; cancel/failure and files-in-use dialogs are support
   paths. To review on a maintainer branch, run **Packaging lint** with that branch selected
-  (or `gh workflow run packaging-lint.yml --repo storytold/gridcraft --ref BRANCH`). No release
+  (or `gh workflow run packaging-lint.yml --repo morrisonkuhlsen/mkmatrix --ref BRANCH`). No release
   environment, signing credentials or Rust build is required. Interactive checkbox behavior
   still needs a Windows desktop check; previews alone do not establish that behavior.
 - **Signing:** `packaging/windows/sign.ps1` uses `signtool` with SHA-256 and an RFC 3161
   timestamp, from a `.pfx` (`WINDOWS_CERTIFICATE*`) if present, otherwise **Azure Trusted
-  Signing** (`AZURE_*`, the storytold setup). With neither it warns and leaves files unsigned.
+  Signing** (`AZURE_*`). With neither it warns and leaves files unsigned.
 
 Locally on Windows: `dotnet tool install -g wix --version 5.0.2`, then
 `pwsh packaging/windows/package.ps1 -Arch x64`.
@@ -178,7 +178,7 @@ binaries need glibc ≥ 2.35. X11/Wayland/xkbcommon/Vulkan/EGL are loaded at run
 packages declare them (see `nfpm.yaml`).
 
 Each AppImage embeds update information
-(`gh-releases-zsync|storytold|mkmatrix|latest|mkmatrix-*-linux-<arch>.AppImage.zsync`), and the
+(`gh-releases-zsync|morrisonkuhlsen|mkmatrix|latest|mkmatrix-*-linux-<arch>.AppImage.zsync`), and the
 matching `.zsync` is published beside it, so AppImageUpdate and AppImageLauncher fetch only the
 changed blocks of the newest published release. appimagetool writes the `.zsync` when
 `zsyncmake` (the `zsync` package) is installed; without it the script warns and skips it.
@@ -226,20 +226,23 @@ shows a `::warning::`. Never store these as org- or repo-level Actions secrets (
 | `APPLE_ID` | Apple ID used by `notarytool` |
 | `APPLE_PASSWORD` | app-specific password for that Apple ID |
 | `APPLE_TEAM_ID` | `DJ6XS33FX8` |
-| `WINDOWS_CERTIFICATE`, `WINDOWS_CERTIFICATE_PASSWORD` | `.pfx` signing (unused by storytold; Azure is used) |
+| `WINDOWS_CERTIFICATE`, `WINDOWS_CERTIFICATE_PASSWORD` | `.pfx` signing |
 | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` | service principal for Azure Trusted Signing |
 | `AZURE_SIGNING_ENDPOINT` | `https://eus.codesigning.azure.net` |
 | `AZURE_SIGNING_ACCOUNT`, `AZURE_CERT_PROFILE` | `LearningMachinesInc`, `learningmachines` |
 
 `GITHUB_TOKEN` creates the release; only the final job gets `contents: write`.
 
+The identities in the table (Learning Machines) are upstream GridCraft's. MK Matrix has no
+signing identities of its own yet, which is why its releases ship unsigned.
+
 The exact commands (from craftrules `release/signing-setup.md`, steps 1–3), run by an org
-admin. Done for storytold/gridcraft on 2026-10-07; the `release-managers` team also has write
-access to the repo, which its ruleset bypass needs.
+admin (upstream GridCraft ran them for `storytold/gridcraft` on 2026-10-07). The release
+managers' team also needs write access to the repo, which its ruleset bypass needs.
 
 ```sh
-REPO=storytold/gridcraft
-RMTEAM_ID=19837241   # release-managers team; `gh api orgs/storytold/teams/release-managers --jq .id`
+REPO=morrisonkuhlsen/mkmatrix
+RMTEAM_ID=...        # the release managers' team: `gh api orgs/morrisonkuhlsen/teams/<team-slug> --jq .id`
 
 # 1a. release branch from the default branch head
 gh api repos/$REPO/git/ref/heads/release >/dev/null 2>&1 || \
@@ -261,7 +264,7 @@ cat > /tmp/ruleset.json <<JSON
 JSON
 gh api --method POST repos/$REPO/rulesets --input /tmp/ruleset.json >/dev/null 2>&1 || echo "ruleset exists"
 
-# 2. sync the twelve secrets into the release environment (run in ~/secrets/storytold/)
+# 2. sync the twelve secrets into the release environment (run in the folder holding the secret files)
 for s in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID KEYCHAIN_PASSWORD \
          AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET AZURE_SIGNING_ENDPOINT AZURE_SIGNING_ACCOUNT AZURE_CERT_PROFILE; do
   [ -f "$s.txt" ] && gh secret set "$s" --env release --repo "$REPO" < "$s.txt" && echo "  set $s" || echo "  MISSING $s.txt"

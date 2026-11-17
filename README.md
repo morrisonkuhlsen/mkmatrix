@@ -53,27 +53,77 @@ the browser.
   </tr>
 </table>
 
-## Where it is going
+## Matrices
 
-1. **Rebrand** (done): MK Matrix's name, mark and splash screen, in the Morrison Kühlsen house style.
-2. **Numerics**: a pure-Rust linear-algebra library (LU, QR, SVD, eigenvalues) under the functions.
-3. **Matrix syntax** (done): `A@B` is the matrix product, `A'` the transpose and `A\b` solves a
-   system; the `MX.` functions do the rest (`MX.INV`, `MX.DET`, `MX.EIG`, `MX.EIGVEC`, `MX.SVD`,
-   `MX.QR`, `MX.LU`, `MX.CHOL`, `MX.PINV`, `MX.RANK`, `MX.TRACE`, `MX.NORM`, `MX.COND`, `MX.POW`,
-   `MX.EYE`, `MX.SOLVE`, `MX.MUL`, `MX.T`). `*`, `/` and `^` stay entry by entry, as in Excel, so a
-   workbook from Excel computes the same here: `A*B` multiplies entry by entry and `A^-1` inverts
-   each entry. Where a formula applies them to matrices, the formula bar says so while it is typed
-   and names the matrix operation (`A@B`, `MX.INV(A)`).
-4. **Named matrices**: `A = B2:D4`, used by name in formulas, with results that spill onto the grid.
+Open the worked example with `--sample regression`: ordinary least squares as blocks on the
+sheet, `β = (X'X)⁻¹X'y` over the named matrices `X`, `y` and `beta`.
+
+<p align="center">
+  <img src="docs/images/regression.png" alt="The regression sample: the named matrices X and y in brackets, the blocks X'X, its inverse, X'y and beta spilled beside them, and beta selected with the Calculation by Hand pane writing each of its entries as a row of the inverse times X'y" width="900">
+</p>
+
+**Named matrices.** Name a block (Formulas › Define Name, or the matrix actions beside a selected
+block) and use it by name: `=X'@X`. The grid draws brackets around it with its name and shape
+(`X · 8×3`), and the Name Box shows where the active cell sits in it, `X(3,2)`. Every matrix
+result is a dynamic array that spills onto the grid and recalculates when its inputs change.
+
+**Operators.** Three operators are added to Excel's formula syntax:
+
+| Write | Meaning | Function form |
+|---|---|---|
+| `A'` | transpose | `MX.T(A)` |
+| `A@B` | matrix product | `MX.MUL(A, B)` |
+| `A\b` | solves `A·x = b`: exactly for a square `A`, by least squares otherwise | `MX.SOLVE(A, b)` |
+
+`*`, `/`, `+`, `-` and `^` keep Excel's meaning: they work **element by element**, so a workbook
+from Excel computes the same here. `A*B` is not the matrix product and `A^-1` is not the inverse;
+write `A@B` and `MX.INV(A)` (or `A\b` to solve without forming the inverse). Where a formula
+applies `*` or `^-1` to matrices, the formula bar says so while it is typed and names the matrix
+operation.
+
+**Functions.** The `MX.` family, listed under Formulas › Linear Algebra:
+
+| Function | Result |
+|---|---|
+| `MX.INV`, `MX.PINV` | inverse, Moore–Penrose pseudo-inverse |
+| `MX.DET`, `MX.TRACE`, `MX.RANK`, `MX.NORM`, `MX.COND` | determinant, trace, rank, norm (`"F"`, 1, 2, `"inf"`), condition number |
+| `MX.EIG`, `MX.EIGVEC` | eigenvalues (largest first), eigenvectors of a symmetric matrix |
+| `MX.SVD`, `MX.QR`, `MX.LU`, `MX.CHOL` | factorizations (`MX.SVD(A, "U")`, `MX.QR(A, "R")`, `MX.LU(A, "P")`…) |
+| `MX.EYE`, `MX.POW` | identity matrix, integer power of a square matrix |
+| `MX.T`, `MX.MUL`, `MX.SOLVE` | the operators above, as functions |
+
+The numerics are pure Rust (nalgebra), so the same results come out natively and in the browser.
+
+**Calculation by Hand** (View › Calculation by Hand) shows the steps that take a matrix formula's
+operands to its result, as a textbook writes them: products element by element, determinants by
+cofactors, inverses by Gauss–Jordan, LU and Cholesky factors, eigenvalues. Copy LaTeX puts the
+steps on the clipboard for a paper. With the pointer over a cell of a product `A@B`, the row of
+`A` and the column of `B` that make it light up and the sum is written out with its numbers
+(`X'(2,:)·y = 1·73 + 2·75 + … = 2915`). View › Matrix Heat Map shades each matrix by its values,
+so diagonals, bands, blocks and signs show at a glance.
+
+**In XLSX files** whatever Excel has an equivalent for is written as Excel's own function: `A'`
+and `MX.T` as `TRANSPOSE`, `A@B` and `MX.MUL` as `MMULT`, `MX.INV` as `MINVERSE`, `MX.DET` as
+`MDETERM`, `MX.EYE` as `MUNIT`. The rest (`A\b` and the other `MX.` functions) are saved as
+user-defined functions, which Excel cannot calculate.
 
 Who it is for: statistics and econometrics (regression, covariance, PCA), teaching linear algebra,
 engineering systems (`Ax = b`, Markov chains, input–output models) and portfolio work.
+
+## Where it is going
+
+- Matrix actions as commands (control channel, CLI, MCP) and in the right-click menu (#31).
+- More `MX.` functions: `KRON`, `DIAG`, null space and orthonormal basis, `EXPM`, eigenvectors of
+  non-symmetric matrices, full SVD and QR, a warning for ill-conditioned systems (#34).
+- Calculation by Hand with exact fractions, and with QR, SVD and RREF (#32, #33).
+- Keeping `A'`, `A@B` and `A\b` through an XLSX round trip instead of reopening them as
+  function calls (#37).
 
 ## Quick start
 
 ```sh
 cargo run --release -p mkmatrix                              # desktop app
-cargo run --release -p mkmatrix -- --sample sales            # open a sample (sales, budget, grades)
+cargo run --release -p mkmatrix -- --sample sales            # open a sample (regression, sales, budget, grades)
 cargo run --release -p mkmatrix -- book.xlsx                 # open a workbook
 cargo run --release -p mkmatrix -- --sample sales --control 7979   # + JSON control channel
 cargo xtask ci                                                 # fmt, clippy, tests, assets, layering, wasm
