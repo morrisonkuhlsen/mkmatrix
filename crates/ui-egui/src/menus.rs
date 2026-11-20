@@ -69,6 +69,7 @@ pub fn tree() -> Vec<(&'static str, Vec<Entry>)> {
                 ("Headings", "view.headings"),
                 ("Numbered Columns", "view.numberedColumns"),
                 ("Matrix Brackets", "view.matrixBrackets"),
+                ("Matrix Heat Map", "view.matrixHeatMap"),
                 ("Calculation by Hand", "view.byHand"),
                 ("-", ""),
                 ("Zoom…", "dialog:zoom"),

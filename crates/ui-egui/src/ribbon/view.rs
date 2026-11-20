@@ -65,6 +65,11 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
         if ui.checkbox(&mut brackets, lang.tr("Matrix Brackets")).on_hover_text(hint).changed() {
             act(app, "view.matrixBrackets", json!({"on": brackets}));
         }
+        let mut heat = app.ui.matrix_heat_map;
+        let hint = lang.tr("Shade each matrix's numbers by their values: positive warm, negative cool, the largest deepest");
+        if ui.checkbox(&mut heat, lang.tr("Matrix Heat Map")).on_hover_text(hint).changed() {
+            act(app, "view.matrixHeatMap", json!({"on": heat}));
+        }
     });
     // A fourth: the formula bar floating over the sheet, above the active cell.
     ui.add_space(6.0);

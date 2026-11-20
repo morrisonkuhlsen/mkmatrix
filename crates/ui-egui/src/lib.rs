@@ -26,6 +26,7 @@ pub mod fonts;
 pub mod formula_bar;
 mod formula_locale;
 pub mod grid;
+pub mod heat_map;
 pub mod i18n;
 pub mod icons;
 pub mod keymap;
@@ -39,6 +40,7 @@ pub mod panes;
 pub mod paper_view;
 pub mod pivot_pane;
 pub mod printing;
+pub mod product_focus;
 pub mod ribbon;
 pub mod selection_glide;
 pub mod shapes;
@@ -124,6 +126,8 @@ pub struct UiState {
     pub density: Density,
     /// Square brackets around each named matrix on the sheet (View › Matrix Brackets).
     pub matrix_brackets: bool,
+    /// Each matrix's numbers shaded by their values (View › Matrix Heat Map).
+    pub matrix_heat_map: bool,
     /// The formula bar floats over the sheet, just above the active cell, instead of sitting under
     /// the ribbon (View › Floating Formula Bar); the Name Box moves to the sheet tab bar. F2 brings
     /// it up to edit in (it goes when the edit ends), Ctrl pressed twice shows or hides it, Esc
@@ -233,6 +237,7 @@ impl Default for UiState {
             numbered_columns: false,
             density: Density::Normal,
             matrix_brackets: true,
+            matrix_heat_map: false,
             floating_formula_bar: false,
             floating_bar_at: None,
             floating_bar_at_sheets: Default::default(),

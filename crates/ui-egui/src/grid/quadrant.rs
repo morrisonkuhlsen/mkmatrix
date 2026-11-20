@@ -81,6 +81,7 @@ pub(crate) fn paint_quadrant(
     cf: &mut CfCache,
     t: &Tokens,
     pivot: &[PivotButton],
+    heat: &crate::heat_map::HeatMap,
 ) {
     let z = geo.z;
     // PivotTable items with a ⊕/⊖ before their label: collapsed or not.
@@ -143,7 +144,14 @@ pub(crate) fn paint_quadrant(
             None => (geo.cell_rect(sh, c), c),
         };
         let (lk, cfl) = look(wb, si, sh, anchor, cf);
-        let lk = for_sheet(lk, t);
+        let mut lk = for_sheet(lk, t);
+        // View › Matrix Heat Map: a matrix's numbers take their shade over any fill of their own.
+        if !heat.is_empty()
+            && let Some(f) = heat.fill(anchor, sh.value_ref(anchor), t)
+        {
+            lk.fill = Some(f);
+            lk.table_fill = false;
+        }
         if let Some(f) = lk.fill {
             p.rect_filled(rect.expand(0.0), 0.0, f);
         } else if in_merge(c).is_some() {

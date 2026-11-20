@@ -116,7 +116,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
     let mut confirm = false;
     let width = match d.name.as_str() {
         "formatCells" => 660.0,
-        "about" => 660.0,
+        "about" => 680.0,
         "insertFunction" => 780.0,
         "commandSearch" => 640.0,
         "find" => 620.0,
@@ -156,8 +156,15 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         "advancedFilter" => window.default_height(0.0),
         _ => window,
     };
+    // egui fills the focused window's title bar with the open-widget colour; a dialog's title sits
+    // on the dialog's own colour instead. Only while the window is drawn: open combo boxes and
+    // menu buttons elsewhere keep theirs.
+    let open_fill = [egui::Theme::Light, egui::Theme::Dark].map(|th| (th, ctx.style_of(th).visuals.widgets.open.weak_bg_fill));
+    ctx.all_styles_mut(|s| s.visuals.widgets.open.weak_bg_fill = s.visuals.window_fill);
     window.show(ctx, |ui| {
         ui.set_min_width(width - 20.0);
+        // Never smaller than it has been: a section with less in it keeps the window's size.
+        ui.set_min_size(d.size);
         match d.name.as_str() {
             "formatCells" => format_cells(app, ui, &mut d, &mut confirm),
             "dataValidation" => data_validation_form(ui, &mut d, &mut confirm, &mut open),
@@ -348,7 +355,14 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
             }
             _ => form(ui, &mut d, &mut confirm, &mut open),
         }
+        // egui's first frame of a window only measures it; the size it settles on comes after.
+        if !ui.is_sizing_pass() {
+            d.size = d.size.max(ui.min_rect().size());
+        }
     });
+    for (th, fill) in open_fill {
+        ctx.style_mut_of(th, |s| s.visuals.widgets.open.weak_bg_fill = fill);
+    }
     // Hyperlinks inside dialogs (About ▸ Contributors) open through the host's `open_url`, since
     // the native shell has no browser integration of its own.
     if let Some(open_url) = &app.services.open_url {

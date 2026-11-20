@@ -158,27 +158,75 @@ fn paint(painter: &egui::Painter, ctx: &egui::Context, rect: Rect, progress: f32
     );
 }
 
-/// MK Matrix's mark, drawn in code: a matrix's brackets around a 3×3 of cells, its diagonal lit.
+/// MK Matrix's mark, drawn in code: [aᵢⱼ], a matrix as mathematics writes one, square brackets
+/// around its general element a with the subscripts i and j. The same geometry as
+/// `assets/app-icon/mkmatrix.svg` (a 512 grid, scaled 1.25× about its centre; the letters
+/// slanted 12° as italics); under 32 points it is `mkmatrix-small.svg`'s, the a alone, since the
+/// subscripts can't be read that small.
 pub fn mark(painter: &egui::Painter, rect: Rect, color: Color32) {
     let s = rect.width().min(rect.height());
     let r = Rect::from_center_size(rect.center(), vec2(s, s));
-    let stroke = Stroke::new((s * 0.075).max(1.0), color);
-    let serif = s * 0.16;
-    for (x, dir) in [(r.left() + s * 0.06, 1.0), (r.right() - s * 0.06, -1.0)] {
-        let (top, bottom) = (r.top() + s * 0.06, r.bottom() - s * 0.06);
-        painter.line_segment([pos2(x, top), pos2(x, bottom)], stroke);
-        painter.line_segment([pos2(x, top), pos2(x + dir * serif, top)], stroke);
-        painter.line_segment([pos2(x, bottom), pos2(x + dir * serif, bottom)], stroke);
-    }
-    let cell = s * 0.17;
-    let gap = s * 0.07;
-    let start = r.center() - vec2(1.5 * cell + gap, 1.5 * cell + gap);
-    for row in 0..3 {
-        for col in 0..3 {
-            let min = start + vec2(col as f32 * (cell + gap), row as f32 * (cell + gap));
-            let fill = if row == col { color } else { color.gamma_multiply(0.4) };
-            painter.rect_filled(Rect::from_min_size(min, vec2(cell, cell)), CornerRadius::same((cell * 0.2) as u8), fill);
+    let small = s < 32.0;
+    let unit = s / 512.0 * 1.25;
+    // A point of the 512 grid on screen; `slant` is the baseline the letters lean about.
+    let at = |x: f32, y: f32, slant: Option<f32>| {
+        let x = slant.map_or(x, |base| x - (y - base) * 12f32.to_radians().tan());
+        pos2(r.center().x + (x - 256.0) * unit, r.center().y + (y - 256.0) * unit)
+    };
+    // The brackets, square-ended.
+    let bracket = if small { 30.0 } else { 26.0 } * unit;
+    for pts in [[(152.0, 112.0), (108.0, 112.0), (108.0, 400.0), (152.0, 400.0)], [(360.0, 112.0), (404.0, 112.0), (404.0, 400.0), (360.0, 400.0)]] {
+        let mut line: Vec<egui::Pos2> = pts.iter().map(|&(x, y)| at(x, y, None)).collect();
+        // Square caps: the serifs run on by half the stroke.
+        let out = |a: egui::Pos2, b: egui::Pos2| a + (a - b).normalized() * bracket / 2.0;
+        if let (Some(&a), Some(&b)) = (line.first(), line.get(1)) {
+            line[0] = out(a, b);
         }
+        let n = line.len();
+        if let (Some(&a), Some(&b)) = (line.last(), line.get(n.wrapping_sub(2))) {
+            line[n - 1] = out(a, b);
+        }
+        painter.add(egui::Shape::line(line, Stroke::new(bracket, color)));
+    }
+    // The letters: an ellipse for a's bowl, strokes with round ends for its stem and the
+    // subscripts, dots over i and j.
+    let base = if small { 330.0 } else { 316.0 };
+    let ellipse = |cx: f32, cy: f32, rx: f32, ry: f32, w: f32| {
+        let pts: Vec<egui::Pos2> = (0..48)
+            .map(|k| {
+                let t = k as f32 / 48.0 * std::f32::consts::TAU;
+                at(cx + rx * t.cos(), cy + ry * t.sin(), Some(base))
+            })
+            .collect();
+        painter.add(egui::Shape::closed_line(pts, Stroke::new(w * unit, color)));
+    };
+    // Down a stem from `top` to `bend`, then a quarter turn through `corner` to `end`.
+    let hook = |top: (f32, f32), bend: (f32, f32), corner: (f32, f32), end: (f32, f32), w: f32| {
+        let mut pts = vec![at(top.0, top.1, Some(base))];
+        for k in 0..=10 {
+            let t = k as f32 / 10.0;
+            let u = 1.0 - t;
+            let x = u * u * bend.0 + 2.0 * u * t * corner.0 + t * t * end.0;
+            let y = u * u * bend.1 + 2.0 * u * t * corner.1 + t * t * end.1;
+            pts.push(at(x, y, Some(base)));
+        }
+        let w = w * unit;
+        for end in [pts.first(), pts.last()].into_iter().flatten() {
+            painter.circle_filled(*end, w / 2.0, color);
+        }
+        painter.add(egui::Shape::line(pts, Stroke::new(w, color)));
+    };
+    if small {
+        ellipse(236.0, 262.0, 54.0, 68.0, 34.0);
+        hook((296.0, 190.0), (296.0, 302.0), (296.0, 330.0), (322.0, 330.0), 34.0);
+        return;
+    }
+    ellipse(208.0, 266.0, 42.0, 52.0, 24.0);
+    hook((254.0, 210.0), (254.0, 298.0), (254.0, 318.0), (274.0, 318.0), 24.0);
+    hook((300.0, 300.0), (300.0, 340.0), (300.0, 352.0), (311.0, 352.0), 15.0);
+    hook((334.0, 300.0), (334.0, 360.0), (334.0, 384.0), (312.0, 384.0), 15.0);
+    for x in [300.0, 334.0] {
+        painter.circle_filled(at(x, 276.0, Some(base)), 9.0 * unit, color);
     }
 }
 

@@ -75,6 +75,9 @@ pub struct Dialog {
     focus_initialized: bool,
     /// The formula box that takes references clicked or dragged on the grid (New Formatting Rule).
     pick: Option<RefPick>,
+    /// The largest the dialog's content has been since it opened: it never shrinks below it, so
+    /// moving between its sections (Find ▸ Replace and back) doesn't resize the window.
+    size: egui::Vec2,
 }
 
 /// A formula box in point mode, as in Excel: a click on the grid writes the cell's absolute
@@ -186,6 +189,7 @@ impl Dialog {
             back: None,
             focus_initialized: false,
             pick: None,
+            size: egui::Vec2::ZERO,
         }
     }
 
@@ -207,6 +211,7 @@ impl Dialog {
             back: None,
             focus_initialized: false,
             pick: None,
+            size: egui::Vec2::ZERO,
         }
     }
 

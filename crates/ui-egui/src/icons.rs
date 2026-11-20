@@ -100,6 +100,7 @@ pub enum Icon {
     Subtotal,
     Lock,
     Spell,
+    HeatMap,
     Freeze,
     Zoom,
     Gridlines,
@@ -238,6 +239,7 @@ impl Icon {
         Icon::Subtotal,
         Icon::Lock,
         Icon::Spell,
+        Icon::HeatMap,
         Icon::Freeze,
         Icon::Zoom,
         Icon::Gridlines,
@@ -874,6 +876,14 @@ fn paint_with(p: &Painter, rect: Rect, icon: Icon, c: Color32, pal: &Palette) {
             g.stroke(&[(5.0, 5.5), (5.0, 7.5)], c);
             g.stroke(&[(11.0, 5.5), (11.0, 7.5)], c);
             g.block(7.25, 10.0, 8.75, 12.5, a);
+        }
+        Icon::HeatMap => {
+            // A matrix's cells shaded by their values, deepest in the accent.
+            for (i, alpha) in [0.15, 0.55, 1.0, 0.35, 0.8, 0.2, 1.0, 0.45, 0.65].into_iter().enumerate() {
+                let (x, y) = (1.5 + (i % 3) as f32 * 4.33, 2.5 + (i / 3) as f32 * 3.67);
+                g.block(x, y, x + 4.33, y + 3.67, a.gamma_multiply(alpha));
+            }
+            grid(&g, c, c);
         }
         Icon::Spell => {
             g.text(7.5, 5.5, "abc", 7.5, c, false, false);

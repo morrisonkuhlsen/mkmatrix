@@ -137,8 +137,20 @@ fn contents(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens, font: &FontId, ro
     let mut inner = field.shrink2(vec2(6.0, 3.0));
     if let Some(v) = &verdict {
         let (text, color) = match v {
-            crate::shapes::Verdict::Fits((r, c)) => (format!("→ {r}×{c}"), t.accent),
+            // The operands' shapes first, `3×8 @ 8×1 → 3×1`; where the result can't land, why.
+            crate::shapes::Verdict::Fits((r, c)) => {
+                let ops = app.editing_operands().map(|o| format!("{o} ")).unwrap_or_default();
+                match app.editing_blocked((*r, *c)) {
+                    Some(at) => (format!("{ops}→ {r}×{c} · {}", app.ui.language.tr("blocked by {cell}").replace("{cell}", &at.a1())), t.danger),
+                    None => (format!("{ops}→ {r}×{c}"), t.accent),
+                }
+            }
             crate::shapes::Verdict::Mismatch(why) => (why.clone(), t.danger),
+        };
+        // An entrywise `*` or `^-1` where the matrix operation may be meant, after the shape (#30).
+        let (text, color) = match app.editing_caution() {
+            Some(caution) => (format!("{text} · {caution}"), t.danger),
+            None => (text, color),
         };
         let galley = ui.painter().layout_no_wrap(text, theme::ui_font(12.0), color);
         let w = galley.size().x.min(field.width() * 0.6);

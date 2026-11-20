@@ -1,5 +1,5 @@
 //! The pieces dialogs are built from, in Format Cells' language: a navigation rail of sections
-//! (icon and name, the chosen one tinted with a bar of the accent), small muted headings, forms
+//! (icon and name, the chosen one marked by a bar of the accent), small muted headings, forms
 //! of labelled rows on a fixed grid, segmented controls, lists of flat rows, and a footer under a
 //! rule with the default button in the accent.
 
@@ -15,14 +15,14 @@ pub(crate) const LABEL_W: f32 = 112.0;
 /// A list row's height.
 pub(crate) const ROW_H: f32 = 28.0;
 
-/// A navigation row: icon and name, the selected one tinted with a bar of the accent. As wide as
+/// A navigation row: icon and name, the selected one marked by a bar of the accent, on no fill. As wide as
 /// the column it is in; `count` (a number of hits, say) sits muted at its right end.
 pub(crate) fn nav_item(ui: &mut egui::Ui, icon: Icon, label: &str, selected: bool, count: Option<usize>, t: &Tokens) -> egui::Response {
     let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), egui::Sense::click());
     resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, label));
     let p = ui.painter();
     if selected {
-        p.rect_filled(r, 0.0, t.accent_soft);
+        // Minimal: the accent bar and the accent name mark the section, on no fill.
         p.rect_filled(Rect::from_min_size(r.min, vec2(3.0, r.height())), 0.0, t.accent);
     } else if resp.hovered() {
         p.rect_filled(r, 0.0, t.hover);
@@ -104,13 +104,8 @@ pub(crate) fn segment(ui: &mut egui::Ui, text: &str, on: bool, width: f32, a11y:
     p.rect_filled(
         r,
         0.0,
-        if on {
-            t.accent_soft
-        } else if resp.hovered() {
-            t.hover
-        } else {
-            t.input_bg
-        },
+        // The chosen one is marked by its accent outline and name, on the field's own fill.
+        if resp.hovered() && !on { t.hover } else { t.input_bg },
     );
     p.rect_stroke(r, 0.0, egui::Stroke::new(1.0, if on { t.accent } else { t.input_border }), egui::StrokeKind::Inside);
     p.text(r.center(), egui::Align2::CENTER_CENTER, text, theme::ui_font(12.5), if on { t.accent } else { t.text });
@@ -149,14 +144,13 @@ pub(crate) fn search_field(ui: &mut egui::Ui, text: &mut String, hint: &str, nam
 }
 
 /// A flat list row: `primary` text, then `secondary` muted beside it (clipped), the chosen row
-/// tinted with the accent. Screen readers read it by `primary`.
+/// marked by a bar and its name in the accent, on no fill. Screen readers read it by `primary`.
 pub(crate) fn list_row(ui: &mut egui::Ui, primary: &str, secondary: Option<&str>, selected: bool, primary_w: f32) -> egui::Response {
     let t = Tokens::get(ui.ctx());
     let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), egui::Sense::click());
     resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, primary));
     let p = ui.painter();
     if selected {
-        p.rect_filled(r, 0.0, t.accent_soft);
         p.rect_filled(Rect::from_min_size(r.min, vec2(2.0, r.height())), 0.0, t.accent);
     } else if resp.hovered() {
         p.rect_filled(r, 0.0, t.hover);
@@ -179,9 +173,8 @@ pub(crate) fn option_row(ui: &mut egui::Ui, text: &str, on: bool, width: f32) ->
     let (r, resp) = ui.allocate_exact_size(vec2(width, 30.0), egui::Sense::click());
     resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::RadioButton, true, on, text));
     let p = ui.painter();
-    if on {
-        p.rect_filled(r, 0.0, t.accent_soft);
-    } else if resp.hovered() {
+    // The filled mark says which is chosen; the row itself takes no tint.
+    if resp.hovered() && !on {
         p.rect_filled(r, 0.0, t.hover);
     }
     let c = pos2(r.left() + 16.0, r.center().y);
