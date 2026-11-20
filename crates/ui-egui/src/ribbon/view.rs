@@ -65,13 +65,9 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
         if ui.checkbox(&mut brackets, lang.tr("Matrix Brackets")).on_hover_text(hint).changed() {
             act(app, "view.matrixBrackets", json!({"on": brackets}));
         }
-        let mut heat = app.ui.matrix_heat_map;
-        let hint = lang.tr("Shade each matrix's numbers by their values: positive warm, negative cool, the largest deepest");
-        if ui.checkbox(&mut heat, lang.tr("Matrix Heat Map")).on_hover_text(hint).changed() {
-            act(app, "view.matrixHeatMap", json!({"on": heat}));
-        }
     });
-    // A fourth: the formula bar floating over the sheet, above the active cell.
+    // A fourth: the formula bar floating over the sheet, above the active cell, and the matrix
+    // heat map (two rows at most, like every column here: a third runs into the group's name).
     ui.add_space(6.0);
     controls::check_column(ui, |ui| {
         let mut floating = app.ui.floating_formula_bar;
@@ -79,6 +75,11 @@ pub(super) fn view(app: &mut SheetApp, ui: &mut Ui) {
             lang.tr("Show the formula bar just above the active cell (F2 to edit in it, or Ctrl twice), with the Name Box in the sheet tab bar");
         if ui.checkbox(&mut floating, lang.tr("Floating Formula Bar")).on_hover_text(hint).changed() {
             act(app, "view.floatingFormulaBar", json!({"on": floating}));
+        }
+        let mut heat = app.ui.matrix_heat_map;
+        let hint = lang.tr("Shade each matrix's numbers by their values: positive warm, negative cool, the largest deepest");
+        if ui.checkbox(&mut heat, lang.tr("Matrix Heat Map")).on_hover_text(hint).changed() {
+            act(app, "view.matrixHeatMap", json!({"on": heat}));
         }
     });
     sep(ui, "Show");
