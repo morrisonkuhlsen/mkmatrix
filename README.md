@@ -12,7 +12,7 @@
 MK Matrix is a spreadsheet whose methodology is linear algebra. A spreadsheet is good at showing
 and touching numbers and poor at matrix mathematics; MATLAB, R, Julia and NumPy are the reverse.
 MK Matrix keeps the cell grid and makes matrices first-class, so a regression is
-`β = (X'X)⁻¹X'y` over blocks you can see, and every change recalculates in place.
+`β = (X'X)⁻¹X'y` (`=MX.INV(X'@X)@X'@y`) over blocks you can see, and every change recalculates in place.
 
 It is a fork of [GridCraft](https://github.com/storytold/gridcraft), a clean-room, Rust-native
 spreadsheet, and inherits its engine, file formats (XLSX in and out), charts, command system,
@@ -56,8 +56,11 @@ the browser.
 
 1. **Rebrand** (done): MK Matrix's name, mark and splash screen, in the Morrison Kühlsen house style.
 2. **Numerics**: a pure-Rust linear-algebra library (LU, QR, SVD, eigenvalues) under the functions.
-3. **Matrix syntax**: `*` as the matrix product between matrices, `A'` for the transpose, `A\b` to
-   solve a system, and `inv`, `det`, `eig`, `svd`, `solve`.
+3. **Matrix syntax**: `A@B` for the matrix product, `A'` for the transpose, `A\b` to solve a
+   system, and the `MX.` functions (`MX.INV`, `MX.DET`, `MX.EIG`, `MX.SVD`, `MX.SOLVE`, …). `*`,
+   `/` and `^` stay entry by entry, as in every spreadsheet, so workbooks from elsewhere keep their
+   meaning; the formula bar points out `X*Y` and `X^-1` on a matrix and suggests `X@Y` and
+   `MX.INV(X)`.
 4. **Named matrices**: `A = B2:D4`, used by name in formulas, with results that spill onto the grid.
 
 Who it is for: statistics and econometrics (regression, covariance, PCA), teaching linear algebra,

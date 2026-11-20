@@ -232,7 +232,10 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     // its shape; when the shapes don't fit, the cell typed in, dashed in the danger colour and
     // tagged with why.
     let preview = match app.editing_shape() {
-        Some(crate::shapes::Verdict::Fits((rows, cols))) if rows.saturating_mul(cols) > 1 => {
+        Some(v @ (crate::shapes::Verdict::Fits(_) | crate::shapes::Verdict::Hint(..)))
+            if v.shape().is_some_and(|(rows, cols)| rows.saturating_mul(cols) > 1) =>
+        {
+            let (rows, cols) = v.shape().unwrap_or((1, 1));
             let at = sel.active;
             let end = mkmatrix_engine::core::CellRef::new(
                 at.row.saturating_add(rows - 1).min(mkmatrix_engine::core::MAX_ROWS - 1),

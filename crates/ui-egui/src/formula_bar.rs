@@ -138,6 +138,7 @@ fn contents(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens, font: &FontId, ro
     if let Some(v) = &verdict {
         let (text, color) = match v {
             crate::shapes::Verdict::Fits((r, c)) => (format!("→ {r}×{c}"), t.accent),
+            crate::shapes::Verdict::Hint((r, c), why) => (format!("→ {r}×{c} · {why}"), t.text),
             crate::shapes::Verdict::Mismatch(why) => (why.clone(), t.danger),
         };
         let galley = ui.painter().layout_no_wrap(text, theme::ui_font(12.0), color);

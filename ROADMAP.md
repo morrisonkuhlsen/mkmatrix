@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~25 points of "ready for real work" and ~160–240 h away
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-06 · **Change:** release (0.15.0) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-20 · **Change:** minor (progress log: hints for `*` and `^-1` on matrices, #30) · **Target:** Microsoft Excel (Microsoft 365)
 
 MK Matrix aims at full Microsoft Excel parity, and at being better in places: faster, open (XLSX
 is the native format), fully scriptable by agents (MCP, control channel, CLI), and on the web.
@@ -135,6 +135,7 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | What landed |
 |---|---|
+| 2026-11-20 | `*` and `^-1` on a named matrix get a hint in the formula bar: `X*Y` multiplies entry by entry and points to `X@Y`, `X^-1` takes reciprocals and points to `MX.INV(X)`; a `*` whose shapes fit only as a matrix product says to use `@`. The README describes the `@`/`MX.` syntax that exists (#30) |
 | 2026-11-06 | 0.15.0: a quieter, single-surface look (gridlines a shade off the sheet, headings and every bar on the sheet's colour, the tabs in the title bar in compact density); dark mode for charts, tables and data bars; matrix brackets with shape tags and cited matrices in reference colours; changed values light up after a recalculation; Format Chart Area and the chart menus in the house style; circular references through a spill area detected; status-bar statistics over styled spills; Alt, Q opens Search Commands |
 | 2026-11-06 | After a recalculation the cells whose values it changed light in the accent and fade (0.7 s): an edit's effect shows at a glance. Not on opening a file, after a full recalculation, past 500 cells, or with View › Animations off |
 | 2026-11-06 | Compact and Minimal density put the ribbon's tabs in the title bar, between the quick-access controls and the ones on the right, with the title centred in the room left: the sheet starts 27 px higher in Compact (from 144 to 117 at 1440×900). A window too narrow for them keeps the tabs in the ribbon; Normal density is unchanged |
@@ -254,6 +255,7 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-20 | minor | Progress log: hints for `*` and `^-1` on matrices; README describes the `@`/`MX.` syntax (#30) |
 | 2026-11-03 | minor | Progress log: 0.14.0 (faster big workbooks, pt-BR formulas, PivotTable Fields pane, floating formula bar, release workflow on the standard macOS runner) |
 | 2026-10-29 | minor | Progress log: 0.13.0 (scrub and sensitivity, AutoFilter menu, terracotta icon, movable floating formula bar) |
 | 2026-10-29 | minor | Progress log: the SQL function |

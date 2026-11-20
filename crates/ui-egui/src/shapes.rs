@@ -1,7 +1,9 @@
 //! The shapes of a formula being typed, as MK Matrix reads them: each range, named matrix and array
 //! a rows×columns block, carried through `'`, `@`, `\`, elementwise operators and the `MX.`
 //! functions, so the formula bar can say what the result will be (`→ 3×1`) or why the dimensions
-//! don't fit (`X@y: 8×3 @ 8×1, 3 vs 8`) before Enter.
+//! don't fit (`X@y: 8×3 @ 8×1, 3 vs 8`) before Enter. It also says when an operator on a matrix
+//! likely means something else: `*` and `^-1` work entry by entry, as in any spreadsheet, so
+//! `X*Y` and `X^-1` get a hint pointing to `X@Y` and `MX.INV(X)`.
 
 use mkmatrix_engine::formula::{BinOp, Expr, UnOp};
 use mkmatrix_engine::model::Workbook;
@@ -11,11 +13,23 @@ use crate::i18n::Language;
 /// A block's rows and columns.
 pub type Shape = (u32, u32);
 
-/// What the shapes say of a formula: its result's shape, a mismatch to explain, or nothing known.
+/// What the shapes say of a formula: its result's shape, its shape with a hint that an operator
+/// likely means something else, a mismatch to explain, or nothing known.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Verdict {
     Fits(Shape),
+    Hint(Shape, String),
     Mismatch(String),
+}
+
+impl Verdict {
+    /// The result's shape when the formula fits, hinted or not.
+    pub fn shape(&self) -> Option<Shape> {
+        match self {
+            Verdict::Fits(s) | Verdict::Hint(s, _) => Some(*s),
+            Verdict::Mismatch(_) => None,
+        }
+    }
 }
 
 /// The verdict for formula text (with its `=`) on sheet `si`, a mismatch worded in `lang`; `None`
@@ -27,8 +41,12 @@ pub fn of_formula(text: &str, wb: &Workbook, si: usize, lang: Language) -> Optio
     let matrices = crate::matrices::on_sheet(wb, si);
     let mut depth = 0;
     match shape(&expr, &matrices, &mut depth) {
-        Ok(Some(s)) if s != (1, 1) || has_matrix(&expr) => Some(Verdict::Fits(s)),
-        Ok(_) => None,
+        Ok(Some(s)) => match hint(&expr, &matrices, lang) {
+            Some(h) => Some(Verdict::Hint(s, h)),
+            None if s != (1, 1) || has_matrix(&expr) => Some(Verdict::Fits(s)),
+            None => None,
+        },
+        Ok(None) => None,
         Err(why) => Some(Verdict::Mismatch(why.text(lang))),
     }
 }
@@ -36,6 +54,65 @@ pub fn of_formula(text: &str, wb: &Workbook, si: usize, lang: Language) -> Optio
 fn has_matrix(e: &Expr) -> bool {
     let mut found = false;
     e.walk(&mut |x| found |= matches!(x, Expr::Binary(BinOp::MatMul | BinOp::Solve, ..) | Expr::Unary(UnOp::Transpose, _)));
+    found
+}
+
+/// Whether `e` reads as a matrix in MK Matrix's own terms: a named matrix, a transpose, a
+/// product, a solve or an `MX.` function. A plain range doesn't count: `B2:C3*D2:E3` entry by entry
+/// is ordinary spreadsheet work.
+fn is_matrix(e: &Expr, matrices: &[(String, mkmatrix_engine::core::RangeRef)]) -> bool {
+    match e {
+        Expr::Name(n) => matrices.iter().any(|(m, _)| mkmatrix_engine::formula::same_name(m, n)),
+        Expr::Paren(x) => is_matrix(x, matrices),
+        Expr::Unary(UnOp::Transpose, _) | Expr::Binary(BinOp::MatMul | BinOp::Solve, ..) => true,
+        Expr::Call(name, _) => name.starts_with("MX."),
+        _ => false,
+    }
+}
+
+/// `-1`, written either way the parser may read it.
+fn is_minus_one(e: &Expr) -> bool {
+    match e {
+        Expr::Number(n) => *n == -1.0,
+        Expr::Unary(UnOp::Neg, x) => matches!(x.as_ref(), Expr::Number(n) if *n == 1.0),
+        Expr::Paren(x) => is_minus_one(x),
+        _ => false,
+    }
+}
+
+/// The first operator in `e` that, applied to a matrix, likely means something else, worded in
+/// `lang`: `X^-1` (each entry's reciprocal, not the inverse) and `X*Y` between two blocks (entry by
+/// entry, not the matrix product).
+fn hint(e: &Expr, matrices: &[(String, mkmatrix_engine::core::RangeRef)], lang: Language) -> Option<String> {
+    let mut found = None;
+    e.walk(&mut |x| {
+        if found.is_some() {
+            return;
+        }
+        let mut depth = 0;
+        let known = |y: &Expr, depth: &mut usize| shape(y, matrices, depth).ok().flatten().filter(|s| *s != (1, 1));
+        match x {
+            Expr::Binary(BinOp::Pow, a, b) if is_minus_one(b) && is_matrix(a, matrices) && known(a, &mut depth).is_some() => {
+                let a = mkmatrix_engine::formula::print(if let Expr::Paren(inner) = a.as_ref() { inner } else { a });
+                found = Some(
+                    lang.tr("{what} takes each entry's reciprocal; the inverse is {fix}")
+                        .replace("{what}", &mkmatrix_engine::formula::print(x))
+                        .replace("{fix}", &format!("MX.INV({a})")),
+                );
+            }
+            Expr::Binary(BinOp::Mul, a, b)
+                if (is_matrix(a, matrices) || is_matrix(b, matrices)) && known(a, &mut depth).is_some() && known(b, &mut depth).is_some() =>
+            {
+                let fix = format!("{}@{}", mkmatrix_engine::formula::print(a), mkmatrix_engine::formula::print(b));
+                found = Some(
+                    lang.tr("{what} multiplies entry by entry; the matrix product is {fix}")
+                        .replace("{what}", &mkmatrix_engine::formula::print(x))
+                        .replace("{fix}", &fix),
+                );
+            }
+            _ => {}
+        }
+    });
     found
 }
 
@@ -51,6 +128,8 @@ enum Why {
     Sizes { what: String, a: Shape, b: Shape },
     /// `what` needs a square matrix.
     NotSquare { what: String, s: Shape },
+    /// `what`: `a*b` doesn't fit entry by entry, but `a@b` would.
+    UseMatMul { what: String, a: Shape, b: Shape },
 }
 
 impl Why {
@@ -65,6 +144,9 @@ impl Why {
                 .replace("{n}", &n.to_string())
                 .replace("{m}", &m.to_string()),
             Why::Sizes { what, a, b } => lang.tr("{what}: {a} vs {b}").replace("{what}", what).replace("{a}", &fmt(*a)).replace("{b}", &fmt(*b)),
+            Why::UseMatMul { what, a, b } => {
+                lang.tr("{what}: {a} vs {b}; the matrix product is @").replace("{what}", what).replace("{a}", &fmt(*a)).replace("{b}", &fmt(*b))
+            }
             Why::NotSquare { what, s } => lang.tr("{what}: {shape} isn't square").replace("{what}", what).replace("{shape}", &fmt(*s)),
         }
     }
@@ -97,12 +179,14 @@ fn shape(e: &Expr, matrices: &[(String, mkmatrix_engine::core::RangeRef)], depth
                 if *op == BinOp::MatMul { ("@", x.1 == y.0, (x.0, y.1), (x.1, y.0)) } else { ("\\", x.0 == y.0, (x.1, y.1), (x.0, y.0)) };
             if ok { Ok(Some(out)) } else { Err(Why::Inner { what: mkmatrix_engine::formula::print(e), a: x, op: sym, b: y, n: inner.0, m: inner.1 }) }
         }
-        Expr::Binary(BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Pow, a, b) => {
+        Expr::Binary(op @ (BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Pow), a, b) => {
             let (Some(x), Some(y)) = (shape(a, matrices, depth)?, shape(b, matrices, depth)?) else { return Ok(None) };
             if x == y || y == (1, 1) {
                 Ok(Some(x))
             } else if x == (1, 1) {
                 Ok(Some(y))
+            } else if *op == BinOp::Mul && x.1 == y.0 {
+                Err(Why::UseMatMul { what: mkmatrix_engine::formula::print(e), a: x, b: y })
             } else {
                 Err(Why::Sizes { what: mkmatrix_engine::formula::print(e), a: x, b: y })
             }
@@ -198,6 +282,26 @@ mod tests {
         assert_eq!(pt("=X@y"), Some(Verdict::Mismatch("X@y: 8×3 @ 8×1, 3 contra 8".into())));
         assert_eq!(pt("=MX.INV(X)"), Some(Verdict::Mismatch("MX.INV: 8×3 não é quadrada".into())));
         assert_eq!(pt("=X+y"), Some(Verdict::Mismatch("X+y: 8×3 contra 8×1".into())));
+    }
+
+    #[test]
+    fn operators_that_likely_mean_the_matrix_one_get_a_hint() {
+        assert_eq!(v("=(X'@X)^-1"), Some(Verdict::Hint((3, 3), "(X'@X)^-1 takes each entry's reciprocal; the inverse is MX.INV(X'@X)".into())));
+        assert_eq!(v("=X'*X'"), Some(Verdict::Hint((3, 8), "X'*X' multiplies entry by entry; the matrix product is X'@X'".into())));
+        assert_eq!(v("=X*X"), Some(Verdict::Hint((8, 3), "X*X multiplies entry by entry; the matrix product is X@X".into())));
+        assert_eq!(v("=X'*X"), Some(Verdict::Mismatch("X'*X: 3×8 vs 8×3; the matrix product is @".into())));
+        // A scalar factor, a plain range, or a scalar power stays quiet.
+        assert_eq!(v("=2*X"), Some(Verdict::Fits((8, 3))));
+        assert_eq!(v("=X^2"), Some(Verdict::Fits((8, 3))));
+        assert_eq!(v("=B2:C3*D2:E3"), Some(Verdict::Fits((2, 2))));
+        assert_eq!(v("=B2:C3^-1"), Some(Verdict::Fits((2, 2))));
+        assert_eq!(v("=A1^-1"), None);
+    }
+
+    #[test]
+    fn hints_are_worded_in_the_interface_language() {
+        let pt = of_formula("=X*X", &book(), 0, Language::PtBr);
+        assert_eq!(pt, Some(Verdict::Hint((8, 3), "X*X multiplica entrada por entrada; o produto matricial é X@X".into())));
     }
 
     #[test]
