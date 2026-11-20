@@ -47,6 +47,7 @@ use mkmatrix_model::Workbook;
 
 pub use crypto::{DecryptError, check_encryption, decrypt};
 pub use csv::{MAX_CSV_BYTES, read_csv, write_csv, write_csv_limited};
+pub use fmla::{from_file as formula_from_file, to_file as formula_to_file};
 pub use ods::read_ods;
 pub use package::{MAX_PART, MAX_TIGHT_PART};
 pub use passthrough::rebase_links;
