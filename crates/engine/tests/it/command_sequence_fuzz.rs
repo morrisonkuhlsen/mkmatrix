@@ -476,8 +476,10 @@ fn recalc_diff(wb: &Workbook) -> Result<(), String> {
     value_diff(wb, &fresh, "a full recalc").map_or(Ok(()), Err)
 }
 
+/// A formula as a file can hold it: the matrix operators `A'`, `A@B` and `A\b` are saved as
+/// `TRANSPOSE`, `MMULT` and `MX.SOLVE` calls and come back that way (#37), the same matrix.
 fn normalized_formula(f: &Formula) -> String {
-    let reparsed = Formula::new(&f.text());
+    let reparsed = Formula::new(&mkmatrix_xlsx::formula_from_file(&mkmatrix_xlsx::formula_to_file(f)));
     let text = reparsed.text();
     if f.array.is_some() { format!("{{={text}}}") } else { format!("={text}") }
 }
@@ -511,8 +513,9 @@ fn watch_list(wb: &Workbook) -> Option<&str> {
     wb.names.iter().find(|n| n.name == WATCH_NAME).map(|n| n.formula.as_str())
 }
 
-/// The workbook with view state (active sheet, scroll, active cell) and the Watch Window list
-/// reset: undo restores view state as it was, but switching sheets isn't an undoable edit.
+/// The workbook with view state (active sheet, scroll, active cell, Normal/Page Layout view) and
+/// the Watch Window list reset: undo restores view state as it was, but switching sheets or views
+/// isn't an undoable edit (`view.pageLayout` is `noundo`, as in Excel).
 fn canonical(wb: &Workbook) -> Workbook {
     let mut wb = wb.clone();
     wb.set_active_sheet(0);
@@ -521,6 +524,7 @@ fn canonical(wb: &Workbook) -> Workbook {
         let sh = Arc::make_mut(sh);
         sh.view_active = CellRef::default();
         sh.view_top_left = CellRef::default();
+        sh.view = mkmatrix_engine::model::SheetViewMode::Normal;
     }
     wb
 }

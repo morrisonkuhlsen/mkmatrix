@@ -9,22 +9,7 @@ use mkmatrix_engine::model::{Sheet, Workbook};
 
 use crate::grid::Geo;
 
-/// The named matrices on sheet `si`: names in the workbook's or that sheet's scope whose formula is
-/// one range on it. Hidden names and Excel's own (`_xlnm.Print_Area`…) are not matrices.
-pub fn on_sheet(wb: &Workbook, si: usize) -> Vec<(String, RangeRef)> {
-    let Some(sheet) = wb.sheet(si) else { return Vec::new() };
-    wb.names
-        .iter()
-        .filter(|n| !n.hidden && !n.name.starts_with('_') && n.scope.is_none_or(|s| s == si))
-        .filter_map(|n| {
-            let target = n.formula.trim_start_matches('=').replace('$', "");
-            let (sheet_name, body) = target.rsplit_once('!')?;
-            let same = mkmatrix_engine::core::unquote_sheet(sheet_name).eq_ignore_ascii_case(&sheet.name);
-            let range = RangeRef::parse(body)?;
-            (same && !range.is_full_rows() && !range.is_full_cols()).then(|| (n.name.clone(), range))
-        })
-        .collect()
-}
+pub use mkmatrix_engine::matrices::on_sheet;
 
 /// The named matrices on every sheet, in sheet order: the names a formula may cite, wherever it
 /// is typed.

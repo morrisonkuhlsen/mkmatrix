@@ -341,6 +341,7 @@ fn value_row(ui: &mut egui::Ui, text: &str, state: Option<bool>, count: Option<(
 pub(super) fn context_menu(app: &mut SheetApp, ui: &mut egui::Ui) {
     let Some(at) = app.grid.context_menu else { return };
     let mut close = false;
+    let matrix = matrix_items(app);
     let resp = egui::Area::new(egui::Id::unique("cell_context")).fixed_pos(at).order(egui::Order::Foreground).show(ui.ctx(), |ui| {
         egui::Frame::popup(ui.style()).show(ui, |ui| {
             ui.set_min_width(200.0);
@@ -378,6 +379,12 @@ pub(super) fn context_menu(app: &mut SheetApp, ui: &mut egui::Ui) {
                 items.insert(i + 1, ("-", ""));
                 items.insert(i + 2, ("Show Details", "pivot.showDetails"));
             }
+            // A block of numbers: its matrix actions, after sorting (#31).
+            if !matrix.is_empty()
+                && let Some(i) = items.iter().position(|(_, id)| *id == "data.sortDescending")
+            {
+                items.splice(i + 1..i + 1, std::iter::once(("-", "")).chain(matrix.iter().copied()));
+            }
             let lang = crate::i18n::current(ui.ctx());
             for (label, id) in items {
                 if label == "-" {
@@ -414,6 +421,7 @@ pub(super) fn context_menu(app: &mut SheetApp, ui: &mut egui::Ui) {
                             app.copy_to_clipboard(ui.ctx(), id);
                         }
                         "edit.paste" => app.paste_from_clipboard(),
+                        matrix if matrix.starts_with("matrix.") => crate::matrix_actions::run(app, matrix),
                         other => app.run_or_alert(other, json!({})),
                     }
                 }
@@ -434,6 +442,26 @@ pub(super) fn context_menu(app: &mut SheetApp, ui: &mut egui::Ui) {
     {
         app.grid.context_menu = None;
     }
+}
+
+/// The cell menu's matrix actions when the selection is one block of numbers: the `matrix.*`
+/// commands that take no second operand, the square-only ones for a square block.
+fn matrix_items(app: &mut SheetApp) -> Vec<(&'static str, &'static str)> {
+    if crate::tabs::matrix_summary(app).is_none() {
+        return Vec::new();
+    }
+    let square = app.session.active().is_some_and(|d| d.selection.current().height() == d.selection.current().width());
+    [
+        ("Transpose", "matrix.transpose", false),
+        ("Inverse", "matrix.inverse", true),
+        ("Determinant", "matrix.determinant", true),
+        ("Eigenvalues", "matrix.eigenvalues", true),
+        ("Singular Values", "matrix.singularValues", false),
+    ]
+    .into_iter()
+    .filter(|(_, _, needs_square)| square || !needs_square)
+    .map(|(label, id, _)| (label, id))
+    .collect()
 }
 
 /// Whether the cell menu offers Show Details (Excel's right-click › Show Details): the active cell
@@ -739,6 +767,7 @@ pub(super) fn header_menu(app: &mut SheetApp, ui: &mut egui::Ui, was_open: bool)
                             app.copy_to_clipboard(ui.ctx(), id);
                         }
                         "edit.paste" => app.paste_from_clipboard(),
+                        matrix if matrix.starts_with("matrix.") => crate::matrix_actions::run(app, matrix),
                         other => app.run_or_alert(other, json!({})),
                     }
                 }
